@@ -1,0 +1,20 @@
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3307/certpilot?useSSL=false&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    username: app
+    password: apppw
+  jpa:
+    hibernate:
+      ddl-auto: update   # 처음 연결 확인용(후엔 none/Flyway 권장)
+    open-in-view: false
+    properties:
+      hibernate.format_sql: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
