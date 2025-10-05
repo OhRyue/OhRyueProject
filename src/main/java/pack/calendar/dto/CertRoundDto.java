@@ -7,6 +7,7 @@ import java.time.LocalDate;
 public record CertRoundDto(
     Long scheduleId,
     Long certId,
+    String certName,      // ← 추가: 조인으로 가져올 자격증 이름
     int year,
     int term,
     LocalDate regStart,

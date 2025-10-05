@@ -6,7 +6,7 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "cert_schedule",
     indexes = {
-        @Index(name = "idx_cert_year", columnList = "certId,year")
+        @Index(name = "idx_cert_year", columnList = "cert_id,year")
     })
 public class CertSchedule {
 
@@ -15,7 +15,7 @@ public class CertSchedule {
   private Long id;
 
   // 자격증 ID (FK 같은 역할 – 간단히 Long으로 보관)
-  @Column(nullable = false)
+  @Column(name = "cert_id", nullable = false)
   private Long certId;
 
   // 회차(예: 1, 2)

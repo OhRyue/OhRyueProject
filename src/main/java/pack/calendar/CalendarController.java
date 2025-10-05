@@ -8,10 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import pack.calendar.dto.CertRoundDto;
-
-// 👇 추가
 import pack.calendar.dto.FullCalendarEventDto;
-import java.util.Arrays;
 
 import java.util.List;
 
@@ -25,7 +22,7 @@ public class CalendarController {
 
   private final CalendarService calendarService;
 
-  @Operation(summary = "회차별 일정 조회", description = "certId(필수), year(선택)로 회차별 일정과 상태를 조회합니다.")
+  @Operation(summary = "회차별 일정 조회", description = "certId(필수), year(선택)로 회차별 일정과 상태를 조회합니다. certName 포함")
   @GetMapping("/rounds")
   public List<CertRoundDto> getRounds(
       @Parameter(description = "자격증 ID", required = true)
@@ -37,13 +34,12 @@ public class CalendarController {
     return calendarService.getRounds(certId, year);
   }
 
-  // 👇 Step E: FullCalendar 연동용 임시 피드(더미)
-  @Operation(summary = "내 캘린더(스텁)", description = "FullCalendar가 바로 쓸 수 있는 임시 이벤트 배열을 반환합니다.")
+  @Operation(summary = "내 캘린더 피드(FullCalendar)", description = "title에 자격증명 포함 (예: 정보처리기사 2025년 1회)")
   @GetMapping("/me")
-  public List<FullCalendarEventDto> myCalendarStub() {
-    return Arrays.asList(
-        new FullCalendarEventDto("r-2025-1", "정보처리기사 1회 필기", "2025-02-10"),
-        new FullCalendarEventDto("r-2025-2", "정보처리기사 2회 필기", "2025-06-03")
-    );
+  public List<FullCalendarEventDto> myCalendar(
+      @RequestParam Long certId,
+      @RequestParam(required = false) @Min(2000) Integer year
+  ) {
+    return calendarService.getMyEvents(certId, year);
   }
 }
