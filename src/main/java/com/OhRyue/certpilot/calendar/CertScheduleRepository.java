@@ -12,7 +12,7 @@ public interface CertScheduleRepository extends JpaRepository<CertSchedule, Long
   // 기존 단순 메서드도 유지해도 되지만, 아래 조인 프로젝션을 메인으로 사용할 거예요.
 
   @Query("""
-    select 
+    select
       s.id as id,
       s.certId as certId,
       s.year as year,
