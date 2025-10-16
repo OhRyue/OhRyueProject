@@ -6,6 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface ConceptCheckRepository extends JpaRepository<ConceptCheck, Long> {
-    List<ConceptCheck> findByConceptIdOrderByIdAsc(Long conceptId);
+    List<ConceptCheck> findByConceptId(Long conceptId);
 }
 

@@ -39,7 +39,7 @@ public class ConceptService {
 
     @Transactional(readOnly = true)
     public List<MiniItemDto> miniCheck(Long conceptId) {
-        List<ConceptCheck> list = checkRepo.findByConceptIdOrderByIdAsc(conceptId);
+        List<ConceptCheck> list = checkRepo.findByConceptId(conceptId);
 
         return list.stream().map(cc -> {
             List<String> choices;

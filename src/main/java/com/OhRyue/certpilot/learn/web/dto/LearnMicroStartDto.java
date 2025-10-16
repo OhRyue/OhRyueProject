@@ -3,7 +3,6 @@ package com.OhRyue.certpilot.learn.web.dto;
 import java.util.List;
 
 public record LearnMicroStartDto(
-    Long microTopicId,
     Long conceptId,
     String conceptTitle,
     String conceptSummary,

@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name="LearnFlow", description="세세항목 사이클 및 세부항목 총정리")
+@Tag(name = "LearnFlow", description = "세세항목 Micro 루프 & 세부항목 Review API")
 @RestController
 @RequestMapping("/learn")
 @RequiredArgsConstructor
@@ -15,13 +15,13 @@ public class LearnFlowController {
 
   private final LearnFlowService svc;
 
-  @Operation(summary="세세항목 시작(개념+미니체크+문제5)")
+  @Operation(summary = "Micro 시작: 세세항목(레벨4) 기준 개념+미니체크+5문제")
   @PostMapping("/micro/start")
   public LearnMicroStartDto startMicro(@RequestBody LearnMicroStartRequest req) {
     return svc.startMicro(req);
   }
 
-  @Operation(summary="세부항목 총정리 시작(20문제)")
+  @Operation(summary = "Review 시작: 세부항목(레벨3) 총정리 20문제")
   @PostMapping("/review/start")
   public LearnReviewStartDto startReview(@RequestBody LearnReviewStartRequest req) {
     return svc.startReview(req);

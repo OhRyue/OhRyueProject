@@ -55,7 +55,7 @@ public class LearnService {
     }
 
     // 2) 미니체크 2~3
-    var checks = ccRepo.findByConceptIdOrderByIdAsc(concept.getId()).stream()
+    var checks = ccRepo.findByConceptId(concept.getId()).stream()
         .limit(3)
         .map(cc -> new LearnTodayDto.MiniQ(cc.getId(), cc.getStem(), readStrList(cc.getChoicesJson())))
         .toList();

@@ -4,8 +4,8 @@ import java.util.List;
 
 public record LearnReviewStartDto(
     Long detailTopicId,
-    String detailTopicName,
-    List<Quiz> quiz20 // 20문항
+    int total,
+    List<Quiz> quiz
 ) {
   public record Quiz(Long id, String stem, List<String> choices, Integer difficulty) {}
 }
