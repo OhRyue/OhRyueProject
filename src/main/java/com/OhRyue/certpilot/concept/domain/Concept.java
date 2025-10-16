@@ -29,6 +29,9 @@ public class Concept {
     @Column(columnDefinition = "TEXT")
     private String pitfalls;
 
+    @Column(name = "topic_id")
+    private Long topicId;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "examples_json", columnDefinition = "JSON")
     private String examplesJson;
@@ -46,4 +49,6 @@ public class Concept {
         this.examplesJson = examplesJson;
         this.tagsJson = tagsJson;
     }
+
+    public Long getTopicId() { return topicId; }
 }
