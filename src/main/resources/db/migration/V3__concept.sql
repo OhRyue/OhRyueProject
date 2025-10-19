@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS concept_check (
   stem          TEXT NOT NULL,
   choices_json  JSON NOT NULL,
   answer_idx    INT NOT NULL,
-  description   TEXT,
+  explanation   TEXT,
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_cc_concept FOREIGN KEY (concept_id) REFERENCES concept(id)
 );

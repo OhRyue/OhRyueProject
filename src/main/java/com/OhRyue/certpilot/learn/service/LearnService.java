@@ -36,60 +36,6 @@ public class LearnService {
   // ⭐ 4-2) learn_session 기록용
   private final LearnSessionRepository learnSessionRepo;
 
-  /** 오늘 학습 패키지: 개념 1 + 미니체크 2~3 + 문제 5 */
-  @Transactional(readOnly = true)
-  public LearnTodayDto prepareToday(LearnTodayRequest req) {
-    // 1) 개념 선택(임시: certId & 카테고리로 최신 1개)
-    Concept concept = conceptRepo
-        .findByCertIdAndCategoryContainingIgnoreCase(
-            req.certId(),
-            Optional.ofNullable(req.category()).orElse(""),
-            PageRequest.of(0, 1, Sort.by("id").descending())
-        )
-        .stream().findFirst()
-        .orElseThrow(() -> new NotFoundException("concept not found for cert=" + req.certId()));
-
-    // ⭐ 4-2) learn_session 생성(사용자 트래킹)
-    if (req.userId() != null) {
-      learnSessionRepo.save(new LearnSession(req.userId(), concept.getId()));
-    }
-
-    // 2) 미니체크 2~3
-    var checks = ccRepo.findByConceptId(concept.getId()).stream()
-        .limit(3)
-        .map(cc -> new LearnTodayDto.MiniQ(cc.getId(), cc.getStem(), readStrList(cc.getChoicesJson())))
-        .toList();
-
-    // 3) 태그 기반 문제 5 (개념 tags_json 사용)
-    var tags = readStrList(concept.getTagsJson());
-    List<Long> qids = (tags == null || tags.isEmpty())
-        ? Collections.emptyList()
-        : qtRepo.findQuestionIdsByTags(tags);
-
-    List<Question> pool;
-    if (qids.isEmpty()) {
-      pool = qRepo.findTop50ByDifficultyBetweenOrderByIdDesc(1, 3);
-    } else {
-      // 간단히 in-memory filter (개수 적을 때). 성능은 추후 튜닝.
-      Set<Long> idset = new HashSet<>(qids);
-      pool = qRepo.findAllById(idset);
-      if (pool.size() < 5) {
-        var fill = qRepo.findTop50ByDifficultyBetweenOrderByIdDesc(1, 3);
-        pool = mergeUnique(pool, fill);
-      }
-    }
-
-    var picked = pool.stream().limit(5).toList();
-    var quiz = picked.stream().map(q ->
-        new LearnTodayDto.QuizQ(q.getId(), q.getStem(), readStrList(q.getChoicesJson()), q.getDifficulty())
-    ).toList();
-
-    return new LearnTodayDto(
-        concept.getId(), concept.getTitle(), concept.getSummary(), concept.getPitfalls(),
-        checks, quiz
-    );
-  }
-
   /** 제출/채점 (MVP 라이트) */
   @Transactional
   public LearnSubmitResult submit(LearnSubmitRequest req) {

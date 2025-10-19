@@ -9,7 +9,7 @@ VALUES (
 );
 SET @CID := LAST_INSERT_ID();
 
-INSERT INTO concept_check(concept_id, stem, choices_json, answer_idx, description) VALUES
+INSERT INTO concept_check(concept_id, stem, choices_json, answer_idx, explanation) VALUES
 (@CID,'Read Committed에서 방지되는 현상은?',
  JSON_ARRAY('Dirty Read','Non-Repeatable Read','Phantom Read','Write Skew'),0,
  'RC는 Dirty Read만 방지'),

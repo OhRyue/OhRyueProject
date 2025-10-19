@@ -4,6 +4,7 @@ import com.OhRyue.certpilot.quiz.web.dto.QuickGradeRequest;
 import com.OhRyue.certpilot.quiz.web.dto.QuickGradeResult;
 import com.OhRyue.certpilot.quiz.web.dto.QuickSessionDto;
 import com.OhRyue.certpilot.quiz.service.QuizQuickService;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "QuizQuick", description = "태그 기반 퀵퀴즈 API")
+@Hidden
 @RestController
 @RequestMapping("/quiz/quick")
 @RequiredArgsConstructor

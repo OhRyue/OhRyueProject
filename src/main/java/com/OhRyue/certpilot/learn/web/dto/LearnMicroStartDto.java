@@ -7,9 +7,9 @@ public record LearnMicroStartDto(
     String conceptTitle,
     String conceptSummary,
     String conceptPitfalls,
-    List<Mini> miniChecks,
+    List<Mini> miniChecks, // OX 4문항
     List<Quiz> quiz // 5문항
 ) {
-  public record Mini(Long id, String stem, List<String> choices) {}
+  public record Mini(Long id, String stem, List<String> choices, Integer answerIdx) {}
   public record Quiz(Long id, String stem, List<String> choices, Integer difficulty) {}
 }

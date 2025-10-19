@@ -20,51 +20,45 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ConceptService {
 
-    private final ConceptRepository conceptRepo;
-    private final ConceptCheckRepository checkRepo;
-    private final ObjectMapper om = new ObjectMapper();
+  private final ConceptRepository conceptRepo;
+  private final ConceptCheckRepository checkRepo;
+  private final ObjectMapper om = new ObjectMapper();
 
-    public Page<ConceptSummaryDto> list(Long certId, String category, Pageable pageable) {
-        Page<Concept> page = conceptRepo.findByCertIdAndCategoryContainingIgnoreCase(certId, category == null ? "" : category, pageable);
-        return page.map(c -> new ConceptSummaryDto(c.getId(), c.getCertId(), c.getCategory(), c.getTitle()));
-    }
+  public Page<ConceptSummaryDto> list(Long certId, String category, Pageable pageable) {
+    Page<Concept> page = conceptRepo.findByCertIdAndCategoryContainingIgnoreCase(
+        certId, category == null ? "" : category, pageable);
+    return page.map(c -> new ConceptSummaryDto(
+        c.getId(), c.getCertId(), c.getCategory(), c.getTitle()
+    ));
+  }
 
-    public ConceptDetailDto detail(Long id) {
-        Concept c = conceptRepo.findById(id).orElseThrow(() -> new NotFoundException("concept not found: " + id));
-        return new ConceptDetailDto(
-                c.getId(), c.getCertId(), c.getCategory(), c.getTitle(),
-                c.getSummary(), c.getPitfalls(), c.getExamplesJson(), c.getTagsJson()
-        );
-    }
+  public ConceptDetailDto detail(Long id) {
+    Concept c = conceptRepo.findById(id)
+        .orElseThrow(() -> new NotFoundException("concept not found: " + id));
+    return new ConceptDetailDto(
+        c.getId(), c.getCertId(), c.getCategory(), c.getTitle(),
+        c.getSummary(), c.getPitfalls(), c.getExamplesJson(), c.getTagsJson()
+    );
+  }
 
-    @Transactional(readOnly = true)
-    public List<MiniItemDto> miniCheck(Long conceptId) {
-        List<ConceptCheck> list = checkRepo.findByConceptId(conceptId);
+  @Transactional(readOnly = true)
+  public List<MiniItemDto> miniCheck(Long conceptId) {
+    List<ConceptCheck> list = checkRepo.findByConceptId(conceptId);
 
-        return list.stream().map(cc -> {
-            List<String> choices;
-            try {
-                choices = om.readValue(cc.getChoicesJson(), new TypeReference<List<String>>() {});
-            } catch (Exception e) {
-                // 파싱 실패 시 안전하게 빈 리스트 반환(또는 throw로 500 대신 422 등)
-                choices = Collections.emptyList();
-            }
-            return new MiniItemDto(
-                    cc.getId(),
-                    cc.getStem(),
-                    choices,
-                    cc.getAnswerIdx(),
-                    cc.getDescription()
-            );
-        }).toList();
-    }
-
-
-    private List<String> parseList(String json) {
-        try {
-            return om.readValue(json, new TypeReference<>() {});
-        } catch (Exception e) {
-            throw new IllegalArgumentException("invalid choices_json");
-        }
-    }
+    return list.stream().map(cc -> {
+      List<String> choices;
+      try {
+        choices = om.readValue(cc.getChoicesJson(), new TypeReference<List<String>>() {});
+      } catch (Exception e) {
+        choices = Collections.emptyList();
+      }
+      return new MiniItemDto(
+          cc.getId(),
+          cc.getStem(),
+          choices,
+          cc.getAnswerIdx(),
+          cc.getExplanation()   // ✅ 설명 필드 명 통일
+      );
+    }).toList();
+  }
 }

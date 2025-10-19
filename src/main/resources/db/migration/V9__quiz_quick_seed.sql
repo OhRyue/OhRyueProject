@@ -1,11 +1,11 @@
-/* V10__quiz_quick_seed.sql
- * 태그 기반 퀵퀴즈용 최소 시드 (6문항)
- * - 주제: 트랜잭션, 격리수준, 인덱스, 정규화, 조인
- * - choices_json: 유효한 JSON 문자열
- * - answer_idx: 0-based
- */
+-- V9__quiz_quick_seed.sql
+-- 태그 기반 보조학습용 최소 시드 (6문항)
+-- - 주제: 트랜잭션, 격리수준, 인덱스, 정규화, 조인
+-- - choices_json: JSON 문자열
+-- - answer_idx: 0-based
+-- - 메인 학습은 Topic 기반
 
--- Q1: 트랜잭션 ACID
+-- Q1: 트랜잭션 ACID - 원자성
 INSERT INTO question(source, year, round, difficulty, stem, choices_json, answer_idx, exp, meta_json)
 VALUES (
   'custom', 2025, 1, 1,
@@ -89,4 +89,4 @@ SET @q6 := LAST_INSERT_ID();
 INSERT INTO question_tag(question_id, tag) VALUES
 (@q6,'조인'),(@q6,'카디널리티'),(@q6,'튜닝');
 
--- 태그 연동을 퀵퀴즈에서 활용하려면 최소 하나 이상은 '트랜잭션' 또는 '격리수준' 태그를 포함하도록 시드합니다.
+-- 참고: 보조학습(퀵퀴즈)에서 태그 필터링 시 최소 하나 이상은 '트랜잭션' 또는 '격리수준' 태그가 포함되도록 구성.

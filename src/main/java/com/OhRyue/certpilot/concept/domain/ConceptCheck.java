@@ -3,7 +3,8 @@ package com.OhRyue.certpilot.concept.domain;
 import jakarta.persistence.*;
 import lombok.*;
 
-@Getter @Setter
+@Getter
+@Setter
 @Entity
 @Table(name = "concept_check")
 @NoArgsConstructor @AllArgsConstructor @Builder
@@ -25,6 +26,14 @@ public class ConceptCheck {
     @Column(name = "answer_idx", nullable = false)
     private Integer answerIdx;
 
-    @Column(name = "description", length = 1000)
-    private String description;
+    @Column(name = "explanation", length = 1000)
+    private String explanation;
+
+    @Column(name = "is_ox", nullable = false)
+    @Builder.Default
+    private boolean isOx = true;
+
+    // 1 = O(true), 0 = X(false)
+    @Column(name = "ox_answer")
+    private Integer oxAnswer;
 }

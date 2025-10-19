@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.OhRyue.certpilot.ability.domain.AbilityProfile;
 import com.OhRyue.certpilot.ability.domain.AbilityProfileId;
 import com.OhRyue.certpilot.ability.domain.repo.AbilityProfileRepository;
+import com.OhRyue.certpilot.ai.AiExplainService;              // ⭐ AI 해설 인터페이스
 import com.OhRyue.certpilot.question.domain.Question;
 import com.OhRyue.certpilot.question.domain.repo.QuestionRepository;
 import com.OhRyue.certpilot.question.domain.repo.QuestionTagRepository;
@@ -28,7 +29,8 @@ public class QuizQuickService {
   private final QuestionRepository qRepo;
   private final QuestionTagRepository qtRepo;
   private final WrongNoteRepository wrongRepo;
-  private final AbilityProfileRepository abilityRepo; // ⭐ 추가
+  private final AbilityProfileRepository abilityRepo;
+  private final AiExplainService aiExplain;                 // ⭐ 주입
 
   private final ObjectMapper om = new ObjectMapper();
 
@@ -58,7 +60,7 @@ public class QuizQuickService {
             q.getId(),
             q.getStem(),
             readStrList(q.getChoicesJson()),
-            q.getAnswerIdx(), // MVP: UI에서 바로 정답 확인 가능(추후 숨김 처리)
+            q.getAnswerIdx(), // MVP: UI에서 바로 정답 확인 가능(추후 숨김 처리 가능)
             q.getExp()
         )
     ).toList();
@@ -67,7 +69,7 @@ public class QuizQuickService {
     return new QuickSessionDto(sessionId, items);
   }
 
-  /** 채점 + wrong_note upsert + ability_profile(EMA) 갱신 */
+  /** 채점 + wrong_note upsert + ability_profile(EMA) 갱신 + AI 해설(폴백) */
   @Transactional
   public QuickGradeResult grade(QuickGradeRequest req) {
     var ids = req.answers().stream().map(QuickGradeRequest.Answer::id).toList();
@@ -84,7 +86,8 @@ public class QuizQuickService {
     int total = req.answers().size();
     int score = 0;
     List<Long> wrongIds = new ArrayList<>();
-    Map<Long, String> explanations = new LinkedHashMap<>();
+    Map<Long, String> explanations = new LinkedHashMap<>();   // DB 기본 해설
+    Map<Long, String> aiExplanations = new LinkedHashMap<>(); // AI 개인화 해설(실패 시 DB 폴백)
 
     for (var a : req.answers()) {
       var q = qMap.get(a.id());
@@ -93,8 +96,8 @@ public class QuizQuickService {
       // 공통: 태그 결정 (meta_json.tags[0] or "general")
       String useTag = resolveTagFromMetaOrDefault(q.getMetaJson());
 
-      if (Objects.equals(q.getAnswerIdx(), a.choiceIdx())) {
-        // ===== 정답 분기 =====
+      boolean correct = Objects.equals(q.getAnswerIdx(), a.choiceIdx());
+      if (correct) {
         score++;
 
         // 2) ability_profile upsert (정답 true)
@@ -105,11 +108,8 @@ public class QuizQuickService {
           ap.applyResult(true /*정답*/, 0.3);
           abilityRepo.save(ap);
         }
-
       } else {
-        // ===== 오답 분기 =====
         wrongIds.add(q.getId());
-        explanations.put(q.getId(), Optional.ofNullable(q.getExp()).orElse(""));
 
         // 1) wrong_note upsert
         if (req.userId() != null) {
@@ -129,9 +129,22 @@ public class QuizQuickService {
           abilityRepo.save(ap);
         }
       }
+
+      // DB 기본 해설
+      String dbExp = Optional.ofNullable(q.getExp()).orElse("");
+      explanations.put(q.getId(), dbExp);
+
+      // AI 개인화 해설 (실패 시 폴백: DB 해설)
+      String aiExp;
+      try {
+        aiExp = aiExplain.explainForQuestion(q, a.choiceIdx(), dbExp);
+      } catch (Exception e) {
+        aiExp = dbExp;
+      }
+      aiExplanations.put(q.getId(), aiExp);
     }
 
-    return new QuickGradeResult(score, total, wrongIds, explanations);
+    return new QuickGradeResult(score, total, wrongIds, explanations, aiExplanations);
   }
 
   // ===== helpers =====
@@ -152,7 +165,7 @@ public class QuizQuickService {
     return new ArrayList<>(m.values());
   }
 
-  /** meta_json에서 "tags" 배열의 첫 값을 사용, 없으면 "general" */
+  /** meta_json에서 "tags"[0] 사용, 없으면 "general" */
   private String resolveTagFromMetaOrDefault(String metaJson) {
     if (metaJson != null && !metaJson.isBlank()) {
       try {
