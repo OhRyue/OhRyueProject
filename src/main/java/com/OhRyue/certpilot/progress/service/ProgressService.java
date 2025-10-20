@@ -24,7 +24,7 @@ public class ProgressService {
     @Transactional(readOnly = true)
     public ProgressOverviewDto overview(Long userId) {
         // 태그별 능력
-        var aps = abilityRepo.findByUserId(userId);
+        var aps = abilityRepo.findByUserIdOrderByEmaCorrectAsc(userId);
 
         List<ProgressOverviewDto.TagStat> tagStats = new ArrayList<>();
         for (AbilityProfile ap : aps) {
@@ -36,7 +36,7 @@ public class ProgressService {
         }
 
         // 최근 오답 10개
-        var recent = wrongRepo.findTop10ByUserIdOrderByLastWrongAtDesc(userId).stream()
+        var recent = wrongRepo.findTopByUserIdOrderByLastWrongAtDesc(userId).stream()
                 .map(wn -> new ProgressOverviewDto.RecentWrong(
                         wn.getQuestionId(),
                         wn.getTag(),

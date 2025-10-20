@@ -14,7 +14,7 @@ public interface WrongNoteRepository extends JpaRepository<WrongNote, WrongNoteI
     Optional<WrongNote> findByUserIdAndQuestionIdAndTag(Long userId, Long questionId, String tag);
 
     // 리포트용
-    List<WrongNote> findTop10ByUserIdOrderByLastWrongAtDesc(Long userId);
+    List<WrongNote> findTopByUserIdOrderByLastWrongAtDesc(Long userId);
 
     int countByUserIdAndTag(Long userId, String tag);
 

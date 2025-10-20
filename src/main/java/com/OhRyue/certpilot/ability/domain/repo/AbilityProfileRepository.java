@@ -8,5 +8,5 @@ import java.util.List;
 
 public interface AbilityProfileRepository extends JpaRepository<AbilityProfile, AbilityProfileId> {
     // 특정 유저의 태그별 능력치
-    List<AbilityProfile> findByUserId(Long userId);
+    List<AbilityProfile> findByUserIdOrderByEmaCorrectAsc(Long userId);
 }

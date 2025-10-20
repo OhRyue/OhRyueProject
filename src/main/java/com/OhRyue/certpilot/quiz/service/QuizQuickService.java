@@ -40,15 +40,15 @@ public class QuizQuickService {
     List<Question> pool;
 
     if (tags == null || tags.isEmpty()) {
-      pool = qRepo.findTop50ByDifficultyBetweenOrderByIdDesc(1, 3);
+      pool = qRepo.findTopByDifficultyBetweenOrderByIdDesc(1, 3);
     } else {
       var ids = new HashSet<>(qtRepo.findQuestionIdsByTags(normalize(tags)));
       pool = ids.isEmpty()
-          ? qRepo.findTop50ByDifficultyBetweenOrderByIdDesc(1, 3)
+          ? qRepo.findTopByDifficultyBetweenOrderByIdDesc(1, 3)
           : qRepo.findAllById(ids);
 
       if (pool.size() < count) {
-        var fill = qRepo.findTop50ByDifficultyBetweenOrderByIdDesc(1, 3);
+        var fill = qRepo.findTopByDifficultyBetweenOrderByIdDesc(1, 3);
         pool = mergeUnique(pool, fill);
       }
     }

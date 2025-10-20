@@ -9,7 +9,7 @@ import java.util.List;
 
 public interface QuestionRepository extends JpaRepository<Question, Long> {
 
-  List<Question> findTop50ByDifficultyBetweenOrderByIdDesc(int min, int max);
+  List<Question> findTopByDifficultyBetweenOrderByIdDesc(int min, int max);
 
   @Query(value = """
       SELECT q.* FROM question q

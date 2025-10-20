@@ -1,4 +1,4 @@
-package com.OhRyue.certpilot.aux.service;
+package com.OhRyue.certpilot.auxiliary.service;
 
 import com.OhRyue.certpilot.progress.service.ProgressService;
 import com.OhRyue.certpilot.progress.web.dto.ProgressOverviewDto;

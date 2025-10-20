@@ -22,7 +22,9 @@ public class SecurityConfig {
             .requestMatchers(
                 "/v3/api-docs/**",
                 "/swagger-ui/**",
-                "/swagger-ui.html"
+                "/swagger-ui.html",
+                "/learn/**",
+                "/aux/**"
             ).permitAll()
             .anyRequest().permitAll() // 필요 시 조정 (인증 붙이면 변경)
         );
