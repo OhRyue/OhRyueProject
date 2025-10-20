@@ -2,9 +2,10 @@ package com.OhRyue.certpilot.learn.web.dto;
 
 import java.util.List;
 
+/** Review(세부항목 20문제) 채점 요청 */
 public record LearnReviewSubmitRequest(
-    Long userId,
-    List<Answer> answers
+        Long userId,
+        List<LearnReviewSubmitRequest.Item> answers
 ) {
-  public record Answer(Long id, Integer choiceIdx) {}
+    public record Item(Long questionId, Integer chosenIdx) {}
 }

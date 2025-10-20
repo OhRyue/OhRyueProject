@@ -2,8 +2,8 @@ package com.OhRyue.certpilot.learn.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.OhRyue.certpilot.ai.AiExplainService;
-import com.OhRyue.certpilot.learn.web.dto.ReviewGradeRequest;
-import com.OhRyue.certpilot.learn.web.dto.ReviewGradeResult;
+import com.OhRyue.certpilot.learn.web.dto.LearnReviewSubmitRequest;
+import com.OhRyue.certpilot.learn.web.dto.LearnReviewSubmitResult;
 import com.OhRyue.certpilot.question.domain.Question;
 import com.OhRyue.certpilot.question.domain.repo.QuestionRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,50 +17,80 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LearnReviewService {
 
-  private final QuestionRepository qRepo;
-  private final AiExplainService aiExplain;
+    private final QuestionRepository qRepo;
+    private final AiExplainService aiExplain;
 
-  @Transactional
-  public ReviewGradeResult gradeReview(ReviewGradeRequest req) {
-    var ids = req.answers().stream().map(ReviewGradeRequest.Item::questionId).toList();
-    Map<Long, Question> map = qRepo.findAllById(ids).stream()
-        .collect(Collectors.toMap(Question::getId, q -> q));
+    /** 메타 파싱용 */
+    private final ObjectMapper om = new ObjectMapper();
 
-    int total = req.answers().size();
-    int score = 0;
-    Map<Long, Boolean> correctness = new LinkedHashMap<>();
+    /**
+     * 세부항목 Review(20문제 기본) 채점 + 문항별 AI 해설 + AI 요약
+     * - 요청: LearnReviewSubmitRequest { userId, answers: [{questionId, chosenIdx}] }
+     * - 응답: LearnReviewSubmitResult { score, total, correctness, explanations, aiSummary }
+     */
+    @Transactional(readOnly = true)
+    public LearnReviewSubmitResult submitReview(LearnReviewSubmitRequest req) {
+        var answers = Optional.ofNullable(req.answers()).orElse(List.of());
 
-    for (var a : req.answers()) {
-      var q = map.get(a.questionId());
-      if (q == null) continue;
-      boolean ok = Objects.equals(q.getAnswerIdx(), a.chosenIdx());
-      if (ok) score++;
-      correctness.put(a.questionId(), ok);
-    }
+        // 문제 조회 맵
+        var ids = answers.stream().map(LearnReviewSubmitRequest.Item::questionId).toList();
+        Map<Long, Question> qMap = qRepo.findAllById(ids).stream()
+                .collect(Collectors.toMap(Question::getId, q -> q, (a, b) -> a, LinkedHashMap::new));
 
-    // 간이 약점 태그: meta_json.tags[0]
-    List<String> weakTags = new ArrayList<>();
-    var om = new ObjectMapper();
-    for (var e : correctness.entrySet()) {
-      if (!e.getValue()) {
-        var q = map.get(e.getKey());
+        int total = answers.size();
+        int score = 0;
+
+        // 정오표 + 해설 + 약점 태그(간이)
+        Map<Long, Boolean> correctness = new LinkedHashMap<>();
+        Map<Long, String> explanations = new LinkedHashMap<>();
+        List<String> weakTags = new ArrayList<>();
+
+        for (var a : answers) {
+            var q = qMap.get(a.questionId());
+            if (q == null) continue;
+
+            boolean ok = Objects.equals(q.getAnswerIdx(), a.chosenIdx());
+            correctness.put(q.getId(), ok);
+            if (ok) {
+                score++;
+            } else {
+                String tag = extractFirstTag(q.getMetaJson());
+                if (tag != null) weakTags.add(tag);
+            }
+
+            String dbExp = Optional.ofNullable(q.getExp()).orElse("");
+            String ai = aiExplain.explainForQuestion(q, a.chosenIdx(), dbExp);
+            explanations.put(q.getId(), ai);
+        }
+
+        // AI 요약(실패 시 폴백)
+        String aiSummary;
         try {
-          var node = om.readTree(q.getMetaJson());
-          if (node != null && node.has("tags") && node.get("tags").isArray() && node.get("tags").size() > 0) {
-            weakTags.add(node.get("tags").get(0).asText());
-          }
+            aiSummary = aiExplain.summarizeReview(correctness, weakTags);
+        } catch (Exception e) {
+            aiSummary = "[요약(폴백)] 총 " + total + "문항 중 정답 " + score + "개. "
+                    + (weakTags.isEmpty() ? "반복 실수 항목 없음." : "반복 실수 태그: " + String.join(", ", weakTags));
+        }
+
+        return new LearnReviewSubmitResult(
+                score,
+                total,
+                correctness,
+                explanations,
+                aiSummary
+        );
+    }
+
+    /** meta_json.tags[0] 추출(없으면 null) */
+    private String extractFirstTag(String metaJson) {
+        if (metaJson == null || metaJson.isBlank()) return null;
+        try {
+            var node = om.readTree(metaJson);
+            var tags = node.get("tags");
+            if (tags != null && tags.isArray() && tags.size() > 0) {
+                return tags.get(0).asText(null);
+            }
         } catch (Exception ignore) {}
-      }
+        return null;
     }
-
-    String aiSummary;
-    try {
-      aiSummary = aiExplain.summarizeReview(correctness, weakTags);
-    } catch (Exception e) {
-      aiSummary = "[폴백 요약] 총 %d문항 중 %d문항 정답. 반복 실수: %s"
-          .formatted(total, score, weakTags.isEmpty() ? "없음" : String.join(", ", weakTags));
-    }
-
-    return new ReviewGradeResult(score, total, correctness, aiSummary);
-  }
 }
