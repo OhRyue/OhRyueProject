@@ -15,6 +15,12 @@ import com.OhRyue.certpilot.learn.domain.repo.LearnSessionRepository;
 import com.OhRyue.certpilot.learn.web.dto.*;
 import com.OhRyue.certpilot.question.domain.Question;
 import com.OhRyue.certpilot.question.domain.repo.QuestionRepository;
+import com.OhRyue.certpilot.wrongnote.domain.WrongNote;
+import com.OhRyue.certpilot.wrongnote.domain.WrongNoteStatus;
+import com.OhRyue.certpilot.wrongnote.domain.repo.WrongNoteRepository;
+import com.OhRyue.certpilot.ability.domain.AbilityProfile;
+import com.OhRyue.certpilot.ability.domain.AbilityProfileId;
+import com.OhRyue.certpilot.ability.domain.repo.AbilityProfileRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,44 +38,42 @@ public class LearnFlowService {
     private final QuestionRepository qRepo;
     private final LearnSessionRepository learnSessionRepo;
 
-    private final AiExplainService aiExplain;
+    // 신규: 오답노트/능력치
+    private final WrongNoteRepository wrongRepo;
+    private final AbilityProfileRepository abilityRepo;
 
+    private final AiExplainService aiExplain;
     private final ObjectMapper om = new ObjectMapper();
 
     // =========================
-    // 1) Micro: 세세항목(4레벨)
-    //    개념 + 미니체크(OX 4) + 퀴즈 5
-    //    (정답/해설은 "시작" 응답에 미포함)
+    // 1) Micro 시작 (세세항목)
     // =========================
-    @Transactional // ⭐ learn_session 저장하므로 readOnly=false
+    @Transactional // 세션 저장이 있으므로 readOnly=false
     public LearnMicroStartDto startMicro(LearnMicroStartRequest req) {
         Long microId = req.microTopicId();
 
-        // 세세항목 존재/소속 확인
         Topic micro = topicRepo.findByIdAndCertId(microId, req.certId())
                 .orElseThrow(() -> new NotFoundException("micro topic not found: " + microId));
 
-        // 세세항목에 연결된 가장 최근 개념 1건
         Concept concept = conceptRepo.findTop1ByTopicIdOrderByIdDesc(micro.getId())
                 .orElseThrow(() -> new NotFoundException("concept not linked to micro topic: " + micro.getId()));
 
-        // 학습 세션 로그(선택)
         if (req.userId() != null) {
             learnSessionRepo.save(new LearnSession(req.userId(), concept.getId()));
         }
 
-        // 미니체크 OX 4문항 고정(정답/해설은 시작 단계에서 미노출 → answerIdx=null)
+        // 미니체크 OX 4문항 고정(정답 숨김)
         var checks = ccRepo.findByConceptId(concept.getId()).stream()
                 .limit(4)
                 .map(cc -> new LearnMicroStartDto.Mini(
                         cc.getId(),
                         cc.getStem(),
                         readStrList(cc.getChoicesJson()),
-                        null // 정답은 시작 단계에서 숨김
+                        null
                 ))
                 .toList();
 
-        // 세세항목(topic) 기반 퀴즈 5 (폴백 없음: 데이터 충분히 시드하는 정책)
+        // 세세항목(topic) 기반 퀴즈 5
         List<Question> qPool = qRepo.findLatestByTopicIds(List.of(micro.getId()), 5);
         var quiz5 = qPool.stream()
                 .map(q -> new LearnMicroStartDto.Quiz(
@@ -91,14 +95,13 @@ public class LearnFlowService {
     }
 
     // =========================
-    // 2) Review: 세부항목(3레벨) 아래 전체 범위
-    //    문제 N(기본 20) — topic 기반
+    // 2) Review 시작 (세부항목 하위 전체)
     // =========================
     @Transactional(readOnly = true)
     public LearnReviewStartDto startReview(LearnReviewStartRequest req) {
         Long detailId = req.detailTopicId();
         int wanted = Optional.ofNullable(req.count()).orElse(20);
-        wanted = Math.max(1, Math.min(wanted, 100)); // 안전 가드
+        wanted = Math.max(1, Math.min(wanted, 100));
 
         Topic detail = topicRepo.findByIdAndCertId(detailId, req.certId())
                 .orElseThrow(() -> new NotFoundException("detail topic not found: " + detailId));
@@ -106,7 +109,6 @@ public class LearnFlowService {
             throw new IllegalArgumentException("detailTopicId must be level=3 topic");
         }
 
-        // 하위 세세항목(4레벨) 목록. 없으면 detail 자체로 출제 시도.
         var micros = topicRepo.findByParentId(detail.getId());
         List<Long> topicScope = micros.isEmpty()
                 ? List.of(detail.getId())
@@ -125,10 +127,9 @@ public class LearnFlowService {
 
     // =========================
     // 3) Micro 제출/채점
-    //    - 미니체크: DB explanation 사용(제출 시 노출)
-    //    - 퀴즈: AI 개인화 해설(실패 시 DB exp 폴백은 AiExplainService 내부)
+    //    - 오답노트/능력치 갱신(간이 태그 기반)
     // =========================
-    @Transactional(readOnly = true)
+    @Transactional
     public LearnMicroSubmitResult submitMicro(LearnMicroSubmitRequest req) {
         var miniAnswers = Optional.ofNullable(req.miniAnswers()).orElse(List.of());
         var quizAnswers = Optional.ofNullable(req.quizAnswers()).orElse(List.of());
@@ -136,7 +137,7 @@ public class LearnFlowService {
         int total = miniAnswers.size() + quizAnswers.size();
         int score = 0;
 
-        // ===== 미니체크 채점 + DB 해설 =====
+        // 미니체크 채점 + DB 해설
         Map<Long, ConceptCheck> ccMap = ccRepo.findAllById(
                 miniAnswers.stream().map(LearnMicroSubmitRequest.MiniAnswer::id).toList()
         ).stream().collect(Collectors.toMap(ConceptCheck::getId, c -> c));
@@ -149,16 +150,14 @@ public class LearnFlowService {
             if (cc == null) continue;
 
             boolean correct = Objects.equals(cc.getAnswerIdx(), a.choiceIdx());
-            if (correct) {
-                score++;
-            } else {
-                wrongIds.add(cc.getId());
-            }
-            // 제출 시점에만 DB 해설 노출
+            if (correct) score++; else wrongIds.add(cc.getId());
+
+            // 시작 때 숨겼던 해설(DB) 노출
             miniExplanations.put(cc.getId(), Optional.ofNullable(cc.getExplanation()).orElse(""));
+            // 미니체크는 오답노트/능력치 갱신 대상에서 제외(개념 점검 용도) — 필요 시 여기서도 tag 기준 갱신 가능
         }
 
-        // ===== 퀴즈 채점 + AI 해설(폴백 DB) =====
+        // 퀴즈 채점 + 오답노트/능력치 + AI 해설(폴백)
         Map<Long, Question> qMap = qRepo.findAllById(
                 quizAnswers.stream().map(LearnMicroSubmitRequest.QuizAnswer::id).toList()
         ).stream().collect(Collectors.toMap(Question::getId, q -> q, (a, b) -> a, LinkedHashMap::new));
@@ -169,72 +168,37 @@ public class LearnFlowService {
             var q = qMap.get(a.id());
             if (q == null) continue;
 
-            boolean correct = Objects.equals(q.getAnswerIdx(), a.choiceIdx());
-            if (correct) {
-                score++;
-            } else {
-                wrongIds.add(q.getId());
+            boolean ok = Objects.equals(q.getAnswerIdx(), a.choiceIdx());
+            if (ok) score++; else wrongIds.add(q.getId());
+
+            // 능력치/오답노트는 "간이 태그(meta_json.tags[0])" 기준
+            if (req.userId() != null) {
+                String useTag = extractFirstTag(q.getMetaJson(), "general");
+
+                // EMA
+                AbilityProfileId apId = new AbilityProfileId(req.userId(), useTag);
+                AbilityProfile ap = abilityRepo.findById(apId).orElseGet(() -> new AbilityProfile(req.userId(), useTag));
+                ap.applyResult(ok, 0.3);
+                abilityRepo.save(ap);
+
+                // 오답노트
+                if (!ok) {
+                    WrongNote wn = wrongRepo.findByUserIdAndQuestionIdAndTag(req.userId(), q.getId(), useTag)
+                            .orElseGet(() -> new WrongNote(req.userId(), q.getId(), useTag));
+                    wn.markWrongOnce();
+                    wn.setStatus(WrongNoteStatus.todo);
+                    wrongRepo.save(wn);
+                }
             }
 
             String dbExp = Optional.ofNullable(q.getExp()).orElse("");
-            // 개인화 해설(실패 시 폴백은 구현체 내부)
-            String ai = aiExplain.explainForQuestion(q, a.choiceIdx(), dbExp);
-            quizExplanations.put(q.getId(), ai);
+            quizExplanations.put(q.getId(), aiExplain.explainForQuestion(q, a.choiceIdx(), dbExp));
         }
 
         return new LearnMicroSubmitResult(score, total, wrongIds, miniExplanations, quizExplanations);
     }
 
-    // =========================
-    // 4) Review 제출/채점 + 요약(AI)
-    //    - 문제별 AI 해설(explanations) + 전체 요약(aiSummary)
-    // =========================
-    @Transactional(readOnly = true)
-    public LearnReviewSubmitResult submitReview(LearnReviewSubmitRequest req) {
-        var answers = Optional.ofNullable(req.answers()).orElse(List.of());
-        var ids = answers.stream().map(LearnReviewSubmitRequest.Item::questionId).toList();
-
-        Map<Long, Question> qMap = qRepo.findAllById(ids).stream()
-                .collect(Collectors.toMap(Question::getId, q -> q, (a, b) -> a, LinkedHashMap::new));
-
-        int total = answers.size();
-        int score = 0;
-
-        Map<Long, Boolean> correctness = new LinkedHashMap<>();
-        Map<Long, String> explanations = new LinkedHashMap<>(); // ⭐ 문항별 해설
-        List<String> weakTags = new ArrayList<>();
-
-        for (var a : answers) {
-            var q = qMap.get(a.questionId());
-            if (q == null) continue;
-
-            boolean ok = Objects.equals(q.getAnswerIdx(), a.chosenIdx());
-            correctness.put(q.getId(), ok);
-            if (ok) {
-                score++;
-            } else {
-                // 간이 약점 태그 추출(meta_json.tags[0])
-                String tag = extractFirstTag(q.getMetaJson());
-                if (tag != null) weakTags.add(tag);
-            }
-
-            String dbExp = Optional.ofNullable(q.getExp()).orElse("");
-            String ai = aiExplain.explainForQuestion(q, a.chosenIdx(), dbExp);
-            explanations.put(q.getId(), ai);
-        }
-
-        String aiSummary = aiExplain.summarizeReview(correctness, weakTags);
-
-        return new LearnReviewSubmitResult(
-                score,
-                total,
-                correctness,
-                explanations,
-                aiSummary
-        );
-    }
-
-    // ===== 유틸 =====
+    // ==== 유틸 ====
     private List<String> readStrList(String json) {
         if (json == null || json.isBlank()) return List.of();
         try {
@@ -244,16 +208,16 @@ public class LearnFlowService {
         }
     }
 
-    /** meta_json.tags[0] 추출 (없으면 null) */
-    private String extractFirstTag(String metaJson) {
-        if (metaJson == null || metaJson.isBlank()) return null;
+    /** meta_json.tags[0] 추출(없으면 defaultTag 반환) */
+    private String extractFirstTag(String metaJson, String defaultTag) {
+        if (metaJson == null || metaJson.isBlank()) return defaultTag;
         try {
             var node = om.readTree(metaJson);
             var tags = node.get("tags");
             if (tags != null && tags.isArray() && tags.size() > 0) {
-                return tags.get(0).asText(null);
+                return tags.get(0).asText(defaultTag);
             }
         } catch (Exception ignore) {}
-        return null;
+        return defaultTag;
     }
 }
