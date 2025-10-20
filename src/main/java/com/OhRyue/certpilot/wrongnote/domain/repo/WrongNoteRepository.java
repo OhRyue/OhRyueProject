@@ -4,6 +4,7 @@ import com.OhRyue.certpilot.wrongnote.domain.WrongNote;
 import com.OhRyue.certpilot.wrongnote.domain.WrongNoteId;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -11,4 +12,10 @@ import java.util.Optional;
  */
 public interface WrongNoteRepository extends JpaRepository<WrongNote, WrongNoteId> {
     Optional<WrongNote> findByUserIdAndQuestionIdAndTag(Long userId, Long questionId, String tag);
+
+    // 리포트용
+    List<WrongNote> findTop10ByUserIdOrderByLastWrongAtDesc(Long userId);
+
+    int countByUserIdAndTag(Long userId, String tag);
+
 }

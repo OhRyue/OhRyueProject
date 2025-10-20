@@ -21,7 +21,7 @@ public class AbilityController {
   @Operation(summary="사용자 최근 능력치 10개")
   @GetMapping("/recent")
   public List<AbilityProfile> recent(@RequestParam Long userId) {
-    return repo.findTop10ByUserIdOrderByUpdatedAtDesc(userId);
+    return repo.findByUserId(userId);
   }
 
   @Operation(summary="특정 태그 능력치")

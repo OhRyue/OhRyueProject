@@ -7,5 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface AbilityProfileRepository extends JpaRepository<AbilityProfile, AbilityProfileId> {
-  List<AbilityProfile> findTop10ByUserIdOrderByUpdatedAtDesc(Long userId);
+    // 특정 유저의 태그별 능력치
+    List<AbilityProfile> findByUserId(Long userId);
 }

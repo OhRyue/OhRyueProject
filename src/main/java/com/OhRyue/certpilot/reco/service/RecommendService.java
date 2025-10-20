@@ -26,7 +26,7 @@ public class RecommendService {
   @Transactional(readOnly = true)
   public RecoResult recommendNext(Long userId, int count, boolean withSession) {
     // 1) EMA 낮은 태그
-    List<AbilityProfile> all = abilityRepo.findTop10ByUserIdOrderByUpdatedAtDesc(userId);
+    List<AbilityProfile> all = abilityRepo.findByUserId(userId);
     List<String> weak = all.stream()
         .filter(a -> a.getEmaCorrect().doubleValue() <= EMA_WEAK_THRESHOLD)
         .map(AbilityProfile::getTag)
