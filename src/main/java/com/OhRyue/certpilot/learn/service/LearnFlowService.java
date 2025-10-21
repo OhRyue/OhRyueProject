@@ -1,9 +1,5 @@
 package com.OhRyue.certpilot.learn.service;
 
-import com.OhRyue.certpilot.learnresult.domain.MicroResult;
-import com.OhRyue.certpilot.learnresult.domain.MicroResultItem;
-import com.OhRyue.certpilot.learnresult.domain.repo.MicroResultItemRepository;
-import com.OhRyue.certpilot.learnresult.domain.repo.MicroResultRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.OhRyue.certpilot.ai.AiExplainService;
@@ -14,9 +10,13 @@ import com.OhRyue.certpilot.concept.domain.repo.ConceptCheckRepository;
 import com.OhRyue.certpilot.concept.domain.repo.ConceptRepository;
 import com.OhRyue.certpilot.curriculum.domain.Topic;
 import com.OhRyue.certpilot.curriculum.domain.repo.TopicRepository;
-import com.OhRyue.certpilot.learn.domain.*;
-import com.OhRyue.certpilot.learn.domain.repo.*;
+import com.OhRyue.certpilot.learn.domain.LearnSession;
+import com.OhRyue.certpilot.learn.domain.repo.LearnSessionRepository;
 import com.OhRyue.certpilot.learn.web.dto.*;
+import com.OhRyue.certpilot.learnresult.domain.MicroResult;
+import com.OhRyue.certpilot.learnresult.domain.MicroResultItem;
+import com.OhRyue.certpilot.learnresult.domain.repo.MicroResultItemRepository;
+import com.OhRyue.certpilot.learnresult.domain.repo.MicroResultRepository;
 import com.OhRyue.certpilot.question.domain.Question;
 import com.OhRyue.certpilot.question.domain.repo.QuestionRepository;
 import lombok.RequiredArgsConstructor;
@@ -36,15 +36,19 @@ public class LearnFlowService {
   private final QuestionRepository qRepo;
   private final LearnSessionRepository learnSessionRepo;
 
+  // Micro 결과 저장
   private final MicroResultRepository microResultRepo;
   private final MicroResultItemRepository microResultItemRepo;
 
   private final AiExplainService aiExplain;
-
   private final ObjectMapper om = new ObjectMapper();
 
-  // ===== Micro 시작 =====
-  @Transactional // 세션 저장 때문에 readOnly=false
+  // =========================
+  // 1) Micro: 세세항목(레벨4)
+  //    개념 + 미니체크(OX 4) + 퀴즈 5
+  //    시작 응답에는 정답/해설 미포함
+  // =========================
+  @Transactional // learn_session 기록 발생 → readOnly=false
   public LearnMicroStartDto startMicro(LearnMicroStartRequest req) {
     Long microId = req.microTopicId();
 
@@ -58,6 +62,7 @@ public class LearnFlowService {
       learnSessionRepo.save(new LearnSession(req.userId(), concept.getId()));
     }
 
+    // 미니체크 OX 4문항 (정답은 시작단계에서 미노출 → answerIdx=null)
     var checks = ccRepo.findByConceptId(concept.getId()).stream()
         .limit(4)
         .map(cc -> new LearnMicroStartDto.Mini(
@@ -68,10 +73,14 @@ public class LearnFlowService {
         ))
         .toList();
 
+    // 세세항목 기반 퀴즈 5 (토픽 매핑된 문제만 사용)
     List<Question> qPool = qRepo.findLatestByTopicIds(List.of(micro.getId()), 5);
     var quiz5 = qPool.stream()
         .map(q -> new LearnMicroStartDto.Quiz(
-            q.getId(), q.getStem(), readStrList(q.getChoicesJson()), q.getDifficulty()
+            q.getId(),
+            q.getStem(),
+            readStrList(q.getChoicesJson()),
+            q.getDifficulty()
         ))
         .toList();
 
@@ -85,99 +94,10 @@ public class LearnFlowService {
     );
   }
 
-  // ===== Micro 제출/채점 + 결과 저장 =====
-  @Transactional
-  public LearnMicroSubmitResult submitMicro(LearnMicroSubmitRequest req) {
-    var miniAnswers = Optional.ofNullable(req.miniAnswers()).orElse(List.of());
-    var quizAnswers = Optional.ofNullable(req.quizAnswers()).orElse(List.of());
-
-    int total = miniAnswers.size() + quizAnswers.size();
-    int score = 0;
-
-    // 미니체크 채점
-    Map<Long, ConceptCheck> ccMap = ccRepo.findAllById(
-        miniAnswers.stream().map(LearnMicroSubmitRequest.MiniAnswer::id).toList()
-    ).stream().collect(Collectors.toMap(ConceptCheck::getId, c -> c));
-
-    Map<Long, String> miniExplanations = new LinkedHashMap<>();
-    List<Long> wrongIds = new ArrayList<>();
-
-    int ord = 0;
-    List<MicroResultItem> toSaveItems = new ArrayList<>();
-
-    for (var a : miniAnswers) {
-      var cc = ccMap.get(a.id());
-      if (cc == null) continue;
-
-      boolean correct = Objects.equals(cc.getAnswerIdx(), a.choiceIdx());
-      if (correct) score++; else wrongIds.add(cc.getId());
-      String exp = Optional.ofNullable(cc.getExplanation()).orElse("");
-      miniExplanations.put(cc.getId(), exp);
-
-      // 결과 아이템 (미니체크는 오답노트 저장 X)
-      toSaveItems.add(MicroResultItem.builder()
-          .itemType("MINI")
-          .refId(cc.getId())
-          .chosenIdx(a.choiceIdx())
-          .correct(correct)
-          .explanation(exp)
-          .ordNo(ord++)
-          .build());
-    }
-
-    // 퀴즈 채점
-    Map<Long, Question> qMap = qRepo.findAllById(
-        quizAnswers.stream().map(LearnMicroSubmitRequest.QuizAnswer::id).toList()
-    ).stream().collect(Collectors.toMap(Question::getId, q -> q, (a,b)->a, LinkedHashMap::new));
-
-    Map<Long, String> quizExplanations = new LinkedHashMap<>();
-
-    for (var a : quizAnswers) {
-      var q = qMap.get(a.id());
-      if (q == null) continue;
-
-      boolean correct = Objects.equals(q.getAnswerIdx(), a.choiceIdx());
-      if (correct) score++; else wrongIds.add(q.getId());
-
-      String dbExp = Optional.ofNullable(q.getExp()).orElse("");
-      String ai = aiExplain.explainForQuestion(q, a.choiceIdx(), dbExp);
-      quizExplanations.put(q.getId(), ai);
-
-      toSaveItems.add(MicroResultItem.builder()
-          .itemType("QUIZ")
-          .refId(q.getId())
-          .chosenIdx(a.choiceIdx())
-          .correct(correct)
-          .explanation(ai)
-          .ordNo(ord++)
-          .build());
-    }
-
-    // 결과 저장(헤더)
-    Long conceptId = conceptRepo.findTop1ByTopicIdOrderByIdDesc(req.microTopicId())
-        .map(Concept::getId)
-        .orElse(null);
-
-    MicroResult header = microResultRepo.save(
-        MicroResult.builder()
-            .userId(req.userId())
-            .certId(null)
-            .topicId(req.microTopicId())
-            .conceptId(conceptId)
-            .score(score)
-            .total(total)
-            .build()
-    );
-
-    // 결과 아이템 저장
-    Long rid = header.getId();
-    toSaveItems.forEach(i -> i.setResultId(rid));
-    microResultItemRepo.saveAll(toSaveItems);
-
-    return new LearnMicroSubmitResult(score, total, wrongIds, miniExplanations, quizExplanations);
-  }
-
-  // ===== Review 시작 =====
+  // =========================
+  // 2) Review: 세부항목(레벨3) 전체 범위
+  //    문제 N(기본 20) — topic 기반
+  // =========================
   @Transactional(readOnly = true)
   public LearnReviewStartDto startReview(LearnReviewStartRequest req) {
     Long detailId = req.detailTopicId();
@@ -196,18 +116,134 @@ public class LearnFlowService {
         : micros.stream().map(Topic::getId).toList();
 
     List<Question> picked = qRepo.findLatestByTopicIds(topicScope, wanted);
-
     var quiz = picked.stream()
-        .map(q -> new LearnReviewStartDto.Quiz(q.getId(), q.getStem(), readStrList(q.getChoicesJson()), q.getDifficulty()))
+        .map(q -> new LearnReviewStartDto.Quiz(
+            q.getId(),
+            q.getStem(),
+            readStrList(q.getChoicesJson()),
+            q.getDifficulty()
+        ))
         .toList();
 
     return new LearnReviewStartDto(detail.getId(), quiz.size(), quiz);
   }
 
+  // =========================
+  // 3) Micro 제출/채점 + 결과 저장
+  //    - 미니체크: DB 해설만 사용(오답노트 저장 없음)
+  //    - 퀴즈: AI 개인화 해설(실패 시 DB exp)
+  // =========================
+  @Transactional
+  public LearnMicroSubmitResult submitMicro(LearnMicroSubmitRequest req) {
+    var miniAnswers = Optional.ofNullable(req.miniAnswers()).orElse(List.of());
+    var quizAnswers = Optional.ofNullable(req.quizAnswers()).orElse(List.of());
+
+    int total = miniAnswers.size() + quizAnswers.size();
+    int score = 0;
+
+    // 미니체크 채점 + DB 해설
+    Map<Long, ConceptCheck> ccMap = ccRepo.findAllById(
+        miniAnswers.stream().map(LearnMicroSubmitRequest.MiniAnswer::id).toList()
+    ).stream().collect(Collectors.toMap(ConceptCheck::getId, c -> c));
+
+    Map<Long, String> miniExplanations = new LinkedHashMap<>();
+    List<Long> wrongIds = new ArrayList<>();
+
+    for (var a : miniAnswers) {
+      var cc = ccMap.get(a.id());
+      if (cc == null) continue;
+      boolean correct = Objects.equals(cc.getAnswerIdx(), a.choiceIdx());
+      if (correct) score++; else wrongIds.add(cc.getId());
+      miniExplanations.put(cc.getId(), Optional.ofNullable(cc.getExplanation()).orElse(""));
+    }
+
+    // 퀴즈 채점 + AI 해설(폴백 DB)
+    Map<Long, Question> qMap = qRepo.findAllById(
+        quizAnswers.stream().map(LearnMicroSubmitRequest.QuizAnswer::id).toList()
+    ).stream().collect(Collectors.toMap(Question::getId, q -> q, (a, b) -> a, LinkedHashMap::new));
+
+    Map<Long, String> quizExplanations = new LinkedHashMap<>();
+    for (var a : quizAnswers) {
+      var q = qMap.get(a.id());
+      if (q == null) continue;
+      boolean correct = Objects.equals(q.getAnswerIdx(), a.choiceIdx());
+      if (correct) score++; else wrongIds.add(q.getId());
+      String dbExp = Optional.ofNullable(q.getExp()).orElse("");
+      String ai = aiExplain.explainForQuestion(q, a.choiceIdx(), dbExp);
+      quizExplanations.put(q.getId(), ai);
+    }
+
+    // 결과 저장 (userId 있을 때만)
+    if (req.userId() != null) {
+      MicroResult header = microResultRepo.save(
+          MicroResult.builder()
+              .userId(req.userId())
+              .certId(req.certId())
+              .topicId(req.microTopicId())
+              .conceptId(req.conceptId())
+              .score(score)
+              .total(total)
+              .build()
+      );
+
+      int ord = 0;
+      // MINI 아이템
+      for (var a : miniAnswers) {
+        var cc = ccMap.get(a.id());
+        if (cc == null) continue;
+        microResultItemRepo.save(
+            MicroResultItem.builder()
+                .resultId(header.getId())
+                .itemType("MINI")
+                .refId(cc.getId())
+                .chosenIdx(a.choiceIdx())
+                .correct(Objects.equals(cc.getAnswerIdx(), a.choiceIdx()))
+                .explanation(Optional.ofNullable(cc.getExplanation()).orElse(""))
+                .ordNo(ord++)
+                .build()
+        );
+      }
+      // QUIZ 아이템
+      for (var a : quizAnswers) {
+        var q = qMap.get(a.id());
+        if (q == null) continue;
+        microResultItemRepo.save(
+            MicroResultItem.builder()
+                .resultId(header.getId())
+                .itemType("QUIZ")
+                .refId(q.getId())
+                .chosenIdx(a.choiceIdx())
+                .correct(Objects.equals(q.getAnswerIdx(), a.choiceIdx()))
+                .explanation(quizExplanations.getOrDefault(q.getId(), ""))
+                .ordNo(ord++)
+                .build()
+        );
+      }
+    }
+
+    return new LearnMicroSubmitResult(score, total, wrongIds, miniExplanations, quizExplanations);
+  }
+
   // ===== 유틸 =====
   private List<String> readStrList(String json) {
     if (json == null || json.isBlank()) return List.of();
-    try { return om.readValue(json, new TypeReference<List<String>>(){}); }
-    catch (Exception e) { return List.of(); }
+    try {
+      return om.readValue(json, new TypeReference<List<String>>() {});
+    } catch (Exception e) {
+      return List.of();
+    }
+  }
+
+  /** meta_json.tags[0] 추출 (없으면 null) */
+  private String extractFirstTag(String metaJson) {
+    if (metaJson == null || metaJson.isBlank()) return null;
+    try {
+      var node = om.readTree(metaJson);
+      var tags = node.get("tags");
+      if (tags != null && tags.isArray() && tags.size() > 0) {
+        return tags.get(0).asText(null);
+      }
+    } catch (Exception ignore) {}
+    return null;
   }
 }

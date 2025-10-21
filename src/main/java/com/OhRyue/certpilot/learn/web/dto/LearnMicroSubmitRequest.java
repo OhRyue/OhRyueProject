@@ -4,7 +4,9 @@ import java.util.List;
 
 public record LearnMicroSubmitRequest(
     Long userId,
-    Long microTopicId,                 // 세세항목 topicId (저장용)
+    Long certId,
+    Long microTopicId,     // 세세항목 micro topicId(레벨4)
+    Long conceptId,
     List<MiniAnswer> miniAnswers,   // concept_check 기준
     List<QuizAnswer> quizAnswers    // question 기준
 ) {
