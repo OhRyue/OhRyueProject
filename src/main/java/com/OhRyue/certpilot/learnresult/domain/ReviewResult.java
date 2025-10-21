@@ -1,34 +1,28 @@
 package com.OhRyue.certpilot.learnresult.domain;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.Instant;
 
+@Getter @Setter
+@NoArgsConstructor @AllArgsConstructor
+@Builder
 @Entity
 @Table(name = "review_result")
-@Getter
-@NoArgsConstructor
 public class ReviewResult {
   @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
   private Long userId;
-
+  private Long certId;
   private Long detailTopicId;
-
   private int score;
-
   private int total;
 
-  @Column(nullable = false, updatable = false, insertable = false, columnDefinition = "timestamp default current_timestamp")
-  private Instant createdAt;
+  @Lob
+  private String aiSummary;
 
-  public ReviewResult(Long userId, Long detailTopicId, int score, int total) {
-    this.userId = userId;
-    this.detailTopicId = detailTopicId;
-    this.score = score;
-    this.total = total;
-  }
+  @Column(name = "created_at", updatable = false, insertable = false)
+  private Instant createdAt;
 }

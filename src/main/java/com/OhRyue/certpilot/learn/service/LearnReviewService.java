@@ -2,14 +2,14 @@ package com.OhRyue.certpilot.learn.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.OhRyue.certpilot.ai.AiExplainService;
-import com.OhRyue.certpilot.learn.web.dto.LearnReviewSubmitRequest;
-import com.OhRyue.certpilot.learn.web.dto.LearnReviewSubmitResult;
-import com.OhRyue.certpilot.question.domain.Question;
-import com.OhRyue.certpilot.question.domain.repo.QuestionRepository;
 import com.OhRyue.certpilot.learnresult.domain.ReviewResult;
 import com.OhRyue.certpilot.learnresult.domain.ReviewResultItem;
 import com.OhRyue.certpilot.learnresult.domain.repo.ReviewResultItemRepository;
 import com.OhRyue.certpilot.learnresult.domain.repo.ReviewResultRepository;
+import com.OhRyue.certpilot.learn.web.dto.LearnReviewSubmitRequest;
+import com.OhRyue.certpilot.learn.web.dto.LearnReviewSubmitResult;
+import com.OhRyue.certpilot.question.domain.Question;
+import com.OhRyue.certpilot.question.domain.repo.QuestionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,9 +25,8 @@ public class LearnReviewService {
   private final AiExplainService aiExplain;
 
   private final ReviewResultRepository reviewResultRepo;
-  private final ReviewResultItemRepository reviewItemRepo;
+  private final ReviewResultItemRepository reviewResultItemRepo;
 
-  /** 메타 파싱용 */
   private final ObjectMapper om = new ObjectMapper();
 
   @Transactional
@@ -45,22 +44,31 @@ public class LearnReviewService {
     Map<Long, String> explanations = new LinkedHashMap<>();
     List<String> weakTags = new ArrayList<>();
 
+    int ord = 0;
+    List<ReviewResultItem> toSave = new ArrayList<>();
+
     for (var a : answers) {
       var q = qMap.get(a.questionId());
       if (q == null) continue;
 
       boolean ok = Objects.equals(q.getAnswerIdx(), a.chosenIdx());
       correctness.put(q.getId(), ok);
-      if (ok) score++;
+      if (ok) score++; else {
+        String tag = extractFirstTag(q.getMetaJson());
+        if (tag != null) weakTags.add(tag);
+      }
 
       String dbExp = Optional.ofNullable(q.getExp()).orElse("");
       String ai = aiExplain.explainForQuestion(q, a.chosenIdx(), dbExp);
       explanations.put(q.getId(), ai);
 
-      if (!ok) {
-        String tag = extractFirstTag(q.getMetaJson());
-        if (tag != null) weakTags.add(tag);
-      }
+      toSave.add(ReviewResultItem.builder()
+          .questionId(q.getId())
+          .chosenIdx(a.chosenIdx())
+          .correct(ok)
+          .aiExplanation(ai)
+          .ordNo(ord++)
+          .build());
     }
 
     String aiSummary;
@@ -68,28 +76,24 @@ public class LearnReviewService {
       aiSummary = aiExplain.summarizeReview(correctness, weakTags);
     } catch (Exception e) {
       aiSummary = "[요약(폴백)] 총 " + total + "문항 중 정답 " + score + "개. "
-          + (weakTags.isEmpty() ? "반복 실수 없음" : "반복 실수 태그: " + String.join(", ", weakTags));
+          + (weakTags.isEmpty() ? "반복 실수 없음." : "반복 실수 태그: " + String.join(", ", weakTags));
     }
 
-    // ===== 결과 저장 ===== (요청에서 detailTopicId 사용)
-    ReviewResult rr = reviewResultRepo.save(new ReviewResult(req.userId(), req.detailTopicId(), score, total));
+    // 헤더 저장
+    ReviewResult header = reviewResultRepo.save(
+        ReviewResult.builder()
+            .userId(req.userId())
+            .certId(null) // 필요 시 요청 확장
+            .detailTopicId(req.detailTopicId())
+            .score(score)
+            .total(total)
+            .aiSummary(aiSummary)
+            .build()
+    );
 
-    for (var a : answers) {
-      var q = qMap.get(a.questionId());
-      if (q == null) continue;
-      boolean ok = Objects.equals(q.getAnswerIdx(), a.chosenIdx());
-      String tag = extractFirstTag(q.getMetaJson());
-      String expSnap = explanations.getOrDefault(q.getId(), Optional.ofNullable(q.getExp()).orElse(""));
-      reviewItemRepo.save(new ReviewResultItem(
-          rr.getId(),
-          q.getId(),
-          ok,
-          a.chosenIdx(),
-          q.getAnswerIdx(),
-          tag,
-          expSnap
-      ));
-    }
+    Long rid = header.getId();
+    toSave.forEach(i -> i.setResultId(rid));
+    reviewResultItemRepo.saveAll(toSave);
 
     return new LearnReviewSubmitResult(score, total, correctness, explanations, aiSummary);
   }

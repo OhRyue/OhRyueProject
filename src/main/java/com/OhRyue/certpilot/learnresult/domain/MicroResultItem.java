@@ -1,50 +1,30 @@
 package com.OhRyue.certpilot.learnresult.domain;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.Instant;
 
+@Getter @Setter
+@NoArgsConstructor @AllArgsConstructor
+@Builder
 @Entity
 @Table(name = "micro_result_item")
-@Getter
-@NoArgsConstructor
 public class MicroResultItem {
   @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
   private Long resultId;
-
-  @Column(length = 8, nullable = false)
-  private String itemType;   // MINI | QUIZ
-
-  private Long refId;
-
+  private String itemType;   // "MINI" | "QUIZ"
+  private Long refId;        // concept_check.id or question.id
+  private Integer chosenIdx; // null 허용
   private boolean correct;
 
-  private Integer chosenIdx;
-
-  private Integer answerIdx;
-
-  @Column(length = 64)
-  private String tag;
-
   @Lob
-  private String expSnapshot;
+  private String explanation; // MINI: DB 해설, QUIZ: AI→폴백
 
-  @Column(nullable = false, updatable = false, insertable = false, columnDefinition = "timestamp default current_timestamp")
+  private int ordNo;
+
+  @Column(name = "created_at", updatable = false, insertable = false)
   private Instant createdAt;
-
-  public MicroResultItem(Long resultId, String itemType, Long refId, boolean correct,
-                         Integer chosenIdx, Integer answerIdx, String tag, String expSnapshot) {
-    this.resultId = resultId;
-    this.itemType = itemType;
-    this.refId = refId;
-    this.correct = correct;
-    this.chosenIdx = chosenIdx;
-    this.answerIdx = answerIdx;
-    this.tag = tag;
-    this.expSnapshot = expSnapshot;
-  }
 }

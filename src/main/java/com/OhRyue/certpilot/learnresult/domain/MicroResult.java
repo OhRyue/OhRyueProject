@@ -1,37 +1,26 @@
 package com.OhRyue.certpilot.learnresult.domain;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.Instant;
 
+@Getter @Setter
+@NoArgsConstructor @AllArgsConstructor
+@Builder
 @Entity
 @Table(name = "micro_result")
-@Getter
-@NoArgsConstructor
 public class MicroResult {
   @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
   private Long userId;
-
+  private Long certId;
+  private Long topicId;   // micro topic(level=4)
   private Long conceptId;
-
-  private Long topicId;
-
   private int score;
-
   private int total;
 
-  @Column(nullable = false, updatable = false, insertable = false, columnDefinition = "timestamp default current_timestamp")
+  @Column(name = "created_at", updatable = false, insertable = false)
   private Instant createdAt;
-
-  public MicroResult(Long userId, Long conceptId, Long topicId, int score, int total) {
-    this.userId = userId;
-    this.conceptId = conceptId;
-    this.topicId = topicId;
-    this.score = score;
-    this.total = total;
-  }
 }
