@@ -1,0 +1,63 @@
+﻿{
+    "content":  [
+                    {
+                        "id":  1,
+                        "stem":  "í¸ëì­ì\u0085 ACID ì¤ ì¼ê´ì± ì¤ëª\u0085ì¼ë¡ ë§ë ê²ì?",
+                        "choices":  [
+                                        "í­ì ì»¤ë°ë¨",
+                                        "ì ì½ì¡°ê±´ì ì ì§",
+                                        "í­ì ì¤ë\u0085ì· ì¬ì©",
+                                        "í­ì ì§ë ¬í"
+                                    ],
+                        "difficulty":  2
+                    },
+                    {
+                        "id":  2,
+                        "stem":  "RC ìì¤ìì íì©ëë íìì?",
+                        "choices":  [
+                                        "Dirty Read",
+                                        "Non-Repeatable Read",
+                                        "ë ë² ì»¤ë°",
+                                        "ì§ë ¬í"
+                                    ],
+                        "difficulty":  2
+                    },
+                    {
+                        "id":  3,
+                        "stem":  "RR ìì¤ìì ì¼ë°ì ì¼ë¡ ë°©ì§ëë ê²ì?",
+                        "choices":  [
+                                        "Dirty Read",
+                                        "Non-Repeatable Read",
+                                        "Starvation",
+                                        "LiveLock"
+                                    ],
+                        "difficulty":  2
+                    },
+                    {
+                        "id":  4,
+                        "stem":  "Phantom Readë¥¼ ê·¼ë³¸ì ì¼ë¡ ë§ë ê²©ë¦¬ìì¤ì?",
+                        "choices":  [
+                                        "RC",
+                                        "RR",
+                                        "Serializable",
+                                        "Read Uncommitted"
+                                    ],
+                        "difficulty":  3
+                    },
+                    {
+                        "id":  5,
+                        "stem":  "í¸ëì­ì\u0085 ë¡¤ë°±ì´ íìí ìí©ì?",
+                        "choices":  [
+                                        "ì ìì²ë¦¬",
+                                        "ë¶ë¶ì±ê³µ",
+                                        "ì¤ë¥/ìì¸",
+                                        "ìºìë¯¸ì¤"
+                                    ],
+                        "difficulty":  1
+                    }
+                ],
+    "page":  0,
+    "size":  5,
+    "totalElements":  41,
+    "totalPages":  9
+}

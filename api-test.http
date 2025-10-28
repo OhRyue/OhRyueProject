@@ -1,0 +1,22 @@
+### 질문 목록 (게이트웨이 경유)
+GET http://localhost:8080/api/questions?page=0&size=5
+Accept: application/json
+
+### 학습 세션 시작 (게이트웨이 경유)
+GET http://localhost:8080/api/learn/session/start?page=0&size=5
+Accept: application/json
+
+### 질문 서비스 직접 호출 (8082)
+GET http://localhost:8082/api/questions?page=0&size=5
+Accept: application/json
+
+### 학습 서비스 직접 호출 (8083)
+GET http://localhost:8083/api/learn/session/start?page=0&size=5
+Accept: application/json
+
+### OpenAPI 문서 JSON (서비스별)
+GET http://localhost:8082/v3/api-docs
+Accept: application/json
+
+GET http://localhost:8083/v3/api-docs
+Accept: application/json

@@ -5,18 +5,80 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: rootpw
       MYSQL_DATABASE: certpilot
+      MYSQL_USER: app
+      MYSQL_PASSWORD: apppw
       TZ: Asia/Seoul
-    ports: ["3307:3306"]   # ← 호스트 3307 → 컨테이너 3306
+    ports:
+      - "3307:3306"              # host 3307 -> container 3306
     volumes:
       - mysql-data:/var/lib/mysql
+
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -prootpw --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
   redis:
     image: redis:7
     container_name: certpilot-redis
     ports: ["6379:6379"]
+
   adminer:
     image: adminer
     container_name: certpilot-adminer
     ports: ["8084:8080"]
-    depends_on: [mysql]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  discovery:
+    build:
+      context: ./infra/discovery
+    container_name: discovery
+    ports: ["8761:8761"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  gateway:
+    build:
+      context: ./infra/gateway
+    container_name: gateway
+    ports: ["8080:8080"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+
+  question-service:
+    build:
+      context: ./services/question-service
+    container_name: question-service
+    ports: ["8082:8082"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
+  learn-service:
+    build:
+      context: ./services/learn-service
+    container_name: learn-service
+    ports: ["8083:8083"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:
