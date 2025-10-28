@@ -1,0 +1,50 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lowerCaseServiceId: true
+      routes:
+        - id: question-service
+          uri: lb://question-service
+          predicates:
+            - Path=/api/questions/**
+        - id: learn-service
+          uri: lb://learn-service
+          predicates:
+            - Path=/api/learn/**
+      default-filters: [ ]
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://discovery:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    non-secure-port: 8080
+    instance-id: ${spring.application.name}:${server.port}:${HOSTNAME}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    gateway:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
