@@ -20,6 +20,50 @@ spring:
           uri: lb://learn-service
           predicates:
             - Path=/api/learn/**
+        - id: certs-service
+          uri: lb://certs-service
+          predicates:
+            - Path=/api/certs/**
+        - id: calendar-service
+          uri: lb://calendar-service
+          predicates:
+            - Path=/api/calendar/**
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+        - id: curriculum-service
+          uri: lb://curriculum-service
+          predicates:
+            - Path=/api/curriculum/**
+        - id: ability-service
+          uri: lb://ability-service
+          predicates:
+            - Path=/api/ability/**
+        - id: wrongnote-service
+          uri: lb://wrongnote-service
+          predicates:
+            - Path=/api/wrongnote/**
+        - id: quiz-service
+          uri: lb://quiz-service
+          predicates:
+            - Path=/api/quiz/**
+        - id: auxiliary-service
+          uri: lb://auxiliary-service
+          predicates:
+            - Path=/api/auxiliary/**
+        - id: progress-service
+          uri: lb://progress-service
+          predicates:
+            - Path=/api/progress/**
+        - id: recommend-service
+          uri: lb://recommend-service
+          predicates:
+            - Path=/api/recommend/**
+        - id: result-service
+          uri: lb://result-service
+          predicates:
+            - Path=/api/result/**
       default-filters: [ ]
 
 eureka:

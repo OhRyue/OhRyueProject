@@ -80,5 +80,140 @@ services:
       mysql:
         condition: service_healthy
 
+  certs-service:
+    build:
+      context: ./services/certs-service
+    container_name: certs-service
+    ports: ["8084:8084"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
+  calendar-service:
+    build:
+      context: ./services/calendar-service
+    container_name: calendar-service
+    ports: ["8085:8085"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+    container_name: auth-service
+    ports: ["8086:8086"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
+  curriculum-service:
+    build:
+      context: ./services/curriculum-service
+    container_name: curriculum-service
+    ports: ["8087:8087"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
+  ability-service:
+    build:
+      context: ./services/ability-service
+    container_name: ability-service
+    ports: ["8088:8088"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
+  wrongnote-service:
+    build:
+      context: ./services/wrongnote-service
+    container_name: wrongnote-service
+    ports: ["8089:8089"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
+  quiz-service:
+    build:
+      context: ./services/quiz-service
+    container_name: quiz-service
+    ports: ["8090:8090"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+
+  auxiliary-service:
+    build:
+      context: ./services/auxiliary-service
+    container_name: auxiliary-service
+    ports: ["8091:8091"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+
+  progress-service:
+    build:
+      context: ./services/progress-service
+    container_name: progress-service
+    ports: ["8092:8092"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+
+  recommend-service:
+    build:
+      context: ./services/recommend-service
+    container_name: recommend-service
+    ports: ["8093:8093"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+
+  result-service:
+    build:
+      context: ./services/result-service
+    container_name: result-service
+    ports: ["8094:8094"]
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      discovery:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:

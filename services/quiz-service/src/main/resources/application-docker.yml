@@ -1,0 +1,35 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: quiz-service
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://discovery:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    non-secure-port: 8090
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
+    instance-id: ${spring.application.name}:${server.port}:${HOSTNAME}
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    org.springframework.cloud: INFO

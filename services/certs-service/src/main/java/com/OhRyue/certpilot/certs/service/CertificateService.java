@@ -1,0 +1,49 @@
+package com.OhRyue.certpilot.certs.service;
+
+import com.OhRyue.certpilot.certs.dto.CertificateDetailDto;
+import com.OhRyue.certpilot.certs.dto.CertificateSummaryDto;
+import com.OhRyue.certpilot.certs.entity.Certificate;
+import com.OhRyue.certpilot.certs.repository.CertificateRepository;
+import com.OhRyue.certpilot.common.error.NotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class CertificateService {
+
+  private final CertificateRepository repo;
+
+  public CertificateService(CertificateRepository repo) {
+    this.repo = repo;
+  }
+
+  public Page<CertificateSummaryDto> findAll(String field, Pageable pageable) {
+    Page<Certificate> page;
+    if (field != null && !field.isBlank()) {
+      page = repo.findByFieldIgnoreCase(field.trim(), pageable);
+    } else {
+      page = repo.findAll(pageable);
+    }
+    return page.map(CertificateSummaryDto::from);
+  }
+
+  public List<CertificateSummaryDto> search(String q, int limit) {
+    if (q == null || q.isBlank()) return List.of();
+    if (limit <= 0) limit = 10;
+    return repo.findTop10ByNameContainingIgnoreCase(q.trim())
+        .stream()
+        .limit(limit)
+        .map(CertificateSummaryDto::from)
+        .toList();
+  }
+
+  public CertificateDetailDto getById(Long id) {
+    Certificate c = repo.findById(id)
+        .orElseThrow(() -> new NotFoundException("certificate not found: " + id));
+    return CertificateDetailDto.from(c);
+  }
+}
+

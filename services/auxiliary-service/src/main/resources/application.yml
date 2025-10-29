@@ -1,0 +1,15 @@
+server:
+  port: 8091
+
+spring:
+  application:
+    name: auxiliary-service
+
+springdoc:
+  api-docs:
+    path: /api-docs
+
+logging:
+  level:
+    root: INFO
+    com.OhRyue.certpilot: DEBUG

@@ -1,0 +1,15 @@
+server:
+  port: 8089
+
+spring:
+  application:
+    name: wrongnote-service
+
+springdoc:
+  api-docs:
+    path: /api-docs
+
+logging:
+  level:
+    root: INFO
+    com.OhRyue.certpilot: DEBUG

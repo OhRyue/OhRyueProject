@@ -1,0 +1,36 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.6'
+}
+
+java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
+
+repositories {
+    mavenCentral()
+    maven { url = uri("https://repo.spring.io/release") }
+}
+
+dependencies {
+    implementation platform("org.springframework.boot:spring-boot-dependencies:3.5.6")
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client:4.3.0'
+
+    implementation project(':infra:shared-lib')
+
+    // 관측/분산추적 (Micrometer Tracing + Brave)
+    implementation "io.micrometer:micrometer-tracing-bridge-brave"
+    implementation "io.zipkin.reporter2:zipkin-reporter-brave"
+
+    // Resilience4j (Spring Boot 3 통합)
+    implementation "io.github.resilience4j:resilience4j-spring-boot3"
+
+    compileOnly 'org.projectlombok:lombok:1.18.34'
+    annotationProcessor 'org.projectlombok:lombok:1.18.34'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
