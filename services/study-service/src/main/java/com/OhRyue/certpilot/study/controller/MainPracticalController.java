@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/study/practical")
 @RequiredArgsConstructor
-public class PracticalController {
+public class MainPracticalController {
 
   private final PracticalService service;
 

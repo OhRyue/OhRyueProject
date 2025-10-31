@@ -38,9 +38,83 @@ public class StudyFlowService {
   /* ========================= 개념 ========================= */
 
   public ConceptResp loadConcept(Long topicId) {
-    Topic t = topicRepo.findById(topicId).orElseThrow(() -> new NoSuchElementException("Topic not found: " + topicId));
-    String content = conceptRepo.findByTopicId(topicId).map(Concept::getContent).orElse("");
-    return new ConceptResp(topicId, t.getTitle(), content);
+    var topic = topicRepo.findById(topicId).orElseThrow(() -> new NoSuchElementException("Topic not found: " + topicId));
+    var conceptOpt = conceptRepo.findByTopicId(topicId);
+
+    // 기본값
+    String topicTitle = topic.getTitle();
+    java.util.List<ConceptResp.Section> sections = java.util.List.of();
+
+    if (conceptOpt.isPresent()) {
+      var concept = conceptOpt.get();
+      var json = concept.getBlocksJson();
+
+      if (json != null && !json.isBlank()) {
+        try {
+          // blocksJson 전체를 파싱해서 sections 배열만 뽑는다.
+          // 구조: { "sections": [ {orderNo, subCode, title, importance, blocks:[...]} , ... ] }
+          com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+          com.fasterxml.jackson.databind.JsonNode root = om.readTree(json);
+          var arr = root.get("sections");
+
+          java.util.List<ConceptResp.Section> list = new java.util.ArrayList<>();
+          if (arr != null && arr.isArray()) {
+            for (var node : arr) {
+              int orderNo = node.hasNonNull("orderNo") ? node.get("orderNo").asInt() : 0;
+              String subCode = node.hasNonNull("subCode") ? node.get("subCode").asText() : "";
+              String secTitle = node.hasNonNull("title") ? node.get("title").asText() : "";
+              int importance = node.hasNonNull("importance") ? node.get("importance").asInt() : 0;
+
+              java.util.List<ConceptResp.Block> blocks = new java.util.ArrayList<>();
+              var blocksNode = node.get("blocks");
+              if (blocksNode != null && blocksNode.isArray()) {
+                for (var b : blocksNode) {
+                  String type     = b.hasNonNull("type")     ? b.get("type").asText() : null;
+                  String text     = b.hasNonNull("text")     ? b.get("text").asText() : null;
+                  String url      = b.hasNonNull("url")      ? b.get("url").asText() : null;
+                  String alt      = b.hasNonNull("alt")      ? b.get("alt").asText() : null;
+                  String caption  = b.hasNonNull("caption")  ? b.get("caption").asText() : null;
+
+                  java.util.List<String> items   = new java.util.ArrayList<>();
+                  java.util.List<String> headers = new java.util.ArrayList<>();
+                  java.util.List<java.util.List<String>> rows = new java.util.ArrayList<>();
+
+                  var itemsNode = b.get("items");
+                  if (itemsNode != null && itemsNode.isArray()) {
+                    itemsNode.forEach(it -> items.add(it.asText()));
+                  }
+                  var headersNode = b.get("headers");
+                  if (headersNode != null && headersNode.isArray()) {
+                    headersNode.forEach(h -> headers.add(h.asText()));
+                  }
+                  var rowsNode = b.get("rows");
+                  if (rowsNode != null && rowsNode.isArray()) {
+                    for (var r : rowsNode) {
+                      java.util.List<String> row = new java.util.ArrayList<>();
+                      r.forEach(cell -> row.add(cell.asText()));
+                      rows.add(row);
+                    }
+                  }
+
+                  blocks.add(new ConceptResp.Block(type, text, items, url, alt, caption, headers, rows));
+                }
+              }
+
+              list.add(new ConceptResp.Section(orderNo, subCode, secTitle, importance, blocks));
+            }
+          }
+          // orderNo 기준 정렬
+          list.sort(java.util.Comparator.comparing(ConceptResp.Section::orderNo));
+          sections = java.util.List.copyOf(list);
+
+        } catch (Exception ignore) {
+          // 파싱 실패 시 레거시 content만 내려가게 비움
+          sections = java.util.List.of();
+        }
+      }
+    }
+
+    return new ConceptResp(topicId, topicTitle, sections);
   }
 
   /* ========================= 미니체크(OX) ========================= */
