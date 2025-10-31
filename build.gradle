@@ -1,43 +1,62 @@
 plugins {
-    //id 'java'
+    id 'java'
     id 'org.springframework.boot' version '3.5.6' apply false
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
-group = 'com.example'
+group = 'com.ohryue'
 version = '0.0.1-SNAPSHOT'
-description = 'OhRyueProject'
+java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
 
-ext {
-    springBootVersion = '3.5.6'
-    springCloudVersion = '2025.0.0'
-}
-
-allprojects {
-    repositories { mavenCentral() }
-}
 
 subprojects {
     apply plugin: 'java'
     apply plugin: 'io.spring.dependency-management'
 
-    java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
 
+    repositories { mavenCentral() }
+
+
+    dependencies {
+        testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
+    }
+
+
+    test { useJUnitPlatform() }
+}
+
+
+ext {
+    set('springBootVersion', '3.5.6')
+    set('springCloudVersion', '2025.0.0')
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'io.spring.dependency-management'
     repositories { mavenCentral() }
 
     dependencyManagement {
         imports {
             mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+        }
+        imports {
             mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
         }
     }
-
     dependencies {
-        compileOnly 'org.projectlombok:lombok'
-        annotationProcessor 'org.projectlombok:lombok'
-        testImplementation 'org.springframework.boot:spring-boot-starter-test'
-        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+        testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
     }
 
-    tasks.withType(Test).configureEach { useJUnitPlatform() }
+    test { useJUnitPlatform() }
+}
+
+configure(subprojects.findAll { it.name.endsWith('service') || it.name == 'gateway' || it.name == 'discovery' }) {
+    apply plugin: 'org.springframework.boot'
+    dependencies {
+        implementation 'org.springframework.boot:spring-boot-starter-actuator'
+        implementation 'org.springframework.boot:spring-boot-starter-validation'
+        implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+        runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+    }
 }

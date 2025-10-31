@@ -3,217 +3,107 @@ services:
     image: mysql:8.4
     container_name: certpilot-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpw}
       MYSQL_DATABASE: certpilot
       MYSQL_USER: app
       MYSQL_PASSWORD: apppw
-      TZ: Asia/Seoul
-    ports:
-      - "3307:3306"              # host 3307 -> container 3306
-    volumes:
-      - mysql-data:/var/lib/mysql
-
+    ports: ["3307:3306"]
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -prootpw --silent"]
-      interval: 5s
-      timeout: 3s
-      retries: 15
-
-  redis:
-    image: redis:7
-    container_name: certpilot-redis
-    ports: ["6379:6379"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpw"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   adminer:
     image: adminer
     container_name: certpilot-adminer
     ports: ["8084:8080"]
-    depends_on:
-      mysql:
-        condition: service_healthy
 
   discovery:
     build:
-      context: ./infra/discovery
+      context: .                                   # ✅ 루트 컨텍스트
+      dockerfile: infra/discovery/Dockerfile       # ✅ 모듈 Dockerfile 경로
+    image: OhRyue/discovery:dev
     container_name: discovery
-    ports: ["8761:8761"]
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      mysql:
-        condition: service_healthy
+    ports: ["8761:8761"]
+    restart: unless-stopped
 
   gateway:
     build:
-      context: ./infra/gateway
+      context: .                                   # ✅ 루트 컨텍스트
+      dockerfile: infra/gateway/Dockerfile         # ✅ 모듈 Dockerfile 경로
+    image: OhRyue/gateway:dev
     container_name: gateway
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on: [discovery]
     ports: ["8080:8080"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
+    restart: unless-stopped
 
-  question-service:
+  account-service:
     build:
-      context: ./services/question-service
-    container_name: question-service
-    ports: ["8082:8082"]
+      context: ./services/account-service
+    image: OhRyue/account-service:dev
+    container_name: account-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on: [ mysql, discovery ]
+    restart: unless-stopped
+
+  study-service:
+    build:
+      context: .
+      dockerfile: services/study-service/Dockerfile
+    image: OhRyue/study-service:dev
+    container_name: study-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
-      discovery:
-        condition: service_started
       mysql:
         condition: service_healthy
-
-  learn-service:
-    build:
-      context: ./services/learn-service
-    container_name: learn-service
-    ports: ["8083:8083"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
       discovery:
         condition: service_started
-      mysql:
-        condition: service_healthy
+    ports: [ "8082:8082" ]
+    restart: unless-stopped
 
-  certs-service:
+  report-service:
     build:
-      context: ./services/certs-service
-    container_name: certs-service
-    ports: ["8084:8084"]
+      context: ./services/report-service
+    image: OhRyue/report-service:dev
+    container_name: report-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-      mysql:
-        condition: service_healthy
+    depends_on: [ discovery ]
+    restart: unless-stopped
 
-  calendar-service:
+  gamify-service:
     build:
-      context: ./services/calendar-service
-    container_name: calendar-service
-    ports: ["8085:8085"]
+      context: ./services/gamify-service
+    image: OhRyue/gamify-service:dev
+    container_name: gamify-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-      mysql:
-        condition: service_healthy
+    depends_on: [ discovery ]
+    restart: unless-stopped
 
-  auth-service:
+  cert-service:
     build:
-      context: ./services/auth-service
-    container_name: auth-service
-    ports: ["8086:8086"]
+      context: ./services/cert-service
+    image: OhRyue/cert-service:dev
+    container_name: cert-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-      mysql:
-        condition: service_healthy
+    depends_on: [ discovery ]
+    restart: unless-stopped
 
-  curriculum-service:
+  versus-service:
     build:
-      context: ./services/curriculum-service
-    container_name: curriculum-service
-    ports: ["8087:8087"]
+      context: ./services/versus-service
+    image: OhRyue/versus-service:dev
+    container_name: versus-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-      mysql:
-        condition: service_healthy
-
-  ability-service:
-    build:
-      context: ./services/ability-service
-    container_name: ability-service
-    ports: ["8088:8088"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-      mysql:
-        condition: service_healthy
-
-  wrongnote-service:
-    build:
-      context: ./services/wrongnote-service
-    container_name: wrongnote-service
-    ports: ["8089:8089"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-      mysql:
-        condition: service_healthy
-
-  quiz-service:
-    build:
-      context: ./services/quiz-service
-    container_name: quiz-service
-    ports: ["8090:8090"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-
-  auxiliary-service:
-    build:
-      context: ./services/auxiliary-service
-    container_name: auxiliary-service
-    ports: ["8091:8091"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-
-  progress-service:
-    build:
-      context: ./services/progress-service
-    container_name: progress-service
-    ports: ["8092:8092"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-
-  recommend-service:
-    build:
-      context: ./services/recommend-service
-    container_name: recommend-service
-    ports: ["8093:8093"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-
-  result-service:
-    build:
-      context: ./services/result-service
-    container_name: result-service
-    ports: ["8094:8094"]
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      discovery:
-        condition: service_started
-      mysql:
-        condition: service_healthy
-
-volumes:
-  mysql-data:
+    depends_on: [ discovery ]
+    restart: unless-stopped

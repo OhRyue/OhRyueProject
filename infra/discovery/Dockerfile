@@ -1,7 +1,17 @@
+# ---------- Builder ----------
+FROM eclipse-temurin:17-jdk AS builder
+WORKDIR /workspace
+
+COPY . ./
+RUN chmod +x ./gradlew || true
+
+RUN ./gradlew :infra:discovery:bootJar --no-daemon -x test
+
+# ---------- Runner ----------
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-ARG JAR=build/libs/*.jar
-COPY ${JAR} app.jar
-ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
+
+COPY --from=builder /workspace/infra/discovery/build/libs/*.jar app.jar
+
 EXPOSE 8761
-ENTRYPOINT ["sh","-c","java $JAVA_OPTS -Dspring.profiles.active=docker -jar app.jar"]
+ENTRYPOINT ["java","-jar","/app/app.jar"]

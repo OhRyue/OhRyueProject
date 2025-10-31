@@ -1,0 +1,4 @@
+server.port: 8085
+spring.application.name: cert-service
+management.endpoints.web.exposure.include: '*'
+eureka.client.serviceUrl.defaultZone: http://discovery:8761/eureka
