@@ -1,66 +1,75 @@
 server:
   port: 8080
+
 spring:
-  application.name: gateway
+  application:
+    name: gateway
   cloud:
     gateway:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      # 프런트 개발용 전역 CORS 허용
+      globalcors:
+        corsConfigurations:
+          "[/**]":
+            allowedOrigins:
+              - http://localhost:5173
+              - http://210.110.33.223:3000
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+
       routes:
-        - id: account
-          uri: lb://account-service
-          predicates: [ Path=/api/account/** ]
-          filters: [ StripPrefix=1 ]
-#        - id: study
-#          uri: lb://study-service
-#          predicates: [ Path=/api/study/** ]
-#          filters: [ StripPrefix=1 ]
         - id: study-service
           uri: lb://study-service
           predicates:
             - Path=/api/study/**
-          filters:
-            - StripPrefix=1
 
-        # Swagger UI 정적 리소스 프록시
         - id: study-swagger-ui
           uri: lb://study-service
           predicates:
             - Path=/api/study/swagger-ui/**
-          filters:
-            - StripPrefix=1
 
-        # OpenAPI JSON 프록시
         - id: study-openapi
           uri: lb://study-service
           predicates:
             - Path=/api/study/v3/api-docs/**
-          filters:
-            - StripPrefix=1
+
+        - id: account
+          uri: lb://account-service
+          predicates:
+            - Path=/api/account/**
+
         - id: report
           uri: lb://report-service
-          predicates: [ Path=/api/report/** ]
-          filters: [ StripPrefix=1 ]
+          predicates:
+            - Path=/api/report/**
+
         - id: gamify
           uri: lb://gamify-service
-          predicates: [ Path=/api/gamify/** ]
-          filters: [ StripPrefix=1 ]
+          predicates:
+            - Path=/api/gamify/**
+
         - id: cert
           uri: lb://cert-service
-          predicates: [ Path=/api/cert/** ]
-          filters: [ StripPrefix=1 ]
+          predicates:
+            - Path=/api/cert/**
+
         - id: versus
           uri: lb://versus-service
-          predicates: [ Path=/api/versus/** ]
-          filters: [ StripPrefix=1 ]
-    discovery.client.simple: false
+          predicates:
+            - Path=/api/versus/**
 
   main:
     web-application-type: reactive
 
 management:
-  endpoints.web.exposure.include: '*'
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
 
 eureka:
   client:
-    serviceUrl.defaultZone: http://discovery:8761/eureka
+    serviceUrl:
+      defaultZone: http://discovery:8761/eureka

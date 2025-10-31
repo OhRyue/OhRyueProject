@@ -2,6 +2,8 @@ server:
   port: 8082
 
 spring:
+  application:
+    name: study-service
   datasource:
     url: jdbc:mysql://mysql:3306/certpilot?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
     username: app
