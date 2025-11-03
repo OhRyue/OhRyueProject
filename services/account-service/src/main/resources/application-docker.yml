@@ -2,8 +2,6 @@ server:
   port: 8081
 
 spring:
-  application:
-    name: account-service
   datasource:
     url: jdbc:mysql://mysql:3306/certpilot?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
     username: app
@@ -20,3 +18,7 @@ eureka:
   client:
     service-url:
       defaultZone: http://discovery:8761/eureka
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true

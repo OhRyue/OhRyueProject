@@ -21,8 +21,8 @@ services:
 
   discovery:
     build:
-      context: .                                   # ✅ 루트 컨텍스트
-      dockerfile: infra/discovery/Dockerfile       # ✅ 모듈 Dockerfile 경로
+      context: .
+      dockerfile: infra/discovery/Dockerfile
     image: OhRyue/discovery:dev
     container_name: discovery
     environment:
@@ -32,8 +32,8 @@ services:
 
   gateway:
     build:
-      context: .                                   # ✅ 루트 컨텍스트
-      dockerfile: infra/gateway/Dockerfile         # ✅ 모듈 Dockerfile 경로
+      context: .
+      dockerfile: infra/gateway/Dockerfile
     image: OhRyue/gateway:dev
     container_name: gateway
     environment:
@@ -44,12 +44,18 @@ services:
 
   account-service:
     build:
-      context: ./services/account-service
+      context: .
+      dockerfile: services/account-service/Dockerfile
     image: OhRyue/account-service:dev
     container_name: account-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on: [ mysql, discovery ]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      discovery:
+        condition: service_started
+    ports: [ "8081:8081" ]
     restart: unless-stopped
 
   study-service:
