@@ -10,6 +10,7 @@ import com.OhRyue.certpilot.account.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -53,5 +54,21 @@ public class AuthController {
         );
 
         return ResponseEntity.ok(response);
+    }
+
+    // debug: 로그인한 사용자 정보 확인 API
+    @GetMapping("/me")
+    public ResponseEntity<?> getMyInfo(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "unauthorized",
+                    "message", "로그인이 필요합니다"
+            ));
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "username", authentication.getName(),
+                "authorities", authentication.getAuthorities()
+        ));
     }
 }

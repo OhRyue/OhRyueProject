@@ -22,3 +22,6 @@ eureka:
     register-with-eureka: true
   instance:
     prefer-ip-address: true
+
+jwt:
+  secret-key: "your-super-secure-secret-key123456"
