@@ -10,12 +10,12 @@ import java.util.Map;
 
 /*
     전역 예외 처리
-    - 로그인 실패, 서버 에러
+    - 컨트롤러에서 발생하는 모든 예외를 여기서 가로채, 일관된 json 형태로 클라이언트에 응답
  */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    // 로그인 실패
+    // 로그인 실패(아이디, 비밀번호 틀림)
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<?> handleInvalidCredentials() {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
@@ -24,7 +24,16 @@ public class GlobalExceptionHandler {
         ));
     }
 
-    // 서버 에러
+    // 회원가입 실패(중복된 username 등 잘못된 요청일 때)
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", "invalid_request",
+                "message", e.getMessage()
+        ));
+    }
+
+    // 그 외 예상하지 못한 서버 내부 에러
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleOtherExceptions(Exception e) {
         log.error("unexpected error", e);
