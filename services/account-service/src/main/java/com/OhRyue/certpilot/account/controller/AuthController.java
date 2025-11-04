@@ -5,6 +5,7 @@ import com.OhRyue.certpilot.account.dto.UserLoginDto;
 import com.OhRyue.certpilot.account.dto.UserRegisterDto;
 import com.OhRyue.certpilot.account.dto.UserResponseDto;
 import com.OhRyue.certpilot.account.service.UserService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,14 +36,13 @@ public class AuthController {
 
     // 로그인
     @PostMapping("/login")
-    public ResponseEntity<UserResponseDto> login(@RequestBody UserLoginDto req) {
+    public ResponseEntity<?> login(@RequestBody UserLoginDto req) {
         User user = userService.login(req.getUsername(), req.getPassword());
-        UserResponseDto response = new UserResponseDto(
-                "로그인 성공",
-                user.getId(),
-                user.getUsername(),
-                user.getRole()
-        );
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(Map.of(
+                "message", "로그인 성공",
+                "userId", user.getId(),
+                "username", user.getUsername(),
+                "role", user.getRole()
+        ));
     }
 }

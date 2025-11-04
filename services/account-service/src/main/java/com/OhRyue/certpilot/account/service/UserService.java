@@ -1,6 +1,7 @@
 package com.OhRyue.certpilot.account.service;
 
 import com.OhRyue.certpilot.account.domain.User;
+import com.OhRyue.certpilot.account.exception.InvalidCredentialsException;
 import com.OhRyue.certpilot.account.repo.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -49,17 +50,9 @@ public class UserService {
      * 로그인 (비밀번호 검증)
      */
     public User login(String username, String rawPassword) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty()) {
-            throw new IllegalArgumentException("존재하지 않는 사용자입니다.");
-        }
-
-        User user = userOpt.get();
-        if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
-            throw new IllegalArgumentException("비밀번호가 올바르지 않습니다.");
-        }
-
-        return user; // 로그인 성공 시 사용자 정보 반환
+        return userRepository.findByUsername(username)
+                .filter(user -> passwordEncoder.matches(rawPassword, user.getPassword()))
+                .orElseThrow(InvalidCredentialsException::new);
     }
 
     /**
