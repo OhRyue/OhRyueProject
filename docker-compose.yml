@@ -8,21 +8,26 @@ services:
       MYSQL_USER: app
       MYSQL_PASSWORD: apppw
     ports: ["3307:3306"]
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d
+      - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpw"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-rootpw}"]
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   adminer:
     image: adminer
     container_name: certpilot-adminer
     ports: ["8084:8080"]
+    restart: unless-stopped
 
   discovery:
     build:
-      context: .                                   # ✅ 루트 컨텍스트
-      dockerfile: infra/discovery/Dockerfile       # ✅ 모듈 Dockerfile 경로
+      context: .
+      dockerfile: infra/discovery/Dockerfile
     image: OhRyue/discovery:dev
     container_name: discovery
     environment:
@@ -32,13 +37,14 @@ services:
 
   gateway:
     build:
-      context: .                                   # ✅ 루트 컨텍스트
-      dockerfile: infra/gateway/Dockerfile         # ✅ 모듈 Dockerfile 경로
+      context: .
+      dockerfile: infra/gateway/Dockerfile
     image: OhRyue/gateway:dev
     container_name: gateway
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on: [discovery]
+    depends_on:
+      - discovery
     ports: ["8080:8080"]
     restart: unless-stopped
 
@@ -49,7 +55,11 @@ services:
     container_name: account-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on: [ mysql, discovery ]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      discovery:
+        condition: service_started
     restart: unless-stopped
 
   study-service:
@@ -65,7 +75,7 @@ services:
         condition: service_healthy
       discovery:
         condition: service_started
-    ports: [ "8082:8082" ]
+    ports: ["8082:8082"]
     restart: unless-stopped
 
   report-service:
@@ -75,7 +85,9 @@ services:
     container_name: report-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on: [ discovery ]
+    depends_on:
+      discovery:
+        condition: service_started
     restart: unless-stopped
 
   gamify-service:
@@ -85,7 +97,9 @@ services:
     container_name: gamify-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on: [ discovery ]
+    depends_on:
+      discovery:
+        condition: service_started
     restart: unless-stopped
 
   cert-service:
@@ -95,7 +109,9 @@ services:
     container_name: cert-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on: [ discovery ]
+    depends_on:
+      discovery:
+        condition: service_started
     restart: unless-stopped
 
   versus-service:
@@ -105,5 +121,10 @@ services:
     container_name: versus-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    depends_on: [ discovery ]
+    depends_on:
+      discovery:
+        condition: service_started
     restart: unless-stopped
+
+volumes:
+  mysql-data:
