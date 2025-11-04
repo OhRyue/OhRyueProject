@@ -5,46 +5,72 @@ import java.util.List;
 
 public class PracticalDtos {
 
-  @Schema(description = "실기용 문제 1개(단답/서술)")
-  public record PracticalQuestion(
-      Long questionId,
-      String type,          // SHORT | LONG
-      String text,
-      String imageUrl
-  ) {}
+    // 실기용 단답/서술 문제 1개
+    @Schema(description = "실기용 문제 1개(단답/서술)")
+    public record PracticalQuestion(
+            Long questionId, // 문제 ID
+            String type,     // SHORT | LONG
+            String text,     // 문제 본문
+            String imageUrl  // 문제 이미지(선택)
+    ) {}
 
-  @Schema(description = "실기 문제 세트")
-  public record PracticalSet(
-      List<PracticalQuestion> items
-  ) {}
+    // 실기 세트(여러 문제)
+    @Schema(description = "실기 문제 세트")
+    public record PracticalSet(
+            List<PracticalQuestion> items // 문제 배열
+    ) {}
 
-  /* ---------- 제출 ---------- */
+    /* ---------- 제출 ---------- */
 
-  @Schema(description = "실기 제출: 사용자 답안 1개")
-  public record PracticalAnswer(
-      Long questionId,
-      String userText
-  ) {}
+    // 사용자 답안 1개(실기)
+    @Schema(description = "실기 제출: 사용자 답안 1개")
+    public record PracticalAnswer(
+            Long questionId, // 문제 ID
+            String userText  // 사용자의 주관식 답변 텍스트
+    ) {}
 
-  @Schema(description = "실기 제출 요청")
-  public record PracticalSubmitReq(
-      String userId,
-      Long topicId,
-      List<PracticalAnswer> answers
-  ) {}
+    // 실기 제출 요청(배치)
+    @Schema(description = "실기 제출 요청")
+    public record PracticalSubmitReq(
+            String userId,                 // 사용자 식별자
+            Long topicId,                  // 토픽 ID
+            List<PracticalAnswer> answers  // 제출 답안 목록
+    ) {}
 
-  @Schema(description = "실기 제출 결과 아이템")
-  public record PracticalSubmitItem(
-      Long questionId,
-      Integer score,          // 0~100
-      String baseExplanation, // DB 내 기본 해설
-      String aiExplanation    // LLM 결과(맞춤 해설)
-  ) {}
+    // 실기 제출 결과 1개
+    @Schema(description = "실기 제출 결과 아이템")
+    public record PracticalSubmitItem(
+            Long questionId,       // 문제 ID
+            Integer score,         // 0~100 (AI 채점)
+            String baseExplanation,// DB 기본 해설
+            String aiExplanation   // LLM 맞춤 해설
+    ) {}
 
-  @Schema(description = "실기 제출 응답")
-  public record PracticalSubmitResp(
-      int total,
-      int avgScore,
-      List<PracticalSubmitItem> items
-  ) {}
+    // 실기 제출 응답(배치)
+    @Schema(description = "실기 제출 응답")
+    public record PracticalSubmitResp(
+            int total,                          // 채점된 문항 수
+            int avgScore,                       // 평균 점수
+            List<PracticalSubmitItem> items,    // 결과 아이템 목록
+            List<Long> wrongQuestionIds         // 방금 세트의 오답 문제 ID들(score<60)
+    ) {}
+
+    /* ---------- 즉시 채점 ---------- */
+
+    // 실기 즉시 채점 요청
+    @Schema(description = "실기 단건 즉시 채점 요청")
+    public record PracticalGradeOneReq(
+            String userId,   // 사용자 ID
+            Long topicId,    // 토픽 ID
+            Long questionId, // 문제 ID
+            String userText  // 사용자의 주관식 답변
+    ) {}
+
+    // 실기 즉시 채점 응답
+    @Schema(description = "실기 단건 즉시 채점 응답")
+    public record PracticalGradeOneResp(
+            Integer score,         // 0~100 (AI 채점)
+            String baseExplanation,// DB 기본 해설
+            String aiExplanation   // LLM 맞춤 해설
+    ) {}
 }
