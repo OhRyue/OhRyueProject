@@ -39,48 +39,105 @@ public class MicroDtos {
   /* ===================== 미니체크(OX) ===================== */
 
   @Schema(name = "MiniSet")
-  public record MiniSet(List<MiniQuestion> items) {}
+  public record MiniSet(
+          List<MiniQuestion> items
+  ) {}
 
   @Schema(name = "MiniQuestion")
-  public record MiniQuestion(Long questionId, String text) {}
+  public record MiniQuestion(
+          Long questionId,
+          String text
+  ) {}
 
   @Schema(name = "MiniSubmitReq")
-  public record MiniSubmitReq(String userId, Long topicId, List<MiniAnswer> answers) {}
+  public record MiniSubmitReq(
+          String userId,
+          Long topicId,
+          List<MiniAnswer> answers
+  ) {}
 
   @Schema(name = "MiniAnswer")
-  public record MiniAnswer(Long questionId, Boolean answer) {}
+  public record MiniAnswer(
+          Long questionId,
+          Boolean answer
+  ) {}
 
   @Schema(name = "MiniSubmitResp")
-  public record MiniSubmitResp(int total, int correct, boolean passed, List<MiniSubmitItem> items) {}
+  public record MiniSubmitResp(
+          int total,
+          int correct,
+          boolean passed,
+          List<MiniSubmitItem> items
+  ) {}
 
   @Schema(name = "MiniSubmitItem")
-  public record MiniSubmitItem(Long questionId, boolean correct, String explanation, String aiExplanation) {}
+  public record MiniSubmitItem(
+          Long questionId,
+          boolean correct,
+          String explanation,
+          String aiExplanation
+  ) {}
 
   /* ===================== MCQ ===================== */
 
   @Schema(name = "McqSet")
-  public record McqSet(List<McqQuestion> items) {}
+  public record McqSet(
+          List<McqQuestion> items
+  ) {}
 
   @Schema(name = "McqQuestion")
-  public record McqQuestion(Long questionId, String text, List<McqChoice> choices, String imageUrl) {}
+  public record McqQuestion(
+          Long questionId,
+          String text,
+          List<McqChoice> choices,
+          String imageUrl
+  ) {}
 
   @Schema(name = "McqChoice")
-  public record McqChoice(String label, String text) {}
+  public record McqChoice(
+          String label,
+          String text
+  ) {}
 
   @Schema(name = "McqSubmitReq")
-  public record McqSubmitReq(String userId, Long topicId, List<McqAnswer> answers) {}
+  public record McqSubmitReq(
+          String userId,
+          Long topicId,
+          List<McqAnswer> answers
+  ) {}
 
   @Schema(name = "McqAnswer")
-  public record McqAnswer(Long questionId, String label) {}
+  public record McqAnswer(
+          Long questionId,
+          String label
+  ) {}
 
   @Schema(name = "McqSubmitResp")
-  public record McqSubmitResp(int total, int correct, List<McqSubmitItem> items) {}
+  public record McqSubmitResp(
+          int total,
+          int correct,
+          List<McqSubmitItem> items
+  ) {}
 
   @Schema(name = "McqSubmitItem")
-  public record McqSubmitItem(Long questionId, boolean correct, String correctLabel, String explanation, String aiExplanation) {}
+  public record McqSubmitItem(
+          Long questionId,
+          boolean correct,
+          String correctLabel,
+          String explanation,
+          String aiExplanation
+  ) {}
 
   /* ===================== 요약 ===================== */
 
   @Schema(name = "SummaryResp")
-  public record SummaryResp(int miniTotal, int miniCorrect, boolean miniPassed, int mcqTotal, int mcqCorrect) {}
+  public record SummaryResp(
+          int miniTotal,
+          int miniCorrect,
+          boolean miniPassed,
+          int mcqTotal,
+          int mcqCorrect,
+          String aiSummary,         // AI 학습 요약(한국어 2~4문장, 폴백 포함)
+          boolean completed         // 완료 여부
+  ) {}
 }
