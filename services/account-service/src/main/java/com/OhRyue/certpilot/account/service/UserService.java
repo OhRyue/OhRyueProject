@@ -24,20 +24,25 @@ public class UserService {
      * 회원가입
      */
     public User register(String username, String rawPassword) {
-        // 중복 아이디 체크
-        if (userRepository.findByUsername(username).isPresent()) {
-            throw new IllegalArgumentException("이미 존재하는 사용자명입니다.");
+        try {
+            System.out.println("✅ register() 들어옴 username=" + username);
+            if (userRepository.findByUsername(username).isPresent()) {
+                throw new IllegalArgumentException("이미 존재하는 사용자명입니다.");
+            }
+
+            String encodedPassword = passwordEncoder.encode(rawPassword);
+
+            User user = new User();
+            user.setUsername(username);
+            user.setPassword(encodedPassword);
+            user.setRole("USER");
+
+            return userRepository.save(user);
+
+        } catch (Exception e) {
+            e.printStackTrace(); // 콘솔에 실제 에러 찍힘
+            throw e;
         }
-
-        // 비밀번호 암호화
-        String encodedPassword = passwordEncoder.encode(rawPassword);
-
-        User user = new User();
-        user.setUsername(username);
-        user.setPassword(encodedPassword);
-        user.setRole("USER");
-
-        return userRepository.save(user);
     }
 
     /**
