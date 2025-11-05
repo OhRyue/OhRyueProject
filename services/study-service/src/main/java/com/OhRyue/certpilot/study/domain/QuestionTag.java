@@ -14,7 +14,8 @@ import lombok.*;
 @Builder
 public class QuestionTag {
 
-  @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
   @Column(nullable = false)
