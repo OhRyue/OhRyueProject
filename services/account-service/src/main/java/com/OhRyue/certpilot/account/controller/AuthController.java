@@ -56,7 +56,7 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    // debug: 로그인한 사용자 정보 확인 API
+    // JWT을 기반으로 DB에서 유저 데이터 조회해서 반환
     @GetMapping("/me")
     public ResponseEntity<?> getMyInfo(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
@@ -66,9 +66,14 @@ public class AuthController {
             ));
         }
 
+        String username = authentication.getName();
+        User user = userService.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다"));
+
         return ResponseEntity.ok(Map.of(
-                "username", authentication.getName(),
-                "authorities", authentication.getAuthorities()
+                "id", user.getId(),
+                "username", user.getUsername(),
+                "role", user.getRole()
         ));
     }
 }
