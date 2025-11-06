@@ -17,6 +17,12 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: always
 
   adminer:
     image: adminer
@@ -60,6 +66,8 @@ services:
       mysql:
         condition: service_healthy
       discovery:
+        condition: service_started
+      redis:
         condition: service_started
     ports: ["8081:8081"]
     restart: unless-stopped
@@ -130,3 +138,5 @@ services:
 
 volumes:
   mysql-data:
+
+
