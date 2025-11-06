@@ -112,4 +112,24 @@ public class AuthController {
         ));
     }
 
+    // 로그아웃
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "unauthorized",
+                    "message", "로그인이 필요합니다"
+            ));
+        }
+
+        String username = authentication.getName();
+
+        // Redis에서 Refresh Token 삭제
+        refreshTokenService.delete(username);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "로그아웃 성공",
+                "username", username
+        ));
+    }
 }
