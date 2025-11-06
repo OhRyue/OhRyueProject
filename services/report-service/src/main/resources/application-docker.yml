@@ -2,10 +2,8 @@ server:
   port: 8083
 
 spring:
-  application:
-    name: report-service
   datasource:
-    url: jdbc:mysql://mysql:3306/certpilot?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://mysql:3306/certpilot_study?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
     username: app
     password: apppw
   jpa:
@@ -20,3 +18,7 @@ eureka:
   client:
     service-url:
       defaultZone: http://discovery:8761/eureka
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true

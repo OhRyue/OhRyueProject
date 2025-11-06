@@ -1,8 +1,17 @@
-# IntelliJ
+# ─────────────────────────────────────
+# IntelliJ / JetBrains
+# ─────────────────────────────────────
 .idea/
 *.iml
+*.ipr
+*.iws
 
-# Gradle
+# VS Code
+.vscode/
+
+# ─────────────────────────────────────
+# Gradle / Build outputs
+# ─────────────────────────────────────
 .gradle/
 .gradle-*/
 .gradle-isolated/
@@ -10,11 +19,55 @@
 **/build/
 out/
 target/
+**/test-results/
+**/reports/
 
+# ─────────────────────────────────────
+# Node / Frontend (Vite, React 등)
+# ─────────────────────────────────────
+**/node_modules/
+**/dist/
+**/.vite/
+**/.turbo/
+**/.parcel-cache/
+**/coverage/
+**/.eslintcache
+
+# ─────────────────────────────────────
+# Environment / Secrets
+# ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env*.example
+
+# Spring Boot local-only profiles
+**/application-local.properties
+**/application-local.yml
+
+# ─────────────────────────────────────
 # Logs
+# ─────────────────────────────────────
 logs/
 *.log
+*.log.*
+*.out
 
-# OS
+# ─────────────────────────────────────
+# OS-specific
+# ─────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ─────────────────────────────────────
+# Editors / swap / temp
+# ─────────────────────────────────────
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# ─────────────────────────────────────
+# Misc
+# ─────────────────────────────────────
+**/dump.rdb

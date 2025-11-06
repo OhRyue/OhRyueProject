@@ -1,31 +1,37 @@
+// src/main/java/com/OhRyue/certpilot/study/domain/QuestionChoice.java
 package com.OhRyue.certpilot.study.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor @Builder
-@Table(name = "question_choice",
-    indexes = {
-        @Index(name = "ix_qchoice_qid", columnList = "questionId"),
-        @Index(name = "ix_qchoice_label", columnList = "label")
-    })
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@Table(
+        name = "question_choice",
+        indexes = {
+                @Index(name = "ix_choice_q", columnList = "question_id"),
+                @Index(name = "ix_choice_label", columnList = "label")
+        }
+)
 public class QuestionChoice {
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-  @Column(nullable = false)
-  private Long questionId;
+    @Column(name = "question_id", nullable = false)
+    private Long questionId;
 
-  @Column(nullable = false, length = 8)
-  private String label;       // A/B/C/D ...
+    @Column(name = "label", nullable = false, length = 1)
+    private String label;   // 'A' ~ 'D'
 
-  @Column(columnDefinition = "TEXT")
-  private String text;
+    @Column(name = "text", nullable = false, length = 1000)
+    private String text;
 
-  @Column(nullable = false)
-  private Boolean correct;
+    @Column(name = "is_correct", nullable = false)
+    private boolean correct;
 }
