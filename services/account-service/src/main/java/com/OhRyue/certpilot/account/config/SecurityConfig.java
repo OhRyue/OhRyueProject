@@ -48,6 +48,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/login",
                                 "/api/auth/register",
+                                "/api/auth/refresh",
                                 "/v3/api-docs/**",      // Swagger JSON
                                 "/swagger-ui/**",       // Swagger UI HTML
                                 "/swagger-ui.html"      // 직접 접근 시

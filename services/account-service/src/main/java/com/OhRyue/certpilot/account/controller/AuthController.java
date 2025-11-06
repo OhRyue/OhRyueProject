@@ -2,10 +2,7 @@ package com.OhRyue.certpilot.account.controller;
 
 import com.OhRyue.certpilot.account.config.JwtTokenProvider;
 import com.OhRyue.certpilot.account.domain.User;
-import com.OhRyue.certpilot.account.dto.LoginResponseDto;
-import com.OhRyue.certpilot.account.dto.UserLoginDto;
-import com.OhRyue.certpilot.account.dto.UserRegisterDto;
-import com.OhRyue.certpilot.account.dto.UserResponseDto;
+import com.OhRyue.certpilot.account.dto.*;
 import com.OhRyue.certpilot.account.service.RefreshTokenService;
 import com.OhRyue.certpilot.account.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -86,18 +83,33 @@ public class AuthController {
         ));
     }
 
+    // Refresh Token을 검증하고 새로운 Access Token을 발급하는 API
     @PostMapping("/refresh")
-    public ResponseEntity<?> refreshToken(@RequestHeader("Refresh-Token") String refreshToken) {
-        String username = jwtTokenProvider.getUsernameFromToken(refreshToken);
+    public ResponseEntity<?> refresh(@RequestBody TokenRefreshRequest request) {
+        String refreshToken = request.getRefreshToken();
 
-        String savedToken = refreshTokenService.get(username);
-        if (savedToken == null || !savedToken.equals(refreshToken)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "invalid_refresh_token"));
+        // 1) 유효한 토큰인지 확인
+        if (!jwtTokenProvider.validateToken(refreshToken)) {
+            throw new IllegalArgumentException("리프레시 토큰이 유효하지 않습니다");
         }
 
-        // 새 Access Token 발급
-        String newAccessToken = jwtTokenProvider.generateToken(username, jwtTokenProvider.getRoleFromToken(refreshToken));
-        return ResponseEntity.ok(Map.of("accessToken", newAccessToken));
+        // 2) 토큰에서 사용자 정보 추출
+        String username = jwtTokenProvider.getUsernameFromToken(refreshToken);
+        String role = jwtTokenProvider.getRoleFromToken(refreshToken);
+
+        // 3) Redis에도 저장돼있는지 확인
+        String savedToken = refreshTokenService.get(username);
+        if (!refreshToken.equals(savedToken)) {
+            throw new IllegalArgumentException("리프레시 토큰이 일치하지 않습니다 (재로그인 필요)");
+        }
+
+        // 4) 새로운 Access Token 발급
+        String newAccessToken = jwtTokenProvider.generateToken(username, role);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "AccessToken 재발급 성공",
+                "accessToken", newAccessToken
+        ));
     }
 
 }
