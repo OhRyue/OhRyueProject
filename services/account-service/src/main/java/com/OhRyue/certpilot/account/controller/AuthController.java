@@ -3,6 +3,7 @@ package com.OhRyue.certpilot.account.controller;
 import com.OhRyue.certpilot.account.config.JwtTokenProvider;
 import com.OhRyue.certpilot.account.domain.User;
 import com.OhRyue.certpilot.account.dto.*;
+import com.OhRyue.certpilot.account.service.EmailService;
 import com.OhRyue.certpilot.account.service.RefreshTokenService;
 import com.OhRyue.certpilot.account.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -131,5 +132,24 @@ public class AuthController {
                 "message", "로그아웃 성공",
                 "username", username
         ));
+    }
+
+    // Debug: 메일 발송
+    @RestController
+    @RequestMapping("/api/mail")
+    @RequiredArgsConstructor
+    public class MailController {
+
+        private final EmailService emailService;
+
+        @PostMapping("/send")
+        public ResponseEntity<?> sendTestMail() {
+            emailService.sendEmail(
+                    "test@test.com",         // 받는 사람
+                    "CertPilot SMTP Test",   // 제목
+                    "테스트 메일입니다."        // 내용
+            );
+            return ResponseEntity.ok("메일 발송 완료!");
+        }
     }
 }
