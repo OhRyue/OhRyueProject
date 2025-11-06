@@ -90,4 +90,20 @@ public class JwtTokenProvider {
     public Collection<? extends GrantedAuthority> getAuthorities(String role) {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role));
     }
+
+    // Refresh Token 생성
+    public String generateRefreshToken(String username, String role) {
+        long now = System.currentTimeMillis();
+        Date issuedAt = new Date(now);
+        Date expiryAt = new Date(now + 1000L * 60 * 60 * 24 * 7); // 7일
+
+        return Jwts.builder()
+                .setSubject(username)
+                .claim("role", role)
+                .setIssuedAt(issuedAt)
+                .setExpiration(expiryAt)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
 }

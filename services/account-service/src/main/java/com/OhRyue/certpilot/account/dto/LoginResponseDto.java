@@ -8,6 +8,7 @@ import lombok.Getter;
 public class LoginResponseDto {
     private String message;  // "로그인 성공"
     private String token;    // JWT 토큰
+    private String refreshToken;
     private Long userId;
     private String username;
     private String role;

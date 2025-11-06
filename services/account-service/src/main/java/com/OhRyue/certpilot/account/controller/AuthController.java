@@ -6,6 +6,7 @@ import com.OhRyue.certpilot.account.dto.LoginResponseDto;
 import com.OhRyue.certpilot.account.dto.UserLoginDto;
 import com.OhRyue.certpilot.account.dto.UserRegisterDto;
 import com.OhRyue.certpilot.account.dto.UserResponseDto;
+import com.OhRyue.certpilot.account.service.RefreshTokenService;
 import com.OhRyue.certpilot.account.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,7 @@ public class AuthController {
 
     private final UserService userService;                  // 사용자 관련 비즈니스 로직(회원가입, 로그인)을 처리하는 클래스
     private final JwtTokenProvider jwtTokenProvider;        // JWT 토큰 생성/검증 기능을 담당하는 클래스
+    private final RefreshTokenService refreshTokenService;
 
     // 회원가입
     @PostMapping("/register")
@@ -39,15 +41,21 @@ public class AuthController {
     // 로그인
     @PostMapping("/login")
     public ResponseEntity<LoginResponseDto> login(@RequestBody UserLoginDto req) {
+        // 1) ID & PW 확인
         User user = userService.login(req.getUsername(), req.getPassword());
 
-        // 로그인 성공하면 JWT 생성
-        String token = jwtTokenProvider.generateToken(user.getUsername(), user.getRole());
+        // 2) Access Token & Refresh Token 생성
+        String accessToken = jwtTokenProvider.generateToken(user.getUsername(), user.getRole());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUsername(), user.getRole());
 
-        // DTO로 감싸서 반환
+        // 3) Refresh Token을 Redis에 저장 (username = key)
+        refreshTokenService.save(user.getUsername(), refreshToken);
+
+        // 4) 응답 DTO로 반환
         LoginResponseDto response = new LoginResponseDto(
                 "로그인 성공",
-                token,
+                accessToken,
+                refreshToken,
                 user.getId(),
                 user.getUsername(),
                 user.getRole()
@@ -55,6 +63,7 @@ public class AuthController {
 
         return ResponseEntity.ok(response);
     }
+
 
     // JWT을 기반으로 DB에서 유저 데이터 조회해서 반환
     @GetMapping("/me")
@@ -76,4 +85,19 @@ public class AuthController {
                 "role", user.getRole()
         ));
     }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@RequestHeader("Refresh-Token") String refreshToken) {
+        String username = jwtTokenProvider.getUsernameFromToken(refreshToken);
+
+        String savedToken = refreshTokenService.get(username);
+        if (savedToken == null || !savedToken.equals(refreshToken)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "invalid_refresh_token"));
+        }
+
+        // 새 Access Token 발급
+        String newAccessToken = jwtTokenProvider.generateToken(username, jwtTokenProvider.getRoleFromToken(refreshToken));
+        return ResponseEntity.ok(Map.of("accessToken", newAccessToken));
+    }
+
 }
