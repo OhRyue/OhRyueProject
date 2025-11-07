@@ -49,6 +49,8 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/register",
                                 "/api/auth/refresh",
+                                "/api/auth/verify-email",
+                                "/api/mail/**",
                                 "/v3/api-docs/**",      // Swagger JSON
                                 "/swagger-ui/**",       // Swagger UI HTML
                                 "/swagger-ui.html"      // 직접 접근 시

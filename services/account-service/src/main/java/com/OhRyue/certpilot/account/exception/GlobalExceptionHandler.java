@@ -33,6 +33,16 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    // 이메일 인증 안 된 사용자
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<?> handleIllegalState(IllegalStateException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "error", "email_not_verified",
+                "message", e.getMessage()   // → "이메일 인증 후 로그인 가능합니다."
+        ));
+    }
+
+
     // 그 외 예상하지 못한 서버 내부 에러
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleOtherExceptions(Exception e) {
