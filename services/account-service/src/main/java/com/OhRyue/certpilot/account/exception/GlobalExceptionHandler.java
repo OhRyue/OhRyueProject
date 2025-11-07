@@ -15,41 +15,40 @@ import java.util.Map;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    // 로그인 실패(아이디, 비밀번호 틀림)
-    @ExceptionHandler(InvalidCredentialsException.class)
-    public ResponseEntity<?> handleInvalidCredentials() {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
-                "error", "invalid_credentials",
-                "message", "아이디 또는 비밀번호가 올바르지 않습니다"
-        ));
-    }
+  // 로그인 실패(아이디, 비밀번호 틀림)
+  @ExceptionHandler(InvalidCredentialsException.class)
+  public ResponseEntity<?> handleInvalidCredentials() {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+        "error", "invalid_credentials",
+        "message", "아이디 또는 비밀번호가 올바르지 않습니다"
+    ));
+  }
 
-    // 회원가입 실패(중복된 username 등 잘못된 요청일 때)
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException e) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
-                "error", "invalid_request",
-                "message", e.getMessage()
-        ));
-    }
+  // 회원가입 실패(중복된 username 등 잘못된 요청일 때)
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException e) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+        "error", "invalid_request",
+        "message", e.getMessage()
+    ));
+  }
 
-    // 이메일 인증 안 된 사용자
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<?> handleIllegalState(IllegalStateException e) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                "error", "email_not_verified",
-                "message", e.getMessage()   // → "이메일 인증 후 로그인 가능합니다."
-        ));
-    }
+  // 이메일 인증 안 된 사용자
+  @ExceptionHandler(IllegalStateException.class)
+  public ResponseEntity<?> handleIllegalState(IllegalStateException e) {
+    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+        "error", "email_not_verified",
+        "message", e.getMessage()   // → "이메일 인증 후 로그인 가능합니다."
+    ));
+  }
 
-
-    // 그 외 예상하지 못한 서버 내부 에러
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleOtherExceptions(Exception e) {
-        log.error("unexpected error", e);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "error", "internal_server_error",
-                "message", "서버 에러가 발생했습니다"
-        ));
-    }
+  // 그 외 예상하지 못한 서버 내부 에러
+  @ExceptionHandler(Exception.class)
+  public ResponseEntity<?> handleOtherExceptions(Exception e) {
+    log.error("unexpected error", e);
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+        "error", "internal_server_error",
+        "message", "서버 에러가 발생했습니다"
+    ));
+  }
 }

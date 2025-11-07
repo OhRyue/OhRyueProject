@@ -1,83 +1,100 @@
 package com.OhRyue.certpilot.account.service;
 
-import com.OhRyue.certpilot.account.domain.User;
-import com.OhRyue.certpilot.account.exception.InvalidCredentialsException;
-import com.OhRyue.certpilot.account.repo.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import com.OhRyue.certpilot.account.domain.AccountStatus;
+import com.OhRyue.certpilot.account.domain.UserAccount;
+import com.OhRyue.certpilot.account.repo.UserAccountRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
+/**
+ * 최신 스키마(user_account) 기반 UserService
+ * - 회원가입: PK=id(username), status=BLOCKED 로 저장 → 이메일 인증 시 ACTIVE 전환
+ * - 로그인: id(username)로 조회, 상태 ACTIVE 확인, 비밀번호 검증
+ *   (시드 {noop} 계정과의 호환을 위해 noop 비교 로직 포함)
+ */
 @Service
 public class UserService {
 
-    private final UserRepository userRepository;
-    private final BCryptPasswordEncoder passwordEncoder;
+  private final UserAccountRepository userAccountRepository;
+  private final PasswordEncoder passwordEncoder;
 
-    @Autowired
-    public UserService(UserRepository userRepository) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = new BCryptPasswordEncoder();
+  public UserService(UserAccountRepository userAccountRepository,
+                     PasswordEncoder passwordEncoder) {
+    this.userAccountRepository = userAccountRepository;
+    this.passwordEncoder = passwordEncoder;
+  }
+
+  // 회원 가입
+  public UserAccount register(String username, String rawPassword, String email) {
+    // 1) username(id) 중복 검사
+    if (userAccountRepository.findById(username).isPresent()) {
+      throw new IllegalArgumentException("이미 존재하는 사용자명입니다.");
     }
 
-    // 회원 가입
-    public User register(String username, String rawPassword, String email) {
-        // 1) username 중복 검사
-        if (userRepository.findByUsername(username).isPresent()) {
-            throw new IllegalArgumentException("이미 존재하는 사용자명입니다.");
-        }
-
-        // 2) email 중복 검사
-        if (userRepository.findByEmail(email).isPresent()) {
-            throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
-        }
-
-        // 3) 비밀번호 암호화
-        String encodedPassword = passwordEncoder.encode(rawPassword);
-
-        // 4) 유저 생성 (enabled = false 기본값)
-        User user = User.builder()
-                .username(username)
-                .password(encodedPassword)
-                .email(email)
-                .role("USER")
-                .enabled(false)
-                .build();
-
-        return userRepository.save(user);
+    // 2) email 중복 검사
+    if (userAccountRepository.findByEmail(email).isPresent()) {
+      throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
     }
 
+    // 3) 비밀번호 암호화 (BCrypt)
+    String encodedPassword = passwordEncoder.encode(rawPassword);
 
-    // 로그인
-    public User login(String username, String rawPassword) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
+    // 4) 유저 생성 (초기에는 BLOCKED로 저장 → 이메일 인증 후 ACTIVE)
+    UserAccount user = UserAccount.builder()
+        .id(username)                         // PK = username
+        .email(email)
+        .passwordHash(encodedPassword)
+        .status(AccountStatus.BLOCKED)        // 이메일 인증 전
+        .createdAt(LocalDateTime.now())
+        .lastLoginAt(null)
+        .build();
 
-        if (!user.isEnabled()) {
-            throw new IllegalStateException("이메일 인증 후 로그인 가능합니다.");
-        }
+    return userAccountRepository.save(user);
+  }
 
-        if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
-            throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
-        }
+  // 로그인
+  public UserAccount login(String username, String rawPassword) {
+    UserAccount user = userAccountRepository.findById(username)
+        .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
 
-        return user;
+    if (user.getStatus() != AccountStatus.ACTIVE) {
+      throw new IllegalStateException("이메일 인증 후 로그인 가능합니다.");
     }
 
-    // 사용자 조회(username 기반)
-    public Optional<User> findByUsername(String username) {
-        return userRepository.findByUsername(username);
+    // 시드 호환: password_hash 가 {noop}로 시작하면 평문 비교, 아니면 BCrypt 비교
+    String hash = user.getPasswordHash();
+    boolean matched;
+    if (hash != null && hash.startsWith("{noop}")) {
+      matched = rawPassword.equals(hash.substring("{noop}".length()));
+    } else {
+      matched = passwordEncoder.matches(rawPassword, hash);
     }
 
-    // 이메일 인증 완료 → enabled = true 저장
-    public void enableUser(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("해당 이메일의 사용자가 없습니다."));
-
-        user.setEnabled(true);   // 인증 완료
-        userRepository.save(user);
+    if (!matched) {
+      throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
     }
 
+    // 마지막 로그인 시각 갱신(선택)
+    user.setLastLoginAt(LocalDateTime.now());
+    userAccountRepository.save(user);
 
+    return user;
+  }
+
+  // 사용자 조회(username=id 기반)
+  public Optional<UserAccount> findByUsername(String username) {
+    return userAccountRepository.findById(username);
+  }
+
+  // 이메일 인증 완료 → status = ACTIVE 저장
+  public void enableUser(String email) {
+    UserAccount user = userAccountRepository.findByEmail(email)
+        .orElseThrow(() -> new IllegalArgumentException("해당 이메일의 사용자가 없습니다."));
+
+    user.setStatus(AccountStatus.ACTIVE);   // 인증 완료
+    userAccountRepository.save(user);
+  }
 }

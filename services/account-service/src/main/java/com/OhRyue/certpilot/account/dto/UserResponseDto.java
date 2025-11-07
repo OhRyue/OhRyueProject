@@ -9,15 +9,15 @@ import lombok.Getter;
 @Schema(description = "회원가입/로그인 응답")
 public class UserResponseDto {
 
-    @Schema(example = "로그인 성공")
-    private String message;
+  @Schema(example = "로그인 성공")
+  private String message;
 
-    @Schema(example = "1")
-    private Long userId;
+  @Schema(example = "ohryue")
+  private String userId;
 
-    @Schema(example = "ohryue")
-    private String username;
+  @Schema(example = "ohryue")
+  private String username;
 
-    @Schema(example = "USER")
-    private String role;
+  @Schema(example = "USER")
+  private String role;
 }
