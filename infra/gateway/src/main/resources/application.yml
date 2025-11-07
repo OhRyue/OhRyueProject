@@ -14,7 +14,8 @@ spring:
           "[/**]":
             allowedOrigins:
               - http://localhost:5173
-              - http://210.110.33.223:3000
+              - http://localhost:3000
+              - http://210.110.33.222:3000
             allowedMethods: "*"
             allowedHeaders: "*"
             allowCredentials: true
