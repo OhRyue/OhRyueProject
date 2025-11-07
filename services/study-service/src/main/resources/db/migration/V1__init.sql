@@ -17,11 +17,11 @@ CREATE TABLE IF NOT EXISTS question (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS question_choice (
-  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-  question_id  BIGINT       NOT NULL,
-  label        CHAR(1)      NOT NULL,
-  text         VARCHAR(1000) NOT NULL,
-  is_correct   TINYINT(1)   NOT NULL DEFAULT 0,
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  question_id   BIGINT       NOT NULL,
+  label         CHAR(1)      NOT NULL,
+  text          VARCHAR(1000) NOT NULL,
+  is_correct    TINYINT(1)   NOT NULL DEFAULT 0,
   UNIQUE KEY uq_choice_label (question_id, label),
   INDEX ix_choice_q (question_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -36,17 +36,18 @@ CREATE TABLE IF NOT EXISTS question_tag (
 
 -- 세션/진행/답안
 CREATE TABLE IF NOT EXISTS study_session (
-  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
-  user_id       VARCHAR(100) NOT NULL,
-  mode          ENUM('MICRO','REVIEW','ASSIST_CATEGORY','ASSIST_DIFF','ASSIST_WEAK') NOT NULL,
-  exam_mode     ENUM('WRITTEN','PRACTICAL') NOT NULL,
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id          VARCHAR(100) NOT NULL,
+  mode             ENUM('MICRO','REVIEW','ASSIST_CATEGORY','ASSIST_DIFF','ASSIST_WEAK') NOT NULL,
+  exam_mode        ENUM('WRITTEN','PRACTICAL') NOT NULL,
   topic_scope_json JSON NULL,
-  question_count  INT NOT NULL,
-  started_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  closed_at     TIMESTAMP NULL,
-  status        ENUM('OPEN','SUBMITTED','CLOSED') NOT NULL DEFAULT 'OPEN',
+  question_count   INT NOT NULL,
+  started_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  closed_at        TIMESTAMP NULL,
+  status           ENUM('OPEN','SUBMITTED','CLOSED') NOT NULL DEFAULT 'OPEN',
   INDEX ix_ss_user (user_id),
-  INDEX ix_ss_mode (mode)
+  INDEX ix_ss_mode (mode),
+  INDEX ix_ss_started (started_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS study_session_item (
@@ -57,8 +58,12 @@ CREATE TABLE IF NOT EXISTS study_session_item (
   submitted_at  TIMESTAMP NULL,
   correct       TINYINT(1) NULL,
   score         INT NULL,
+  UNIQUE KEY uq_ssi_session_order (session_id, order_no),
+  UNIQUE KEY uq_ssi_session_question (session_id, question_id),
   INDEX ix_ssi_session (session_id),
-  INDEX ix_ssi_question (question_id)
+  INDEX ix_ssi_question (question_id),
+  CONSTRAINT fk_ssi_session FOREIGN KEY (session_id) REFERENCES study_session(id)
+    ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS user_progress (
@@ -86,20 +91,23 @@ CREATE TABLE IF NOT EXISTS user_answer (
   answer_text  VARCHAR(2000) NULL,
   created_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX ix_uans_user_time (user_id, created_at),
-  INDEX ix_uans_question (question_id)
+  INDEX ix_uans_question (question_id),
+  INDEX ix_uans_user_question_time (user_id, question_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS study_summary (
-  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
-  session_id     BIGINT NOT NULL,
-  user_id        VARCHAR(100) NOT NULL,
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  session_id      BIGINT NOT NULL,
+  user_id         VARCHAR(100) NOT NULL,
   ai_summary_text TEXT NULL,
-  total          INT  NOT NULL,
-  correct        INT  NOT NULL,
-  accuracy       DECIMAL(5,2) NOT NULL,
-  time_spent_sec INT  NULL,
+  total           INT  NOT NULL,
+  correct         INT  NOT NULL,
+  accuracy        DECIMAL(5,2) NOT NULL,
+  time_spent_sec  INT  NULL,
   INDEX ix_sum_user (user_id),
-  UNIQUE KEY uq_sum_session (session_id)
+  UNIQUE KEY uq_sum_session (session_id),
+  CONSTRAINT fk_sum_session FOREIGN KEY (session_id) REFERENCES study_session(id)
+    ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- AI 로그

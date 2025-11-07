@@ -1,6 +1,7 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- 계정
 CREATE TABLE IF NOT EXISTS user_account (
   id              VARCHAR(100) PRIMARY KEY,
   email           VARCHAR(255) NOT NULL UNIQUE,
@@ -10,6 +11,7 @@ CREATE TABLE IF NOT EXISTS user_account (
   last_login_at   TIMESTAMP NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 프로필(계정 신원)
 CREATE TABLE IF NOT EXISTS user_profile (
   user_id       VARCHAR(100) PRIMARY KEY,
   nickname      VARCHAR(100) NOT NULL,
@@ -18,12 +20,14 @@ CREATE TABLE IF NOT EXISTS user_profile (
   lang          VARCHAR(16)  NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 환경설정(UI/알림)
 CREATE TABLE IF NOT EXISTS user_settings (
-  user_id       VARCHAR(100) PRIMARY KEY,
-  ui_prefs_json JSON NULL,
+  user_id          VARCHAR(100) PRIMARY KEY,
+  ui_prefs_json    JSON NULL,
   notif_prefs_json JSON NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 목표 자격증(사용자당 1개)
 CREATE TABLE IF NOT EXISTS user_goal_cert (
   id               BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id          VARCHAR(100) NOT NULL,
@@ -32,7 +36,7 @@ CREATE TABLE IF NOT EXISTS user_goal_cert (
   target_round_id  BIGINT NULL,
   dday_cached      INT NULL,
   created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX ix_goal_user (user_id),
+  UNIQUE KEY uq_goal_user (user_id),
   INDEX ix_goal_cert (cert_id),
   INDEX ix_goal_round (target_round_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

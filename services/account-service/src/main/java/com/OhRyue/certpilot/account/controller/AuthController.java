@@ -3,8 +3,10 @@ package com.OhRyue.certpilot.account.controller;
 import com.OhRyue.certpilot.account.config.JwtTokenProvider;
 import com.OhRyue.certpilot.account.domain.User;
 import com.OhRyue.certpilot.account.dto.*;
+import com.OhRyue.certpilot.account.service.EmailService;
 import com.OhRyue.certpilot.account.service.RefreshTokenService;
 import com.OhRyue.certpilot.account.service.UserService;
+import com.OhRyue.certpilot.account.service.VerificationCodeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,28 +14,62 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/account")
 @RequiredArgsConstructor
 public class AuthController {
 
     private final UserService userService;                  // 사용자 관련 비즈니스 로직(회원가입, 로그인)을 처리하는 클래스
-    private final JwtTokenProvider jwtTokenProvider;        // JWT 토큰 생성/검증 기능을 담당하는 클래스
+    private final EmailService emailService;
     private final RefreshTokenService refreshTokenService;
+    private final JwtTokenProvider jwtTokenProvider;        // JWT 토큰 생성/검증 기능을 담당하는 클래스
+    private final VerificationCodeService verificationCodeService;
 
     // 회원가입
     @PostMapping("/register")
     public ResponseEntity<UserResponseDto> register(@RequestBody UserRegisterDto req) {
-        User user = userService.register(req.getUsername(), req.getPassword());
-        UserResponseDto response = new UserResponseDto(
-                "회원가입 성공",
-                user.getId(),
-                user.getUsername(),
-                null // 회원가입 시 role 없으면 null
+        // 1) 유저 저장 (enabled = false로 저장)
+        User user = userService.register(req.getUsername(), req.getPassword(), req.getEmail());
+
+        // 2) 6자리 인증코드 생성
+        String verificationCode = String.format("%06d", (int) (Math.random() * 1000000));
+
+        // 3) Redis에 VC:username 형태로 저장 (10분 유효)
+        verificationCodeService.saveCode(user.getEmail(), verificationCode);
+
+        // 4) 이메일 발송
+        emailService.sendVerificationCode(user.getEmail(), verificationCode);
+
+
+        // 5) 응답 반환
+        return ResponseEntity.ok(
+                new UserResponseDto(
+                        "회원가입 완료! 이메일 인증을 진행해주세요.",
+                        user.getId(),
+                        user.getUsername(),
+                        user.getRole()
+                )
         );
-        return ResponseEntity.ok(response);
     }
+
+    // 인증
+    @PostMapping("/verify-email")
+    public ResponseEntity<?> verifyEmail(@RequestBody VerifyEmailRequest request) {
+        String savedCode = verificationCodeService.getCode(request.getEmail());
+
+        if (savedCode == null || !savedCode.equals(request.getCode())) {
+            return ResponseEntity.status(400).body("인증 코드가 틀리거나 만료되었습니다");
+        }
+
+        // 이메일 인증 성공 → 이메일 기준으로 활성화 처리
+        userService.enableUser(request.getEmail());
+        verificationCodeService.deleteCode(request.getEmail());
+
+        return ResponseEntity.ok("이메일 인증 완료!");
+    }
+
 
     // 로그인
     @PostMapping("/login")
@@ -112,4 +148,43 @@ public class AuthController {
         ));
     }
 
+    // 로그아웃
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "unauthorized",
+                    "message", "로그인이 필요합니다"
+            ));
+        }
+
+        String username = authentication.getName();
+
+        // Redis에서 Refresh Token 삭제
+        refreshTokenService.delete(username);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "로그아웃 성공",
+                "username", username
+        ));
+    }
+
+    // Debug: 메일 발송
+    @RestController
+    @RequestMapping("/api/mail")
+    @RequiredArgsConstructor
+    public class MailController {
+
+        private final EmailService emailService;
+
+        @PostMapping("/send")
+        public ResponseEntity<?> sendTestMail() {
+            emailService.sendEmail(
+                    "test@test.com",         // 받는 사람
+                    "CertPilot SMTP Test",   // 제목
+                    "테스트 메일입니다."        // 내용
+            );
+            return ResponseEntity.ok("메일 발송 완료!");
+        }
+    }
 }

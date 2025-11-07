@@ -20,21 +20,6 @@ spring:
             allowCredentials: true
 
       routes:
-        - id: study-service
-          uri: lb://study-service
-          predicates:
-            - Path=/api/study/**
-
-        - id: study-swagger-ui
-          uri: lb://study-service
-          predicates:
-            - Path=/api/study/swagger-ui/**
-
-        - id: study-openapi
-          uri: lb://study-service
-          predicates:
-            - Path=/api/study/v3/api-docs/**
-
         - id: account-service
           uri: lb://account-service
           predicates:
@@ -50,20 +35,35 @@ spring:
           predicates:
             - Path=/api/account/v3/api-docs/**
 
-        - id: profile-service
-          uri: lb://profile-service
+        - id: study-service
+          uri: lb://study-service
           predicates:
-            - Path=/api/profile/**
+            - Path=/api/study/**
 
-        - id: profile-swagger-ui
-          uri: lb://profile-service
+        - id: study-swagger-ui
+          uri: lb://study-service
           predicates:
-            - Path=/api/profile/swagger-ui/**
+            - Path=/api/study/swagger-ui/**
 
-        - id: profile-openapi
-          uri: lb://profile-service
+        - id: study-openapi
+          uri: lb://study-service
           predicates:
-            - Path=/api/profile/v3/api-docs/**
+            - Path=/api/study/v3/api-docs/**
+
+        - id: progress-service
+          uri: lb://progress-service
+          predicates:
+            - Path=/api/progress/**
+
+        - id: progress-swagger-ui
+          uri: lb://progress-service
+          predicates:
+            - Path=/api/progress/swagger-ui/**
+
+        - id: progress-openapi
+          uri: lb://progress-service
+          predicates:
+            - Path=/api/progress/v3/api-docs/**
 
         - id: cert-serivce
           uri: lb://cert-service
@@ -94,6 +94,21 @@ spring:
           uri: lb://versus-service
           predicates:
             - Path=/api/versus/v3/api-docs/**
+
+        - id: community-serivce
+          uri: lb://community-service
+          predicates:
+            - Path=/api/community/**
+
+        - id: community-swagger-ui
+          uri: lb://community-service
+          predicates:
+            - Path=/api/community/swagger-ui/**
+
+        - id: community-openapi
+          uri: lb://community-service
+          predicates:
+            - Path=/api/community/v3/api-docs/**
 
   main:
     web-application-type: reactive
