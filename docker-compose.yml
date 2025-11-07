@@ -62,6 +62,8 @@ services:
     container_name: account-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
     depends_on:
       mysql:
         condition: service_healthy
