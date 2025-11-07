@@ -1,7 +1,7 @@
-package com.OhRyue.certpilot.report.domain;
+package com.OhRyue.certpilot.profile.domain;
 
-import com.OhRyue.certpilot.report.domain.enums.Difficulty;
-import com.OhRyue.certpilot.report.domain.enums.QuestionType;
+import com.OhRyue.certpilot.profile.domain.enums.Difficulty;
+import com.OhRyue.certpilot.profile.domain.enums.QuestionType;
 import jakarta.persistence.*;
 import lombok.*;
 

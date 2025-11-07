@@ -1,4 +1,4 @@
-package com.OhRyue.certpilot.report.domain;
+package com.OhRyue.certpilot.profile.domain;
 
 import jakarta.persistence.*;
 import lombok.*;

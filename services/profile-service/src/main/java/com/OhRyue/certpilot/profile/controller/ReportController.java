@@ -1,7 +1,7 @@
-package com.OhRyue.certpilot.report.controller;
+package com.OhRyue.certpilot.profile.controller;
 
-import com.OhRyue.certpilot.report.dto.ReportDtos.*;
-import com.OhRyue.certpilot.report.service.ReportService;
+import com.OhRyue.certpilot.profile.dto.ReportDtos.*;
+import com.OhRyue.certpilot.profile.service.ReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;

@@ -50,35 +50,20 @@ spring:
           predicates:
             - Path=/api/account/v3/api-docs/**
 
-        - id: report-service
-          uri: lb://report-service
+        - id: profile-service
+          uri: lb://profile-service
           predicates:
-            - Path=/api/report/**
+            - Path=/api/profile/**
 
-        - id: report-swagger-ui
-          uri: lb://report-service
+        - id: profile-swagger-ui
+          uri: lb://profile-service
           predicates:
-            - Path=/api/report/swagger-ui/**
+            - Path=/api/profile/swagger-ui/**
 
-        - id: report-openapi
-          uri: lb://report-service
+        - id: profile-openapi
+          uri: lb://profile-service
           predicates:
-            - Path=/api/report/v3/api-docs/**
-
-        - id: gamify-serivce
-          uri: lb://gamify-service
-          predicates:
-            - Path=/api/gamify/**
-
-        - id: gamify-swagger-ui
-          uri: lb://gamify-service
-          predicates:
-            - Path=/api/gamify/swagger-ui/**
-
-        - id: gamify-openapi
-          uri: lb://gamify-service
-          predicates:
-            - Path=/api/gamify/v3/api-docs/**
+            - Path=/api/profile/v3/api-docs/**
 
         - id: cert-serivce
           uri: lb://cert-service

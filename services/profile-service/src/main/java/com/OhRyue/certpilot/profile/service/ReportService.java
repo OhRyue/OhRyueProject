@@ -1,12 +1,12 @@
-package com.OhRyue.certpilot.report.service;
+package com.OhRyue.certpilot.profile.service;
 
-import com.OhRyue.certpilot.report.domain.Question;
-import com.OhRyue.certpilot.report.domain.UserAnswer;
-import com.OhRyue.certpilot.report.domain.enums.QuestionType;
-import com.OhRyue.certpilot.report.dto.ReportDtos.*;
-import com.OhRyue.certpilot.report.repository.QuestionRepository;
-import com.OhRyue.certpilot.report.repository.QuestionTagRepository;
-import com.OhRyue.certpilot.report.repository.UserAnswerRepository;
+import com.OhRyue.certpilot.profile.domain.Question;
+import com.OhRyue.certpilot.profile.domain.UserAnswer;
+import com.OhRyue.certpilot.profile.domain.enums.QuestionType;
+import com.OhRyue.certpilot.profile.dto.ReportDtos.*;
+import com.OhRyue.certpilot.profile.repository.QuestionRepository;
+import com.OhRyue.certpilot.profile.repository.QuestionTagRepository;
+import com.OhRyue.certpilot.profile.repository.UserAnswerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,4 +1,4 @@
-package com.OhRyue.certpilot.report.domain.enums;
+package com.OhRyue.certpilot.profile.domain.enums;
 
 public enum Difficulty {
     EASY, NORMAL, HARD

@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: report-service
+    name: profile-service
   datasource:
     url: jdbc:mysql://mysql:3306/certpilot?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
     username: app

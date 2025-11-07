@@ -1,6 +1,6 @@
-package com.OhRyue.certpilot.report.repository;
+package com.OhRyue.certpilot.profile.repository;
 
-import com.OhRyue.certpilot.report.domain.QuestionTag;
+import com.OhRyue.certpilot.profile.domain.QuestionTag;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 

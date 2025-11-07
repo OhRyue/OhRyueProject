@@ -91,9 +91,9 @@ services:
   report-service:
     build:
       context: .
-      dockerfile: services/report-service/Dockerfile
-    image: OhRyue/report-service:dev
-    container_name: report-service
+      dockerfile: services/profile-service/Dockerfile
+    image: OhRyue/profile-service:dev
+    container_name: profile-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -102,22 +102,6 @@ services:
       discovery:
         condition: service_started
     ports: [ "8083:8083" ]
-    restart: unless-stopped
-
-  gamify-service:
-    build:
-      context: .
-      dockerfile: services/gamify-service/Dockerfile
-    image: OhRyue/gamify-service:dev
-    container_name: gamify-service
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      mysql:
-        condition: service_healthy
-      discovery:
-        condition: service_started
-    ports: [ "8084:8084" ]
     restart: unless-stopped
 
   cert-service:
@@ -133,7 +117,7 @@ services:
         condition: service_healthy
       discovery:
         condition: service_started
-    ports: [ "8085:8085" ]
+    ports: [ "8084:8084" ]
     restart: unless-stopped
 
   versus-service:
@@ -149,7 +133,7 @@ services:
         condition: service_healthy
       discovery:
         condition: service_started
-    ports: [ "8086:8086" ]
+    ports: [ "8085:8085" ]
     restart: unless-stopped
 
 volumes:

@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS question (
 CREATE TABLE IF NOT EXISTS question_choice (
   id           BIGINT AUTO_INCREMENT PRIMARY KEY,
   question_id  BIGINT       NOT NULL,
-  label        CHAR(1)      NOT NULL,           -- 'A'~'D' 권장
+  label        CHAR(1)      NOT NULL,           -- 'A'~'D'
   text         VARCHAR(1000) NOT NULL,
   is_correct   TINYINT(1)   NOT NULL DEFAULT 0,
   CONSTRAINT fk_choice_question FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE,
