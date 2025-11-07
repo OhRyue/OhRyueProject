@@ -1,3 +1,8 @@
 package com.OhRyue.certpilot.study.domain.enums;
 
-public enum QuestionType { OX, MCQ, SHORT, LONG } // OX, 객관식, 단답, 서술
+public enum QuestionType {
+  OX,   // O/X
+  MCQ,  // 객관식
+  SHORT,// 단답
+  LONG  // 서술
+}

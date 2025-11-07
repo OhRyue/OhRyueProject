@@ -1,9 +1,10 @@
+// src/main/java/com/OhRyue/certpilot/study/service/WrittenService.java
 package com.OhRyue.certpilot.study.service;
 
 import com.OhRyue.certpilot.study.domain.*;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.domain.enums.QuestionType;
-import com.OhRyue.certpilot.study.dto.MicroDtos.*;
+import com.OhRyue.certpilot.study.dto.WrittenDtos.*;
 import com.OhRyue.certpilot.study.dto.ReviewDtos.*;
 import com.OhRyue.certpilot.study.dto.WrongRecapDtos.*;
 import com.OhRyue.certpilot.study.repository.*;
@@ -110,7 +111,7 @@ public class WrittenService {
         Collections.shuffle(pool);
 
         List<MiniQuestion> items = pool.stream()
-                .limit(5)
+                .limit(4)
                 .map(q -> new MiniQuestion(q.getId(), nzs(q.getText())))
                 .toList();
 
@@ -125,15 +126,16 @@ public class WrittenService {
 
         int correctCnt = 0;
         List<MiniSubmitItem> items = new ArrayList<>();
+        List<Long> wrongIds = new ArrayList<>();
 
         for (MiniAnswer a : req.answers()) {
             Question q = require(qsById.get(a.questionId()), "Question not found: " + a.questionId());
 
             boolean correct = Objects.equals(q.getOxAnswer(), a.answer());
-            if (correct) correctCnt++;
+            if (correct) correctCnt++; else wrongIds.add(q.getId());
 
             String baseExpl = nzs(q.getExplanation());
-            String aiExpl = "";
+            String aiExpl = ""; // 미니체크는 AI 해설 미사용
 
             answerRepo.save(UserAnswer.builder()
                     .userId(req.userId())
@@ -161,10 +163,10 @@ public class WrittenService {
         p.setUpdatedAt(Instant.now());
         progressRepo.save(p);
 
-        return new MiniSubmitResp(req.answers().size(), correctCnt, passed, items);
+        return new MiniSubmitResp(req.answers().size(), correctCnt, passed, items, wrongIds);
     }
 
-    /* ========================= MCQ ========================= */
+    /* ========================= 문제세트(객관식) ========================= */
 
     public McqSet mcqSet(Long topicId, String userId) {
         List<Question> pool = questionRepo.findAll().stream()
@@ -174,7 +176,7 @@ public class WrittenService {
                 .collect(Collectors.toList());
         Collections.shuffle(pool);
 
-        List<Question> picked = pool.stream().limit(4).toList();
+        List<Question> picked = pool.stream().limit(5).toList();
 
         List<McqQuestion> dto = picked.stream().map(q -> {
             List<McqChoice> choices = choiceRepo.findByQuestionId(q.getId()).stream()
@@ -189,26 +191,41 @@ public class WrittenService {
 
     @Transactional
     public McqSubmitResp submitMcq(McqSubmitReq req) {
+        // 1) 입력 질문 조회
         List<Long> ids = req.answers().stream().map(McqAnswer::questionId).toList();
         List<Question> qs = questionRepo.findAllById(ids);
 
+        // 2) 필기는 '객관식(MCQ)'만 허용
+        boolean allMcq = qs.stream().allMatch(q -> q.getType() == QuestionType.MCQ);
+        if (!allMcq) {
+            throw new IllegalArgumentException("Written MCQ submit only accepts MCQ questions.");
+        }
+
+        // 3) 정답 맵 구성 (isCorrect() 사용)
         Map<Long, String> correctMap = new HashMap<>();
         for (Question q : qs) {
             for (QuestionChoice c : choiceRepo.findByQuestionId(q.getId())) {
-                if (Boolean.TRUE.equals(c.isCorrect())) { correctMap.put(q.getId(), c.getLabel()); break; }
+                if (c.isCorrect()) {
+                    correctMap.put(q.getId(), c.getLabel());
+                    break;
+                }
             }
         }
 
         int correctCnt = 0;
         List<McqSubmitItem> items = new ArrayList<>();
+        List<Long> wrongIds = new ArrayList<>();
 
+        // 4) 채점/저장
         for (McqAnswer a : req.answers()) {
-            String correctLabel = correctMap.get(a.questionId());
+            String correctLabel = correctMap.get(a.questionId()); // 없으면 null -> 오답 처리
             boolean ok = Objects.equals(correctLabel, a.label());
-            if (ok) correctCnt++;
+            if (ok) correctCnt++; else wrongIds.add(a.questionId());
 
-            Question q = qs.stream().filter(x -> Objects.equals(x.getId(), a.questionId()))
+            Question q = qs.stream()
+                    .filter(x -> Objects.equals(x.getId(), a.questionId()))
                     .findFirst().orElseThrow();
+
             String baseExpl = nzs(q.getExplanation());
             String aiExpl = ok ? "" : nzs(ai.explainWrongForMCQ(a.label(), correctLabel, q));
 
@@ -223,6 +240,7 @@ public class WrittenService {
             items.add(new McqSubmitItem(a.questionId(), ok, correctLabel, baseExpl, aiExpl));
         }
 
+        // 5) 진행도 업데이트
         UserProgress p = progressRepo
                 .findByUserIdAndTopicIdAndExamMode(req.userId(), req.topicId(), ExamMode.WRITTEN)
                 .orElseGet(() -> UserProgress.builder()
@@ -235,7 +253,7 @@ public class WrittenService {
         p.setUpdatedAt(Instant.now());
         progressRepo.save(p);
 
-        return new McqSubmitResp(req.answers().size(), correctCnt, items);
+        return new McqSubmitResp(req.answers().size(), correctCnt, items, wrongIds);
     }
 
     /* ========================= 요약(필기 완료) ========================= */
@@ -250,8 +268,8 @@ public class WrittenService {
         int mcqT  = nz(p.getMcqTotal());
         int mcqC  = nz(p.getMcqCorrect());
 
-        // 완료 판정: 상위 이동은 프런트가 막으므로 서버는 "시도 여부"로만 판단
-        boolean completed = (miniT > 0 && mcqT > 0);
+        // 정책: 미니 전부 정답 + MCQ 전부 정답
+        boolean completed = miniPassed && (mcqT > 0 && mcqC == mcqT);
 
         int streak = computeStreakDays(userId);
         String aiSummary = ai.summarizeWrittenKorean(userId, topicId, miniT, miniC, mcqT, mcqC, completed, streak);
@@ -286,26 +304,21 @@ public class WrittenService {
         return submitMcq(req);
     }
 
-    /**
-     * 틀린문제 다시보기(요약): '최근 오답'을 기준으로 동일 토픽의 항목을 모아
-     * 문항/내답/정답/DB 해설을 보여준다(재풀이 아님).
-     */
+    /* ========================= 틀린문제 다시보기 ========================= */
+
     public WrongRecapSet wrongRecap(Long topicId, String userId, int limit) {
-        // 1) 최근 오답 로그
         List<UserAnswer> wrongLogs = answerRepo.findAll().stream()
                 .filter(a -> Objects.equals(a.getUserId(), userId))
                 .filter(a -> !a.isCorrect())
                 .sorted(Comparator.comparing(UserAnswer::getCreatedAt).reversed())
                 .toList();
 
-        // 2) questionId 추출(중복 제거, 상한 200)
         LinkedHashSet<Long> wrongQids = new LinkedHashSet<>();
         for (UserAnswer a : wrongLogs) {
             wrongQids.add(a.getQuestionId());
             if (wrongQids.size() >= 200) break;
         }
 
-        // 3) 해당 토픽 + 모든 타입(OX/MCQ/SHORT/LONG) 필터
         List<Question> pool = questionRepo.findAllById(wrongQids).stream()
                 .filter(q -> Objects.equals(q.getTopicId(), topicId))
                 .sorted(Comparator.comparing(Question::getId))
@@ -313,7 +326,6 @@ public class WrittenService {
 
         List<WrongRecapSet.Item> items = new ArrayList<>();
         for (Question q : pool) {
-            // 내 최근 오답 1건
             String myAns = wrongLogs.stream()
                     .filter(a -> Objects.equals(a.getQuestionId(), q.getId()))
                     .findFirst().map(UserAnswer::getAnswerText).orElse("");
@@ -323,12 +335,12 @@ public class WrittenService {
                 case OX -> correctAns = String.valueOf(q.getOxAnswer());
                 case MCQ -> {
                     String corr = choiceRepo.findByQuestionId(q.getId()).stream()
-                            .filter(c -> Boolean.TRUE.equals(c.isCorrect()))
+                            .filter(QuestionChoice::isCorrect)
                             .map(QuestionChoice::getLabel)
                             .findFirst().orElse("");
                     correctAns = corr;
                 }
-                default -> correctAns = ""; // SHORT/LONG은 정답표시 대신 해설로 안내
+                default -> correctAns = "";
             }
 
             items.add(new WrongRecapSet.Item(
@@ -336,6 +348,59 @@ public class WrittenService {
                     nzs(myAns), correctAns, nzs(q.getExplanation()), q.getImageUrl()
             ));
             if (items.size() >= limit) break;
+        }
+
+        return new WrongRecapSet(items);
+    }
+
+    public WrongRecapSet wrongRecapByIds(String ids, String userId) {
+        List<Long> qids = Arrays.stream(ids.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .map(Long::valueOf)
+                .distinct()
+                .limit(200)
+                .toList();
+
+        if (qids.isEmpty()) return new WrongRecapSet(List.of());
+
+        Map<Long, Question> qm = questionRepo.findAllById(qids).stream()
+                .collect(Collectors.toMap(Question::getId, it -> it));
+
+        Map<Long, String> myLatestAns = new HashMap<>();
+        if (userId != null && !userId.isBlank()) {
+            answerRepo.findAll().stream()
+                    .filter(a -> Objects.equals(a.getUserId(), userId))
+                    .filter(a -> qids.contains(a.getQuestionId()))
+                    .collect(Collectors.groupingBy(UserAnswer::getQuestionId,
+                            Collectors.maxBy(Comparator.comparing(UserAnswer::getCreatedAt))))
+                    .forEach((qid, opt) -> myLatestAns.put(qid, opt.map(UserAnswer::getAnswerText).orElse("")));
+        }
+
+        List<WrongRecapSet.Item> items = new ArrayList<>();
+        for (Long qid : qids) {
+            Question q = qm.get(qid);
+            if (q == null) continue;
+
+            String correctAns;
+            switch (q.getType()) {
+                case OX -> correctAns = String.valueOf(q.getOxAnswer());
+                case MCQ -> {
+                    String corr = choiceRepo.findByQuestionId(q.getId()).stream()
+                            .filter(QuestionChoice::isCorrect)
+                            .map(QuestionChoice::getLabel)
+                            .findFirst().orElse("");
+                    correctAns = corr;
+                }
+                default -> correctAns = "";
+            }
+
+            String myAns = myLatestAns.getOrDefault(qid, "");
+
+            items.add(new WrongRecapSet.Item(
+                    q.getId(), q.getType().name(), nzs(q.getText()),
+                    nzs(myAns), correctAns, nzs(q.getExplanation()), q.getImageUrl()
+            ));
         }
 
         return new WrongRecapSet(items);
@@ -358,5 +423,41 @@ public class WrittenService {
         LocalDate cur = LocalDate.now(KST);
         while (days.contains(cur)) { streak++; cur = cur.minusDays(1); }
         return streak;
+    }
+
+    /* ========================= 즉시 채점 ========================= */
+    @Transactional
+    public MiniGradeOneResp gradeOneMini(MiniGradeOneReq req) {
+        MiniSubmitReq batch = new MiniSubmitReq(
+                req.userId(),
+                req.topicId(),
+                List.of(new MiniAnswer(req.questionId(), req.answer()))
+        );
+        MiniSubmitResp r = submitMini(batch);
+        MiniSubmitItem item = r.items().isEmpty()
+                ? new MiniSubmitItem(req.questionId(), false, "", "")
+                : r.items().get(0);
+        return new MiniGradeOneResp(item.correct(), item.explanation());
+    }
+
+    @Transactional
+    public McqGradeOneResp gradeOneMcq(McqGradeOneReq req) {
+        McqSubmitReq batch = new McqSubmitReq(
+                req.userId(),
+                req.topicId(),
+                List.of(new McqAnswer(req.questionId(), req.label()))
+        );
+        McqSubmitResp r = submitMcq(batch);
+
+        McqSubmitItem item = r.items().isEmpty()
+                ? new McqSubmitItem(req.questionId(), false, "", "", "")
+                : r.items().get(0);
+
+        return new McqGradeOneResp(
+                item.correct(),
+                item.correctLabel(),
+                item.explanation(),
+                item.aiExplanation()
+        );
     }
 }
