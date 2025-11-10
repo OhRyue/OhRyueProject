@@ -3,7 +3,6 @@ package com.OhRyue.certpilot.study.service;
 import com.OhRyue.certpilot.study.domain.AnswerLog;
 import com.OhRyue.certpilot.study.dto.ReportPlusDtos.*;
 import com.OhRyue.certpilot.study.repository.AnswerLogRepository;
-import com.OhRyue.certpilot.study.repository.AnswerLogRepository;
 import com.OhRyue.certpilot.study.repository.QuestionTagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

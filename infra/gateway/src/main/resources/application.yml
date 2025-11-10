@@ -4,123 +4,164 @@ server:
 spring:
   application:
     name: gateway
-  cloud:
-    gateway:
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-      # 프런트 개발용 전역 CORS 허용
-      globalcors:
-        corsConfigurations:
-          "[/**]":
-            allowedOrigins:
-              - http://localhost:5173
-              - http://localhost:3000
-              - http://210.110.33.222:3000
-            allowedMethods: "*"
-            allowedHeaders: "*"
-            allowCredentials: true
-
-      routes:
-        - id: account-service
-          uri: lb://account-service
-          predicates:
-            - Path=/api/account/**
-
-        - id: account-swagger-ui
-          uri: lb://account-service
-          predicates:
-            - Path=/api/account/swagger-ui/**
-
-        - id: account-openapi
-          uri: lb://account-service
-          predicates:
-            - Path=/api/account/v3/api-docs/**
-
-        - id: study-service
-          uri: lb://study-service
-          predicates:
-            - Path=/api/study/**
-
-        - id: study-swagger-ui
-          uri: lb://study-service
-          predicates:
-            - Path=/api/study/swagger-ui/**
-
-        - id: study-openapi
-          uri: lb://study-service
-          predicates:
-            - Path=/api/study/v3/api-docs/**
-
-        - id: progress-service
-          uri: lb://progress-service
-          predicates:
-            - Path=/api/progress/**
-
-        - id: progress-swagger-ui
-          uri: lb://progress-service
-          predicates:
-            - Path=/api/progress/swagger-ui/**
-
-        - id: progress-openapi
-          uri: lb://progress-service
-          predicates:
-            - Path=/api/progress/v3/api-docs/**
-
-        - id: cert-serivce
-          uri: lb://cert-service
-          predicates:
-            - Path=/api/cert/**
-
-        - id: cert-swagger-ui
-          uri: lb://cert-service
-          predicates:
-            - Path=/api/cert/swagger-ui/**
-
-        - id: cert-openapi
-          uri: lb://cert-service
-          predicates:
-            - Path=/api/cert/v3/api-docs/**
-
-        - id: versus-serivce
-          uri: lb://versus-service
-          predicates:
-            - Path=/api/versus/**
-
-        - id: versus-swagger-ui
-          uri: lb://versus-service
-          predicates:
-            - Path=/api/versus/swagger-ui/**
-
-        - id: versus-openapi
-          uri: lb://versus-service
-          predicates:
-            - Path=/api/versus/v3/api-docs/**
-
-        - id: community-serivce
-          uri: lb://community-service
-          predicates:
-            - Path=/api/community/**
-
-        - id: community-swagger-ui
-          uri: lb://community-service
-          predicates:
-            - Path=/api/community/swagger-ui/**
-
-        - id: community-openapi
-          uri: lb://community-service
-          predicates:
-            - Path=/api/community/v3/api-docs/**
-
   main:
     web-application-type: reactive
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+          globalcors:
+            cors-configurations:
+              "[/**]":
+                allowed-origins:
+                  - ${FRONTEND_ORIGIN:http://localhost:5173}
+                  - http://localhost:3000
+                  - http://210.110.33.222:3000
+                allowed-methods: "*"
+                allowed-headers: "*"
+                allow-credentials: true
+
+          routes:
+            # --- study ---
+            - id: study-service
+              uri: lb://study-service
+              predicates:
+                - Path=/api/study/**
+              filters:
+                - RewritePath=/api/study/(?<segment>.*),/${segment}
+                # 필요 시 다시 켜세요 (userKeyResolver 빈 준비 후)
+                # - name: RequestRateLimiter
+                #   args:
+                #     redis-rate-limiter.replenishRate: 10
+                #     redis-rate-limiter.burstCapacity: 20
+                #     key-resolver: "#{@userKeyResolver}"
+
+            - id: study-swagger-ui
+              uri: lb://study-service
+              predicates:
+                - Path=/api/study/swagger-ui/**
+              filters:
+                - RewritePath=/api/study/(?<segment>.*),/${segment}
+
+            - id: study-openapi
+              uri: lb://study-service
+              predicates:
+                - Path=/api/study/v3/api-docs/**
+              filters:
+                - RewritePath=/api/study/(?<segment>.*),/${segment}
+
+            # --- account ---
+            - id: account-service
+              uri: lb://account-service
+              predicates:
+                - Path=/api/account/**
+              filters:
+                - RewritePath=/api/account/(?<segment>.*),/${segment}
+
+            - id: account-swagger-ui
+              uri: lb://account-service
+              predicates:
+                - Path=/api/account/swagger-ui/**
+              filters:
+                - RewritePath=/api/account/(?<segment>.*),/${segment}
+
+            - id: account-openapi
+              uri: lb://account-service
+              predicates:
+                - Path=/api/account/v3/api-docs/**
+              filters:
+                - RewritePath=/api/account/(?<segment>.*),/${segment}
+
+            # --- progress ---
+            - id: progress-service
+              uri: lb://progress-service
+              predicates:
+                - Path=/api/progress/**
+              filters:
+                - RewritePath=/api/progress/(?<segment>.*),/${segment}
+
+            - id: progress-swagger-ui
+              uri: lb://progress-service
+              predicates:
+                - Path=/api/progress/swagger-ui/**
+              filters:
+                - RewritePath=/api/progress/(?<segment>.*),/${segment}
+
+            - id: progress-openapi
+              uri: lb://progress-service
+              predicates:
+                - Path=/api/progress/v3/api-docs/**
+              filters:
+                - RewritePath=/api/progress/(?<segment>.*),/${segment}
+
+            # --- cert ---
+            - id: cert-service
+              uri: lb://cert-service
+              predicates:
+                - Path=/api/certs/**
+              filters:
+                - RewritePath=/api/certs/(?<segment>.*),/${segment}
+
+            - id: cert-swagger-ui
+              uri: lb://cert-service
+              predicates:
+                - Path=/api/certs/swagger-ui/**
+              filters:
+                - RewritePath=/api/certs/(?<segment>.*),/${segment}
+
+            - id: cert-openapi
+              uri: lb://cert-service
+              predicates:
+                - Path=/api/certs/v3/api-docs/**
+              filters:
+                - RewritePath=/api/certs/(?<segment>.*),/${segment}
+
+            # --- versus ---
+            - id: versus-service
+              uri: lb://versus-service
+              predicates:
+                - Path=/api/versus/**
+              filters:
+                - RewritePath=/api/versus/(?<segment>.*),/${segment}
+
+            - id: versus-swagger-ui
+              uri: lb://versus-service
+              predicates:
+                - Path=/api/versus/swagger-ui/**
+              filters:
+                - RewritePath=/api/versus/(?<segment>.*),/${segment}
+
+            - id: versus-openapi
+              uri: lb://versus-service
+              predicates:
+                - Path=/api/versus/v3/api-docs/**
+              filters:
+                - RewritePath=/api/versus/(?<segment>.*),/${segment}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
+        include: health,info,gateway,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 eureka:
   client:
+    fetch-registry: true
+    register-with-eureka: true
     serviceUrl:
-      defaultZone: http://discovery:8761/eureka
+      defaultZone: http://discovery:8761/eureka/
+  instance:
+    prefer-ip-address: true

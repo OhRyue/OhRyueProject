@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   mysql:
     image: mysql:8.4
@@ -7,7 +9,8 @@ services:
       MYSQL_DATABASE: certpilot
       MYSQL_USER: app
       MYSQL_PASSWORD: apppw
-    ports: ["3307:3306"]
+    ports:
+      - "3307:3306"
     volumes:
       - ./db:/docker-entrypoint-initdb.d
       - mysql-data:/var/lib/mysql
@@ -17,18 +20,28 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    networks: [ backend ]
+
   redis:
     image: redis:7
     container_name: redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: always
+    networks: [ backend ]
 
   adminer:
     image: adminer
     container_name: certpilot-adminer
-    ports: ["8084:8080"]
+    ports:
+      - "7979:8080"
     restart: unless-stopped
+    networks: [ backend ]
 
   discovery:
     build:
@@ -38,8 +51,15 @@ services:
     container_name: discovery
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-    ports: ["8761:8761"]
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
+    networks: [ backend ]
 
   gateway:
     build:
@@ -49,10 +69,19 @@ services:
     container_name: gateway
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - FRONTEND_ORIGIN=http://localhost:5173
+      - SECURITY_JWT_HMAC_SECRET=${GATEWAY_JWT_SECRET}
     depends_on:
-      - discovery
-    ports: ["8080:8080"]
+      discovery:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
     restart: unless-stopped
+    networks: [ backend ]
 
   account-service:
     build:
@@ -64,15 +93,16 @@ services:
       - SPRING_PROFILES_ACTIVE=docker
       - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - SECURITY_JWT_HMAC_SECRET=${ACCOUNT_JWT_SECRET}
     depends_on:
       mysql:
         condition: service_healthy
       discovery:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_started
-    ports: ["8081:8081"]
     restart: unless-stopped
+    networks: [ backend ]
 
   study-service:
     build:
@@ -82,13 +112,14 @@ services:
     container_name: study-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - SECURITY_JWT_HMAC_SECRET=${STUDY_JWT_SECRET}
     depends_on:
       mysql:
         condition: service_healthy
       discovery:
-        condition: service_started
-    ports: ["8082:8082"]
+        condition: service_healthy
     restart: unless-stopped
+    networks: [ backend ]
 
   progress-service:
     build:
@@ -102,9 +133,9 @@ services:
       mysql:
         condition: service_healthy
       discovery:
-        condition: service_started
-    ports: [ "8083:8083" ]
+        condition: service_healthy
     restart: unless-stopped
+    networks: [ backend ]
 
   cert-service:
     build:
@@ -118,9 +149,9 @@ services:
       mysql:
         condition: service_healthy
       discovery:
-        condition: service_started
-    ports: [ "8084:8084" ]
+        condition: service_healthy
     restart: unless-stopped
+    networks: [ backend ]
 
   versus-service:
     build:
@@ -134,9 +165,9 @@ services:
       mysql:
         condition: service_healthy
       discovery:
-        condition: service_started
-    ports: [ "8085:8085" ]
+        condition: service_healthy
     restart: unless-stopped
+    networks: [ backend ]
 
   community-service:
     build:
@@ -150,11 +181,12 @@ services:
       mysql:
         condition: service_healthy
       discovery:
-        condition: service_started
-    ports: [ "8086:8086" ]
+        condition: service_healthy
     restart: unless-stopped
+    networks: [ backend ]
+
+networks:
+  backend:
 
 volumes:
   mysql-data:
-
-

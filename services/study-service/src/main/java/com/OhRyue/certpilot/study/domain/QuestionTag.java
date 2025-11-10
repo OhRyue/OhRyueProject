@@ -6,7 +6,7 @@ import lombok.*;
 @Entity
 @Table(name = "question_tag", indexes = {
     @Index(name = "ix_qtag_tag", columnList = "tag"),
-    @Index(name = "ix_qtag_qid", columnList = "questionId")
+    @Index(name = "ix_qtag_qid", columnList = "question_id")
 })
 @Getter @Setter
 @NoArgsConstructor
@@ -18,7 +18,7 @@ public class QuestionTag {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(nullable = false)
+  @Column(name = "question_id", nullable = false)
   private Long questionId;
 
   @Column(nullable = false, length = 80)

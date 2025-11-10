@@ -1,27 +1,34 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- 이 스크립트는 certpilot_study 데이터베이스에서 실행.
+USE certpilot_study;
+
 -- ---------------------------------
--- 0) 공통: 참조 대상(자격증/토픽) 변수 확보
+-- 0) 공통: 참조 대상(자격증/토픽) 변수 확보  (→ cross-DB: certpilot_cert)
 -- ---------------------------------
 -- 자격증: 정보처리기사
-SET @cert_id := (SELECT id FROM cert WHERE name = '정보처리기사' LIMIT 1);
+SET @cert_id := (
+  SELECT id FROM certpilot_cert.cert
+   WHERE name = '정보처리기사'
+   LIMIT 1
+);
 
--- 토픽들 (예시: 질문에서 준 구조)
-SET @t_1              := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1' LIMIT 1);         -- 소프트웨어 설계
-SET @t_1_1            := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.1' LIMIT 1);       -- 요구사항 확인
-SET @t_1_1_1          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.1.1' LIMIT 1);     -- 현행 시스템 분석
-SET @t_1_1_2          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.1.2' LIMIT 1);     -- 요구사항 확인
-SET @t_1_1_3          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.1.3' LIMIT 1);     -- 분석 모델 확인
-SET @t_1_2            := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.2' LIMIT 1);       -- 화면설계
-SET @t_1_2_1          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.2.1' LIMIT 1);     -- UI 요구사항 확인
-SET @t_1_3            := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.3' LIMIT 1);       -- 애플리케이션 설계
-SET @t_1_3_1          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.3.1' LIMIT 1);     -- 공통 모듈 설계
-SET @t_1_3_2          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.3.2' LIMIT 1);     -- 객체 지향 설계
-SET @t_1_4            := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.4' LIMIT 1);       -- 인터페이스 설계
-SET @t_1_4_1          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.4.1' LIMIT 1);     -- 인터페이스 요구사항 확인
-SET @t_1_4_2          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.4.2' LIMIT 1);     -- 인터페이스 대상 식별
-SET @t_1_4_3          := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='1.4.3' LIMIT 1);     -- 인터페이스 상세 설계
+-- 토픽들 (예시: 질문에서 준 구조)  ※ 모두 certpilot_cert.topic 참조
+SET @t_1      := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1'     LIMIT 1);  -- 소프트웨어 설계
+SET @t_1_1    := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.1'   LIMIT 1);  -- 요구사항 확인
+SET @t_1_1_1  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.1.1' LIMIT 1);  -- 현행 시스템 분석
+SET @t_1_1_2  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.1.2' LIMIT 1);  -- 요구사항 확인
+SET @t_1_1_3  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.1.3' LIMIT 1);  -- 분석 모델 확인
+SET @t_1_2    := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.2'   LIMIT 1);  -- 화면설계
+SET @t_1_2_1  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.2.1' LIMIT 1);  -- UI 요구사항 확인
+SET @t_1_3    := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.3'   LIMIT 1);  -- 애플리케이션 설계
+SET @t_1_3_1  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.3.1' LIMIT 1);  -- 공통 모듈 설계
+SET @t_1_3_2  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.3.2' LIMIT 1);  -- 객체 지향 설계
+SET @t_1_4    := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.4'   LIMIT 1);  -- 인터페이스 설계
+SET @t_1_4_1  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.4.1' LIMIT 1);  -- 인터페이스 요구사항 확인
+SET @t_1_4_2  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.4.2' LIMIT 1);  -- 인터페이스 대상 식별
+SET @t_1_4_3  := (SELECT id FROM certpilot_cert.topic WHERE cert_id=@cert_id AND code='1.4.3' LIMIT 1);  -- 인터페이스 상세 설계
 
 -- 사용자 (account-service seed 준수)
 SET @u_ohryue := 'ohryue';
@@ -86,7 +93,8 @@ SELECT q.id, t.tag FROM (
   SELECT '요구사항' AS tag UNION ALL
   SELECT '현행시스템' UNION ALL
   SELECT '분석모델'   UNION ALL
-  SELECT 'UI' ) t
+  SELECT 'UI'
+) t
 JOIN question q ON q.text IN (
   '현행 시스템 분석 단계에서 성능 지표(응답시간/처리량 등) 수집은 핵심 활동이다. (O/X)',
   '요구사항 확인에서는 이해관계자 식별과 요구사항 분류(기능/비기능)가 이루어진다. (O/X)',
@@ -221,7 +229,8 @@ SELECT q.id, t.tag FROM (
   SELECT 'OOP'         UNION ALL
   SELECT '인터페이스요구' UNION ALL
   SELECT '대상식별'     UNION ALL
-  SELECT '상세설계' ) t
+  SELECT '상세설계'
+) t
 JOIN question q ON q.id IN (@q_m1,@q_m2,@q_m3,@q_m4,@q_m5)
 LEFT JOIN question_tag qt ON qt.question_id=q.id AND qt.tag=t.tag
 WHERE qt.id IS NULL;
@@ -343,24 +352,19 @@ INSERT INTO user_answer (user_id, question_id, correct, score, answer_text)
 SELECT @u_ohryue, @q_ox4, 0, NULL, 'O' FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM user_answer WHERE user_id=@u_ohryue AND question_id=@q_ox4);
 
--- MCQ 제출(B/D/A/A/A 라고 가정, 정답은 문제별로 위에서 지정)
--- q_m1: 정답 C → 오답
+-- MCQ 제출(B/D/A/A/A 가정)
 INSERT INTO user_answer (user_id, question_id, correct, score, answer_text)
 SELECT @u_ohryue, @q_l, 0, NULL, 'B' FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM user_answer WHERE user_id=@u_ohryue AND question_id=@q_l);
--- q_m2: 정답 B → 정답
 INSERT INTO user_answer (user_id, question_id, correct, score, answer_text)
 SELECT @u_ohryue, @q_m, 1, NULL, 'B' FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM user_answer WHERE user_id=@u_ohryue AND question_id=@q_m);
--- q_m3: 정답 A → 정답
 INSERT INTO user_answer (user_id, question_id, correct, score, answer_text)
 SELECT @u_ohryue, @q_n, 1, NULL, 'A' FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM user_answer WHERE user_id=@u_ohryue AND question_id=@q_n);
--- q_m4: 정답 D → 정답
 INSERT INTO user_answer (user_id, question_id, correct, score, answer_text)
 SELECT @u_ohryue, @q_o, 1, NULL, 'D' FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM user_answer WHERE user_id=@u_ohryue AND question_id=@q_o);
--- q_m5: 정답 A → 오답(예: D)
 INSERT INTO user_answer (user_id, question_id, correct, score, answer_text)
 SELECT @u_ohryue, @q_p, 0, NULL, 'D' FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM user_answer WHERE user_id=@u_ohryue AND question_id=@q_p);

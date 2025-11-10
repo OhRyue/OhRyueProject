@@ -8,19 +8,21 @@ import lombok.*;
 @Entity
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor @Builder
-@Table(name = "question",
+@Table(
+    name = "question",
     indexes = {
-        @Index(name = "ix_q_topic", columnList = "topicId"),
+        @Index(name = "ix_q_topic", columnList = "topic_id"),
         @Index(name = "ix_q_type", columnList = "type"),
         @Index(name = "ix_q_diff", columnList = "difficulty")
-    })
+    }
+)
 public class Question {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(nullable = false)
+  @Column(name = "topic_id", nullable = false)
   private Long topicId;     // 출제 토픽(세세항목/세부항목 등)
 
   @Enumerated(EnumType.STRING)
@@ -34,9 +36,11 @@ public class Question {
   @Column(columnDefinition = "TEXT")
   private String text;
 
+  @Column(name = "image_url")
   private String imageUrl;  // 실기용/객관식 이미지(Optional)
 
   // OX 전용
+  @Column(name = "ox_answer")
   private Boolean oxAnswer; // type=OX일 때 정답(O=true, X=false)
 
   @Column(columnDefinition = "TEXT")

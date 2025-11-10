@@ -30,12 +30,24 @@ spring:
 
 eureka:
   client:
-    service-url:
-      defaultZone: http://discovery:8761/eureka
+    serviceUrl:
+      defaultZone: http://discovery:8761/eureka/
     fetch-registry: true
     register-with-eureka: true
   instance:
     prefer-ip-address: true
 
-jwt:
-  secret-key: "your-super-secure-secret-key123456"
+security:
+  jwt:
+    hmac-secret: ${SECURITY_JWT_HMAC_SECRET:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

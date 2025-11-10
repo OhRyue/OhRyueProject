@@ -10,10 +10,13 @@ import java.time.Instant;
  * - 파생쿼리에서 사용되는 필드명: userId, questionId, correct, answeredAt
  */
 @Entity
-@Table(name = "answer_log", indexes = {
-    @Index(name = "ix_answerlog_user_time", columnList = "userId,answeredAt"),
-    @Index(name = "ix_answerlog_question", columnList = "questionId")
-})
+@Table(
+    name = "answer_log",
+    indexes = {
+        @Index(name = "ix_answerlog_user_time", columnList = "user_id,answered_at"),
+        @Index(name = "ix_answerlog_question", columnList = "question_id")
+    }
+)
 @Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -25,11 +28,11 @@ public class AnswerLog {
   private Long id;
 
   /** 사용자 식별자(로그인 아이디/UUID 등) */
-  @Column(nullable = false, length = 100)
+  @Column(name = "user_id", nullable = false, length = 100)
   private String userId;
 
   /** 문제 ID (FK처럼 사용; 실제 FK 제약은 선택) */
-  @Column(nullable = false)
+  @Column(name = "question_id", nullable = false)
   private Long questionId;
 
   /** 정답 여부 */
@@ -37,10 +40,10 @@ public class AnswerLog {
   private Boolean correct;
 
   /** 풀이 시각(UTC) */
-  @Column(nullable = false)
+  @Column(name = "answered_at", nullable = false)
   private Instant answeredAt;
 
-  /** 선택(옵션): 선택지 라벨/텍스트, 제출 답안 등 */
+  /** 선택지 라벨/텍스트, 제출 답안 등 */
   @Column(length = 50)
   private String userAnswer;     // MCQ/OX라벨 또는 주관식 텍스트 요약
 

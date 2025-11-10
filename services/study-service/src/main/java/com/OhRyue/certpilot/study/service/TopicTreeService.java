@@ -23,72 +23,73 @@ import java.util.*;
 @Slf4j
 public class TopicTreeService {
 
-    private final TopicRepository repo;
+  private final TopicRepository repo;
 
-    @PersistenceContext
-    private final EntityManager em;
+  @PersistenceContext
+  // ✅ JPA 필드 주입은 final 불가 → final 제거
+  private EntityManager em;
 
-    /**
-     * 기존 메서드명/시그니처 유지
-     */
-    public Set<Long> descendantIds(Long rootId) {
-        return descendantsOf(rootId);
-    }
+  /**
+   * 기존 메서드명/시그니처 유지
+   */
+  public Set<Long> descendantIds(Long rootId) {
+    return descendantsOf(rootId);
+  }
 
-    /**
-     * 신규 오버로드: 명시적 이름의 동등 기능
-     */
-    public Set<Long> descendantsOf(Long rootTopicId) {
-        // 1) MySQL 8.0 재귀 CTE 시도
-        try {
-            String sql = """
+  /**
+   * 신규 오버로드: 명시적 이름의 동등 기능
+   */
+  public Set<Long> descendantsOf(Long rootTopicId) {
+    // 1) MySQL 8.0 재귀 CTE 시도
+    try {
+      String sql = """
           WITH RECURSIVE t AS (
-            SELECT id, parent_id FROM topic WHERE id = :root
+            SELECT id, parentId FROM topic WHERE id = :root
             UNION ALL
-            SELECT c.id, c.parent_id
+            SELECT c.id, c.parentId
             FROM topic c
-            INNER JOIN t ON c.parent_id = t.id
+            INNER JOIN t ON c.parentId = t.id
           )
           SELECT id FROM t
           """;
-            Query q = em.createNativeQuery(sql);
-            q.setParameter("root", rootTopicId);
-            @SuppressWarnings("unchecked")
-            List<BigInteger> rows = q.getResultList();
+      Query q = em.createNativeQuery(sql);
+      q.setParameter("root", rootTopicId);
+      @SuppressWarnings("unchecked")
+      List<BigInteger> rows = q.getResultList();
 
-            Set<Long> out = new LinkedHashSet<>();
-            for (BigInteger bi : rows) out.add(bi.longValue());
-            // 방어: 최소한 루트는 포함
-            if (out.isEmpty()) out.add(rootTopicId);
-            return out;
-        } catch (Exception e) {
-            log.warn("Recursive CTE failed, fallback to iterative select. cause={}", e.getMessage());
-            // 2) 폴백: iterative children select (findAll 스캔 제거)
-            return fetchDescendantsIteratively(rootTopicId);
-        }
+      Set<Long> out = new LinkedHashSet<>();
+      for (BigInteger bi : rows) out.add(bi.longValue());
+      // 방어: 최소한 루트는 포함
+      if (out.isEmpty()) out.add(rootTopicId);
+      return out;
+    } catch (Exception e) {
+      log.warn("Recursive CTE failed, fallback to iterative select. cause={}", e.getMessage());
+      // 2) 폴백: iterative children select (findAll 스캔 제거)
+      return fetchDescendantsIteratively(rootTopicId);
     }
+  }
 
-    /**
-     * 폴백: parent_id 인덱스를 활용해 반복적으로 자식만 조회
-     */
-    private Set<Long> fetchDescendantsIteratively(Long rootId) {
-        Set<Long> visited = new LinkedHashSet<>();
-        Deque<Long> dq = new ArrayDeque<>();
-        dq.add(rootId);
+  /**
+   * 폴백: parentId 인덱스를 활용해 반복적으로 자식만 조회
+   */
+  private Set<Long> fetchDescendantsIteratively(Long rootId) {
+    Set<Long> visited = new LinkedHashSet<>();
+    Deque<Long> dq = new ArrayDeque<>();
+    dq.add(rootId);
 
-        while (!dq.isEmpty()) {
-            Long cur = dq.poll();
-            if (!visited.add(cur)) continue;
+    while (!dq.isEmpty()) {
+      Long cur = dq.poll();
+      if (!visited.add(cur)) continue;
 
-            // children ids만 조회 (전체 findAll() X)
-            String sql = "SELECT id FROM topic WHERE parent_id = :pid";
-            Query q = em.createNativeQuery(sql);
-            q.setParameter("pid", cur);
-            @SuppressWarnings("unchecked")
-            List<BigInteger> childIds = q.getResultList();
+      // children ids만 조회 (전체 findAll() X)
+      String sql = "SELECT id FROM topic WHERE parentId = :pid";
+      Query q = em.createNativeQuery(sql);
+      q.setParameter("pid", cur);
+      @SuppressWarnings("unchecked")
+      List<BigInteger> childIds = q.getResultList();
 
-            for (BigInteger bi : childIds) dq.add(bi.longValue());
-        }
-        return visited;
+      for (BigInteger bi : childIds) dq.add(bi.longValue());
     }
+    return visited;
+  }
 }

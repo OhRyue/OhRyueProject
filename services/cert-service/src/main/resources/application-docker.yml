@@ -1,13 +1,13 @@
 server:
-  port: 8083
+  port: 8084
 
 spring:
   application:
-    name: progress-service
+    name: cert-service
   datasource:
-    url: jdbc:mysql://mysql:3306/certpilot_progress?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
-    username: progress
-    password: progresspw
+    url: jdbc:mysql://mysql:3306/certpilot_cert?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
+    username: cert
+    password: certpw
   jpa:
     hibernate:
       ddl-auto: none
@@ -24,6 +24,9 @@ eureka:
     register-with-eureka: true
   instance:
     prefer-ip-address: true
+
+frontend:
+  origin: ${FRONTEND_ORIGIN:http://localhost:5173}
 
 management:
   endpoints:

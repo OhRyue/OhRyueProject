@@ -1,15 +1,21 @@
 package com.OhRyue.certpilot.study.config;
 
-import io.swagger.v3.oas.annotations.OpenAPIDefinition;
-import io.swagger.v3.oas.annotations.info.Info;
+import io.swagger.v3.oas.models.ExternalDocumentation;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.*;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-@OpenAPIDefinition(
-    info = @Info(
-        title = "Study Service API",
-        version = "1.0.0",
-        description = "메인학습·보조학습·실기 채점 API"
-    )
-)
 @Configuration
-public class OpenApiConfig {}
+public class OpenApiConfig {
+  @Bean
+  public OpenAPI studyOpenAPI() {
+    return new OpenAPI()
+        .info(new Info()
+            .title("CertPilot - Study Service API")
+            .version("v1")
+            .description("개념/미니체크/객관식/실기/보조학습/리포트 API"))
+        .externalDocs(new ExternalDocumentation()
+            .description("Gateway: /api/study/**"));
+  }
+}

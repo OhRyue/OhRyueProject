@@ -1,0 +1,23 @@
+// src/main/java/com/OhRyue/certpilot/study/config/WebConfig.java
+package com.OhRyue.certpilot.study.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.*;
+
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+  @Value("${frontend.origin:http://localhost:5173}")
+  private String frontendOrigin;
+
+  @Override
+  public void addCorsMappings(CorsRegistry registry) {
+    registry.addMapping("/api/study/**")
+        .allowedOrigins(frontendOrigin)
+        .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
+        .allowedHeaders("*")
+        .allowCredentials(true)
+        .maxAge(3600);
+  }
+}

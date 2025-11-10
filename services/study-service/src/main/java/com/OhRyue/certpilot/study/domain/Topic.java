@@ -7,11 +7,13 @@ import lombok.*;
 @Entity
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor @Builder
-@Table(name = "topic",
+@Table(
+    name = "topic",
     indexes = {
-        @Index(name = "ix_topic_parent", columnList = "parentId"),
-        @Index(name = "ix_topic_exam_mode", columnList = "examMode")
-    })
+        @Index(name = "ix_topic_parent", columnList = "parent_id"),
+        @Index(name = "ix_topic_exam_mode", columnList = "exam_mode")
+    }
+)
 public class Topic {
 
   @Id
@@ -19,7 +21,7 @@ public class Topic {
   private Long id;
 
   /** 계층(major/sub/micro) */
-  @Column(name = "parentId")
+  @Column(name = "parent_id")
   private Long parentId;
 
   /** 예: "1.1.1" */
@@ -32,6 +34,6 @@ public class Topic {
 
   /** WRITTEN | PRACTICAL */
   @Enumerated(EnumType.STRING)
-  @Column(name = "examMode", length = 20, nullable = false)
+  @Column(name = "exam_mode", length = 20, nullable = false)
   private ExamMode examMode;
 }

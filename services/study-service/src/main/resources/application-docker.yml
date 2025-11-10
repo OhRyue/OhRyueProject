@@ -2,6 +2,8 @@ server:
   port: 8082
 
 spring:
+  application:
+    name: study-service
   datasource:
     url: jdbc:mysql://mysql:3306/certpilot_study?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
     username: study
@@ -13,37 +15,66 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-  cloud:
-    openfeign:
-      client:
-        config:
-          llmClient:
-            url: http://llm:8099
-            connectTimeout: 2000
-            readTimeout: 5000
 
 eureka:
   client:
-    service-url:
-      defaultZone: http://discovery:8761/eureka
+    serviceUrl:
+      defaultZone: http://discovery:8761/eureka/
     fetch-registry: true
     register-with-eureka: true
   instance:
     prefer-ip-address: true
 
+security:
+  jwt:
+    hmac-secret: ${SECURITY_JWT_HMAC_SECRET:}
+
 llm:
-  enabled: true
-  timeout-ms: 5000
+  base-url: ${LLM_BASE_URL:}
+  api-key: ${LLM_API_KEY:}
+  timeout-ms: 3000
+
+frontend:
+  origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+
+resilience4j:
+  retry:
+    instances:
+      llm:
+        max-attempts: 3
+        wait-duration: 200ms
+  circuitbreaker:
+    instances:
+      llm:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+        slow-call-rate-threshold: 50
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
 
 study:
   reco:
     default-count: 20
-    allowed-difficulties: "EASY,NORMAL,HARD"
-    difficulty-weight-easy: 0.8
-    difficulty-weight-normal: 1.0
-    difficulty-weight-hard: 1.2
-    recent-wrong-weight: 1.5
+    allowed-difficulties: EASY,NORMAL,HARD
+    recent-wrong-weight: 0.8
     recent-days: 14
     min-tried-per-tag: 3
-    per-tag-quota-ratio: 0.5
+    per-tag-quota-ratio: 0.4
     explore-ratio: 0.2
+    difficulty-weight-easy: 0.9
+    difficulty-weight-normal: 1.0
+    difficulty-weight-hard: 1.1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

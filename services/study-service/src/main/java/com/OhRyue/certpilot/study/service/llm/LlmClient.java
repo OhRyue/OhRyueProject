@@ -14,6 +14,7 @@ import java.util.Map;
  */
 @FeignClient(
     name = "llmClient",
+    url = "${llm.base-url:http://localhost:8099}",
     configuration = LlmFeignConfig.class
 )
 public interface LlmClient {
