@@ -1,4 +1,4 @@
-plugins {
+ plugins {
     id 'org.springframework.boot'
     id 'io.spring.dependency-management'
     id 'java'
@@ -22,6 +22,8 @@ dependencies {
     runtimeOnly 'com.mysql:mysql-connector-j'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'
+
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign:4.1.4'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

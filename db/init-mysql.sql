@@ -1,9 +1,6 @@
 -- =========================================================
 -- CertPilot: MySQL bootstrap (databases + users + grants)
 -- =========================================================
--- 이 스크립트는 docker-entrypoint-initdb.d 에 두면
--- mysql 컨테이너 최초 기동 시 자동 실행됩니다.
--- =========================================================
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
@@ -38,17 +35,20 @@ GRANT ALL ON certpilot_cert.* TO 'cert'@'%';
 CREATE USER IF NOT EXISTS 'study'@'%' IDENTIFIED BY 'studypw';
 GRANT ALL ON certpilot_study.* TO 'study'@'%';
 
--- study의 Flyway seed(V2 등)에서 cert/topic을 참조하므로,
 -- study 계정에 cert DB에 대한 SELECT 권한을 부여합니다.
 GRANT SELECT ON certpilot_cert.* TO 'study'@'%';
 
+-- versus-service
 CREATE USER IF NOT EXISTS 'versus'@'%' IDENTIFIED BY 'versuspw';
 GRANT ALL ON certpilot_versus.* TO 'versus'@'%';
 
--- CREATE USER IF NOT EXISTS 'progress'@'%' IDENTIFIED BY 'progresspw';
--- GRANT ALL ON certpilot_progress.* TO 'progress'@'%';
--- CREATE USER IF NOT EXISTS 'community'@'%' IDENTIFIED BY 'communitypw';
--- GRANT ALL ON certpilot_community.* TO 'community'@'%';
+-- progress-service
+CREATE USER IF NOT EXISTS 'progress'@'%' IDENTIFIED BY 'progresspw';
+GRANT ALL ON certpilot_progress.* TO 'progress'@'%';
+
+-- community-service
+CREATE USER IF NOT EXISTS 'community'@'%' IDENTIFIED BY 'communitypw';
+GRANT ALL ON certpilot_community.* TO 'community'@'%';
 
 FLUSH PRIVILEGES;
 

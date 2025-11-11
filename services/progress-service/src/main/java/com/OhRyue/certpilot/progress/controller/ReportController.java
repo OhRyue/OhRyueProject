@@ -3,11 +3,15 @@ package com.OhRyue.certpilot.progress.controller;
 import com.OhRyue.certpilot.progress.dto.ReportDtos.*;
 import com.OhRyue.certpilot.progress.service.ReportService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/progress/report") // 게이트웨이 최신 규칙(/api/progress/**)에 맞춰 경로 정정
+@RequestMapping("/api/progress/report")
 @RequiredArgsConstructor
 public class ReportController {
 
@@ -32,13 +36,36 @@ public class ReportController {
     return report.abilityByTag(userId, mode, limit);
   }
 
-  @Operation(summary = "최근 학습 결과(일별)", description = "최근 N일 동안 일자별 푼 문제/정답/정답률")
-  @GetMapping("/recent-daily")
-  public RecentResp recentDaily(
+  @Operation(
+      summary = "최근 학습 기록(최신순)",
+      description = "유저의 최근 학습 결과를 최신순으로 반환합니다. (날짜/유형/파트이름/정답수/전체/정답률)",
+      responses = {
+          @ApiResponse(
+              responseCode = "200",
+              description = "성공",
+              content = @Content(
+                  schema = @Schema(implementation = RecentRecordsResp.class),
+                  examples = @ExampleObject(
+                      name = "RecentRecordsResp 예시",
+                      value = """
+                      {
+                        "records": [
+                          { "date": "2025-11-06", "type": "Micro",  "partTitle": "데이터베이스 기초", "total": 20, "correct": 10, "accuracy": 50.0 },
+                          { "date": "2025-11-05", "type": "Review", "partTitle": "정규화",         "total": 20, "correct": 18, "accuracy": 90.0 },
+                          { "date": "2025-11-04", "type": "Assist", "partTitle": "네트워크 기초", "total": 10, "correct": 7,  "accuracy": 70.0 }
+                        ]
+                      }
+                      """
+                  )
+              )
+          )
+      }
+  )
+  @GetMapping("/recent-records")
+  public RecentRecordsResp recentRecords(
       @RequestParam String userId,
-      @RequestParam(defaultValue = "WRITTEN") String mode,
-      @RequestParam(defaultValue = "14") int days
+      @RequestParam(defaultValue = "30") int limit
   ) {
-    return report.recentDaily(userId, mode, days);
+    return report.recentRecords(userId, limit);
   }
 }
