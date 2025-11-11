@@ -14,138 +14,128 @@ spring:
 
   cloud:
     gateway:
-      server:
-        webflux:
-          default-filters:
-            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
 
-          globalcors:
-            cors-configurations:
-              "[/**]":
-                allowed-origins:
-                  - ${FRONTEND_ORIGIN:http://localhost:5173}
-                  - http://localhost:3000
-                  - http://210.110.33.222:3000
-                allowed-methods: "*"
-                allowed-headers: "*"
-                allow-credentials: true
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          "[/**]":
+            allowed-origins:
+              - ${FRONTEND_ORIGIN:http://localhost:5173}
+              - http://localhost:3000
+              - http://210.110.33.222:3000
+            allowed-methods: "*"
+            allowed-headers: "*"
+            allow-credentials: true
 
-          routes:
-            # --- study ---
-            - id: study-service
-              uri: lb://study-service
-              predicates:
-                - Path=/api/study/**
-              filters:
-                - RewritePath=/api/study/(?<segment>.*),/${segment}
-                # 필요 시 다시 켜세요 (userKeyResolver 빈 준비 후)
-                # - name: RequestRateLimiter
-                #   args:
-                #     redis-rate-limiter.replenishRate: 10
-                #     redis-rate-limiter.burstCapacity: 20
-                #     key-resolver: "#{@userKeyResolver}"
+      routes:
+        # --- study ---
+        - id: study-service
+          uri: lb://study-service
+          predicates:
+            - Path=/api/study/**
+          filters:
+            # 필요 시 다시 켜세요 (userKeyResolver 빈 준비 후)
+            # - name: RequestRateLimiter
+            #   args:
+            #     redis-rate-limiter.replenishRate: 10
+            #     redis-rate-limiter.burstCapacity: 20
+            #     key-resolver: "#{@userKeyResolver}"
+            - AddRequestHeader=X-Forwarded-Prefix, /api/study
+            - RewritePath=/api/study/(?<segment>.*), /${segment}
 
-            - id: study-swagger-ui
-              uri: lb://study-service
-              predicates:
-                - Path=/api/study/swagger-ui/**
-              filters:
-                - RewritePath=/api/study/(?<segment>.*),/${segment}
+        - id: study-swagger-ui
+          uri: lb://study-service
+          predicates:
+            - Path=/api/study/swagger-ui/**
+          filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/study
+            - RewritePath=/api/study/(?<segment>swagger-ui/.*), /${segment}
 
-            - id: study-openapi
-              uri: lb://study-service
-              predicates:
-                - Path=/api/study/v3/api-docs/**
-              filters:
-                - RewritePath=/api/study/(?<segment>.*),/${segment}
+        - id: study-openapi
+          uri: lb://study-service
+          predicates:
+            - Path=/api/study/v3/api-docs/**
+          filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/study
+            - RewritePath=/api/study/(?<segment>v3/api-docs.*), /${segment}
 
-            # --- account ---
-            - id: account-service
-              uri: lb://account-service
-              predicates:
-                - Path=/api/account/**
-              filters:
-                - RewritePath=/api/account/(?<segment>.*),/${segment}
+        # --- account ---
+        - id: account-service
+          uri: lb://account-service
+          predicates:
+            - Path=/api/account/**
+          filters:
 
-            - id: account-swagger-ui
-              uri: lb://account-service
-              predicates:
-                - Path=/api/account/swagger-ui/**
-              filters:
-                - RewritePath=/api/account/(?<segment>.*),/${segment}
+        - id: account-swagger-ui
+          uri: lb://account-service
+          predicates:
+            - Path=/api/account/swagger-ui/**
+          filters:
 
-            - id: account-openapi
-              uri: lb://account-service
-              predicates:
-                - Path=/api/account/v3/api-docs/**
-              filters:
-                - RewritePath=/api/account/(?<segment>.*),/${segment}
+        - id: account-openapi
+          uri: lb://account-service
+          predicates:
+            - Path=/api/account/v3/api-docs/**
+          filters:
 
-            # --- progress ---
-            - id: progress-service
-              uri: lb://progress-service
-              predicates:
-                - Path=/api/progress/**
-              filters:
-                - RewritePath=/api/progress/(?<segment>.*),/${segment}
+        # --- progress ---
+        - id: progress-service
+          uri: lb://progress-service
+          predicates:
+            - Path=/api/progress/**
+          filters:
 
-            - id: progress-swagger-ui
-              uri: lb://progress-service
-              predicates:
-                - Path=/api/progress/swagger-ui/**
-              filters:
-                - RewritePath=/api/progress/(?<segment>.*),/${segment}
+        - id: progress-swagger-ui
+          uri: lb://progress-service
+          predicates:
+            - Path=/api/progress/swagger-ui/**
+          filters:
 
-            - id: progress-openapi
-              uri: lb://progress-service
-              predicates:
-                - Path=/api/progress/v3/api-docs/**
-              filters:
-                - RewritePath=/api/progress/(?<segment>.*),/${segment}
+        - id: progress-openapi
+          uri: lb://progress-service
+          predicates:
+            - Path=/api/progress/v3/api-docs/**
+          filters:
 
-            # --- cert ---
-            - id: cert-service
-              uri: lb://cert-service
-              predicates:
-                - Path=/api/certs/**
-              filters:
-                - RewritePath=/api/certs/(?<segment>.*),/${segment}
+        # --- cert ---
+        - id: cert-service
+          uri: lb://cert-service
+          predicates:
+            - Path=/api/certs/**
+          filters:
 
-            - id: cert-swagger-ui
-              uri: lb://cert-service
-              predicates:
-                - Path=/api/certs/swagger-ui/**
-              filters:
-                - RewritePath=/api/certs/(?<segment>.*),/${segment}
+        - id: cert-swagger-ui
+          uri: lb://cert-service
+          predicates:
+            - Path=/api/certs/swagger-ui/**
+          filters:
 
-            - id: cert-openapi
-              uri: lb://cert-service
-              predicates:
-                - Path=/api/certs/v3/api-docs/**
-              filters:
-                - RewritePath=/api/certs/(?<segment>.*),/${segment}
+        - id: cert-openapi
+          uri: lb://cert-service
+          predicates:
+            - Path=/api/certs/v3/api-docs/**
+          filters:
 
-            # --- versus ---
-            - id: versus-service
-              uri: lb://versus-service
-              predicates:
-                - Path=/api/versus/**
-              filters:
-                - RewritePath=/api/versus/(?<segment>.*),/${segment}
+        # --- versus ---
+        - id: versus-service
+          uri: lb://versus-service
+          predicates:
+            - Path=/api/versus/**
+          filters:
 
-            - id: versus-swagger-ui
-              uri: lb://versus-service
-              predicates:
-                - Path=/api/versus/swagger-ui/**
-              filters:
-                - RewritePath=/api/versus/(?<segment>.*),/${segment}
+        - id: versus-swagger-ui
+          uri: lb://versus-service
+          predicates:
+            - Path=/api/versus/swagger-ui/**
+          filters:
 
-            - id: versus-openapi
-              uri: lb://versus-service
-              predicates:
-                - Path=/api/versus/v3/api-docs/**
-              filters:
-                - RewritePath=/api/versus/(?<segment>.*),/${segment}
+        - id: versus-openapi
+          uri: lb://versus-service
+          predicates:
+            - Path=/api/versus/v3/api-docs/**
+          filters:
 
 management:
   endpoints:

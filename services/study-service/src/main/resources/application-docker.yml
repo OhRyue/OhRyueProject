@@ -37,13 +37,25 @@ llm:
 frontend:
   origin: ${FRONTEND_ORIGIN:http://localhost:5173}
 
-resilience4j:
-  retry:
-    instances:
-      llm:
-        max-attempts: 3
-        wait-duration: 200ms
+# === CircuitBreaker 전역 스위치 (Feign에 적용) ===
+feign:
   circuitbreaker:
+    enabled: true
+
+# === Resilience4j 정책: 기본(default) + 기존 llm 인스턴스 유지 ===
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 50
+        minimum-number-of-calls: 10
+        slow-call-duration-threshold: 2s
+        slow-call-rate-threshold: 50
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 5
+        automatic-transition-from-open-to-half-open-enabled: true
     instances:
       llm:
         sliding-window-type: COUNT_BASED
@@ -54,6 +66,27 @@ resilience4j:
         minimum-number-of-calls: 10
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 3s
+        cancel-running-future: true
+    # 필요 시 Feign 전용 인스턴스를 추가해도 됨(없으면 default 사용)
+    # instances:
+    #   feign-default:
+    #     baseConfig: default
+  retry:
+    configs:
+      default:
+        max-attempts: 2
+        wait-duration: 200ms
+        retry-exceptions:
+          - java.io.IOException
+          - org.springframework.web.client.ResourceAccessException
+    instances:
+      llm:
+        max-attempts: 3
+        wait-duration: 200ms
 
 study:
   reco:
@@ -72,7 +105,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info,prometheus,metrics
   endpoint:
     health:
       probes:

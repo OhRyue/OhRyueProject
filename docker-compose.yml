@@ -89,6 +89,8 @@ services:
       dockerfile: services/account-service/Dockerfile
     image: OhRyue/account-service:dev
     container_name: account-service
+    ports:
+      - "8081:8081"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - MAIL_USERNAME=${MAIL_USERNAME}
@@ -103,6 +105,11 @@ services:
         condition: service_started
     restart: unless-stopped
     networks: [ backend ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8081/actuator/health" ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
 
   study-service:
     build:
@@ -110,6 +117,8 @@ services:
       dockerfile: services/study-service/Dockerfile
     image: OhRyue/study-service:dev
     container_name: study-service
+    ports:
+      - "8082:8082"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SECURITY_JWT_HMAC_SECRET=${STUDY_JWT_SECRET}
@@ -120,6 +129,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [ backend ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8082/actuator/health" ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
 
   progress-service:
     build:
@@ -127,6 +141,8 @@ services:
       dockerfile: services/progress-service/Dockerfile
     image: OhRyue/progress-service:dev
     container_name: progress-service
+    ports:
+      - "8083:8083"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -136,6 +152,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [ backend ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8083/actuator/health" ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
 
   cert-service:
     build:
@@ -143,6 +164,8 @@ services:
       dockerfile: services/cert-service/Dockerfile
     image: OhRyue/cert-service:dev
     container_name: cert-service
+    ports:
+      - "8084:8084"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -152,6 +175,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [ backend ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8084/actuator/health" ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
 
   versus-service:
     build:
@@ -159,6 +187,8 @@ services:
       dockerfile: services/versus-service/Dockerfile
     image: OhRyue/versus-service:dev
     container_name: versus-service
+    ports:
+      - "8085:8085"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -168,6 +198,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [ backend ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8085/actuator/health" ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
 
   community-service:
     build:
@@ -175,6 +210,8 @@ services:
       dockerfile: services/community-service/Dockerfile
     image: OhRyue/community-service:dev
     container_name: community-service
+    ports:
+      - "8086:8086"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
@@ -184,6 +221,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [ backend ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8086/actuator/health" ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
 
 networks:
   backend:

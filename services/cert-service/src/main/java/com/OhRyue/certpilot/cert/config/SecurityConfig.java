@@ -10,9 +10,8 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
   private static final String[] SWAGGER = {
-      "/v3/api-docs/**",
-      "/swagger-ui/**",
-      "/swagger-ui.html"
+          "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",
+          "/actuator/health", "/actuator/info"
   };
 
   @Bean
