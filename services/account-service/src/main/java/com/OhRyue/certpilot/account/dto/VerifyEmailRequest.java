@@ -7,5 +7,7 @@ import lombok.Setter;
 @Setter
 public class VerifyEmailRequest {
     private String email;
-    private String code; // 사용자가 입력한 인증코드
+    private String code;
+    private String username;
+    private String password;
 }

@@ -29,46 +29,52 @@ public class AuthController {
     private final VerificationCodeService verificationCodeService;
 
     // 회원가입
-    @PostMapping("/register")
-    public ResponseEntity<UserResponseDto> register(@Valid @RequestBody UserRegisterDto req) {
-        // 1) 유저 저장 (enabled = false로 저장)
-        User user = userService.register(req.getUsername(), req.getPassword(), req.getEmail());
+    // 인증 메일 전송 (DB 저장 안 함)
+    @PostMapping("/send-verification")
+    public ResponseEntity<?> sendVerification(@Valid @RequestBody UserRegisterDto req) {
 
-        // 2) 6자리 인증코드 생성
-        String verificationCode = String.format("%06d", (int) (Math.random() * 1000000));
-
-        // 3) Redis에 VC:username 형태로 저장 (10분 유효)
-        verificationCodeService.saveCode(user.getEmail(), verificationCode);
-
-        // 4) 이메일 발송
-        emailService.sendVerificationCode(user.getEmail(), verificationCode);
-
-
-        // 5) 응답 반환
-        return ResponseEntity.ok(
-                new UserResponseDto(
-                        "회원가입 완료! 이메일 인증을 진행해주세요.",
-                        user.getId(),
-                        user.getUsername(),
-                        user.getRole()
-                )
-        );
-    }
-
-    // 인증
-    @PostMapping("/verify-email")
-    public ResponseEntity<?> verifyEmail(@RequestBody VerifyEmailRequest request) {
-        String savedCode = verificationCodeService.getCode(request.getEmail());
-
-        if (savedCode == null || !savedCode.equals(request.getCode())) {
-            return ResponseEntity.status(400).body("인증 코드가 틀리거나 만료되었습니다");
+        // 아이디 중복 체크
+        if (userService.isUsernameDuplicate(req.getUsername())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                    "message", "이미 존재하는 아이디입니다."
+            ));
         }
 
-        // 이메일 인증 성공 → 이메일 기준으로 활성화 처리
-        userService.enableUser(request.getEmail());
-        verificationCodeService.deleteCode(request.getEmail());
+        // 인증코드 생성
+        String verificationCode = String.format("%06d", (int) (Math.random() * 1000000));
 
-        return ResponseEntity.ok("이메일 인증 완료!");
+        // Redis 저장 (10분 유효)
+        verificationCodeService.saveCode(req.getEmail(), verificationCode);
+
+        // 이메일 발송
+        emailService.sendVerificationCode(req.getEmail(), verificationCode);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "인증코드가 이메일로 전송되었습니다."
+        ));
+    }
+
+    // 인증 + 회원가입(DB 저장)
+    @PostMapping("/verify-email")
+    public ResponseEntity<?> verifyEmail(@RequestBody VerifyEmailRequest req) {
+        String savedCode = verificationCodeService.getCode(req.getEmail());
+
+        if (savedCode == null || !savedCode.equals(req.getCode())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                    "message", "인증 코드가 틀리거나 만료되었습니다"
+            ));
+        }
+
+        // 인증 성공 → 유저 DB 저장
+        User user = userService.register(req.getUsername(), req.getPassword(), req.getEmail());
+
+        // Redis 코드 삭제
+        verificationCodeService.deleteCode(req.getEmail());
+
+        return ResponseEntity.ok(Map.of(
+                "message", "이메일 인증 완료! 회원가입이 완료되었습니다.",
+                "username", user.getUsername()
+        ));
     }
 
 
