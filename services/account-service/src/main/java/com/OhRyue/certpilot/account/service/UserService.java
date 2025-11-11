@@ -79,5 +79,11 @@ public class UserService {
         userRepository.save(user);
     }
 
+    // 아이디 중복 확인
+    public boolean isUsernameDuplicate(String username) {
+        return userRepository.existsByUsername(username);
+    }
+
+
 
 }

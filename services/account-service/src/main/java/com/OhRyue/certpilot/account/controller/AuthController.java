@@ -7,6 +7,7 @@ import com.OhRyue.certpilot.account.service.EmailService;
 import com.OhRyue.certpilot.account.service.RefreshTokenService;
 import com.OhRyue.certpilot.account.service.UserService;
 import com.OhRyue.certpilot.account.service.VerificationCodeService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +30,7 @@ public class AuthController {
 
     // 회원가입
     @PostMapping("/register")
-    public ResponseEntity<UserResponseDto> register(@RequestBody UserRegisterDto req) {
+    public ResponseEntity<UserResponseDto> register(@Valid @RequestBody UserRegisterDto req) {
         // 1) 유저 저장 (enabled = false로 저장)
         User user = userService.register(req.getUsername(), req.getPassword(), req.getEmail());
 
@@ -186,5 +187,16 @@ public class AuthController {
             );
             return ResponseEntity.ok("메일 발송 완료!");
         }
+    }
+
+    // 아이디 중복 확인
+    @GetMapping("/check-username")
+    public ResponseEntity<?> checkUsername(@RequestParam String username) {
+        boolean isDuplicate = userService.isUsernameDuplicate(username);
+
+        return ResponseEntity.ok(Map.of(
+                "available", !isDuplicate,  // 프론트에서 res.data.available로 받음
+                "message", isDuplicate ? "이미 존재하는 아이디입니다." : "사용 가능한 아이디입니다."
+        ));
     }
 }

@@ -3,6 +3,7 @@ package com.OhRyue.certpilot.account.exception;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -42,6 +43,22 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    // 요청 DTO의 유효성 검사(@Valid) 실패 시 발생하는 예외 처리
+    // → 예: 아이디 형식 불일치, 필수값 누락 등
+    // 클라이언트에 400 Bad Request와 함께 메시지를 반환
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<?> handleValidationException(MethodArgumentNotValidException e) {
+        String errorMessage = e.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .findFirst()
+                .map(err -> err.getDefaultMessage())
+                .orElse("잘못된 요청입니다.");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", "invalid_format",
+                "message", errorMessage
+        ));
+    }
 
     // 그 외 예상하지 못한 서버 내부 에러
     @ExceptionHandler(Exception.class)
