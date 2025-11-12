@@ -3,6 +3,7 @@ package com.OhRyue.certpilot.account.controller;
 import com.OhRyue.certpilot.account.config.JwtTokenProvider;
 import com.OhRyue.certpilot.account.domain.User;
 import com.OhRyue.certpilot.account.dto.*;
+import com.OhRyue.certpilot.account.repo.UserRepository;
 import com.OhRyue.certpilot.account.service.EmailService;
 import com.OhRyue.certpilot.account.service.RefreshTokenService;
 import com.OhRyue.certpilot.account.service.UserService;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -25,8 +27,12 @@ public class AuthController {
     private final UserService userService;                  // 사용자 관련 비즈니스 로직(회원가입, 로그인)을 처리하는 클래스
     private final EmailService emailService;
     private final RefreshTokenService refreshTokenService;
-    private final JwtTokenProvider jwtTokenProvider;        // JWT 토큰 생성/검증 기능을 담당하는 클래스
     private final VerificationCodeService verificationCodeService;
+    private final UserRepository userRepository;
+    private final JwtTokenProvider jwtTokenProvider;        // JWT 토큰 생성/검증 기능을 담당하는 클래스
+    private final PasswordEncoder passwordEncoder;
+
+    String encodedPassword = passwordEncoder.encode(dto.getNewPassword());
 
     // 회원가입
     // 인증 메일 전송 (DB 저장 안 함)
@@ -104,7 +110,6 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-
     // JWT을 기반으로 DB에서 유저 데이터 조회해서 반환
     @GetMapping("/me")
     public ResponseEntity<?> getMyInfo(Authentication authentication) {
@@ -176,25 +181,6 @@ public class AuthController {
         ));
     }
 
-    // Debug: 메일 발송
-    @RestController
-    @RequestMapping("/api/mail")
-    @RequiredArgsConstructor
-    public class MailController {
-
-        private final EmailService emailService;
-
-        @PostMapping("/send")
-        public ResponseEntity<?> sendTestMail() {
-            emailService.sendEmail(
-                    "test@test.com",         // 받는 사람
-                    "CertPilot SMTP Test",   // 제목
-                    "테스트 메일입니다."        // 내용
-            );
-            return ResponseEntity.ok("메일 발송 완료!");
-        }
-    }
-
     // 아이디 중복 확인
     @GetMapping("/check-username")
     public ResponseEntity<?> checkUsername(@RequestParam String username) {
@@ -205,4 +191,39 @@ public class AuthController {
                 "message", isDuplicate ? "이미 존재하는 아이디입니다." : "사용 가능한 아이디입니다."
         ));
     }
+
+    // 비밀번호 찾기: 인증 코드 보내기
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> sendVerificationCode(@RequestBody ForgotPasswordRequest dto) {
+        User user = userRepository.findByUsername(dto.getUsername())
+                .orElseThrow(() -> new RuntimeException("유저를 찾을 수 없습니다."));
+
+        String code = verificationCodeService.generateCode(user.getEmail());
+        emailService.sendVerificationCode(user.getEmail(), code);
+
+        return ResponseEntity.ok("인증 코드가 이메일로 전송되었습니다.");
+    }
+
+    // 비밀번호 찾기: 인증 코드 확인
+    @PostMapping("/verify-code")
+    public ResponseEntity<String> verifyCode(@RequestBody VerifyCodeRequest dto) {
+        boolean isValid = verificationCodeService.verify(dto.getEmail(), dto.getCode());
+        if (!isValid) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("코드가 유효하지 않습니다.");
+        }
+        return ResponseEntity.ok("인증 성공");
+    }
+
+    // 비밀번호 찾기: 새 비밀번호 설정
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordRequest dto) {
+        User user = userRepository.findByEmail(dto.getEmail())
+                .orElseThrow(() -> new RuntimeException("유저를 찾을 수 없습니다."));
+        user.setPassword(encodedPassword);
+        userRepository.save(user);
+
+        return ResponseEntity.ok("비밀번호가 성공적으로 변경되었습니다.");
+    }
+
+
 }

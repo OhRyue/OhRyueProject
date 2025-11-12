@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -33,4 +35,11 @@ public class VerificationCodeService {
     public void deleteCode(String email) {
         redisTemplate.delete("VC:" + email);
     }
+
+    public String generateCode(String email) {
+        String code = String.format("%06d", new Random().nextInt(999999));
+        redisTemplate.opsForValue().set(email, code, Duration.ofMinutes(5));
+        return code;
+    }
+
 }
