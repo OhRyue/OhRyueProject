@@ -42,7 +42,7 @@ public class UserService {
                 .password(encodedPassword)
                 .email(email)
                 .role("USER")
-                .enabled(false)
+                .enabled(true)
                 .build();
 
         return userRepository.save(user);

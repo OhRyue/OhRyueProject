@@ -22,7 +22,7 @@ public class VerificationCodeService {
 
     // 인증코드 저장 (email 또는 username 기준)
     public void saveCode(String email, String code) {
-        String key = "VC:" + email;  // Verification Code
+        String key = "VC:" + email;
         redisTemplate.opsForValue().set(key, code, expireMinutes, TimeUnit.MINUTES);
     }
 
@@ -36,10 +36,22 @@ public class VerificationCodeService {
         redisTemplate.delete("VC:" + email);
     }
 
+    // 인증 코드 생성 + 저장 (회원가입/비번찾기 겸용)
     public String generateCode(String email) {
         String code = String.format("%06d", new Random().nextInt(999999));
-        redisTemplate.opsForValue().set(email, code, Duration.ofMinutes(5));
+        String key = "VC:" + email;
+        redisTemplate.opsForValue().set(key, code, Duration.ofMinutes(expireMinutes));
         return code;
     }
 
+    // 코드 검증 (비번 찾기 등에서 사용)
+    public boolean verify(String email, String code) {
+        String key = "VC:" + email;
+        String stored = redisTemplate.opsForValue().get(key);
+        if (stored != null && stored.equals(code)) {
+            redisTemplate.delete(key);
+            return true;
+        }
+        return false;
+    }
 }

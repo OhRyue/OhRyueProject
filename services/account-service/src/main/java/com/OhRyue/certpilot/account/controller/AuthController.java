@@ -32,8 +32,6 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;        // JWT 토큰 생성/검증 기능을 담당하는 클래스
     private final PasswordEncoder passwordEncoder;
 
-    String encodedPassword = passwordEncoder.encode(dto.getNewPassword());
-
     // 회원가입
     // 인증 메일 전송 (DB 저장 안 함)
     @PostMapping("/send-verification")
@@ -219,11 +217,11 @@ public class AuthController {
     public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordRequest dto) {
         User user = userRepository.findByEmail(dto.getEmail())
                 .orElseThrow(() -> new RuntimeException("유저를 찾을 수 없습니다."));
+        String encodedPassword = passwordEncoder.encode(dto.getNewPassword());
         user.setPassword(encodedPassword);
         userRepository.save(user);
 
         return ResponseEntity.ok("비밀번호가 성공적으로 변경되었습니다.");
     }
-
 
 }
