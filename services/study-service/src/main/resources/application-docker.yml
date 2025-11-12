@@ -30,7 +30,7 @@ security:
     hmac-secret: ${SECURITY_JWT_HMAC_SECRET:}
 
 llm:
-  base-url: ${LLM_BASE_URL:}
+  base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
   api-key: ${LLM_API_KEY:}
   timeout-ms: 3000
 
