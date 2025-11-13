@@ -1,11 +1,13 @@
-package com.OhRyue.certpilot.cert;
+package com.OhRyue.certpilot.community;
 
-import org.springframework.boot.*;
-import org.springframework.boot.autoconfigure.*;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cache.annotation.EnableCaching;
 
 @SpringBootApplication
-public class CertApplication {
-  public static void main(String[] a){
-    SpringApplication.run(CertApplication.class,a);
+@EnableCaching
+public class CommunityApplication {
+  public static void main(String[] args){
+    SpringApplication.run(CommunityApplication.class, args);
   }
 }
