@@ -3,9 +3,11 @@ package com.OhRyue.certpilot.progress.controller;
 import com.OhRyue.certpilot.progress.domain.UserStreak;
 import com.OhRyue.certpilot.progress.service.StreakService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "Progress - Streak", description = "연속 학습 관리 APIs")
 @RestController
 @RequestMapping("/api/progress/streak")
 @RequiredArgsConstructor

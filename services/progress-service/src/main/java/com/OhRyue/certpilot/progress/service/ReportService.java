@@ -1,163 +1,155 @@
 package com.OhRyue.certpilot.progress.service;
 
-import com.OhRyue.certpilot.progress.domain.Question;
-import com.OhRyue.certpilot.progress.domain.UserAnswer;
-import com.OhRyue.certpilot.progress.domain.enums.QuestionType;
+import com.OhRyue.certpilot.progress.domain.ReportDaily;
+import com.OhRyue.certpilot.progress.domain.ReportTagSkill;
+import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
 import com.OhRyue.certpilot.progress.dto.ReportDtos.*;
 import com.OhRyue.certpilot.progress.feign.StudyReportClient;
-import com.OhRyue.certpilot.progress.repository.QuestionRepository;
-import com.OhRyue.certpilot.progress.repository.QuestionTagRepository;
-import com.OhRyue.certpilot.progress.repository.UserAnswerRepository;
+import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
+import com.OhRyue.certpilot.progress.repository.ReportTagSkillRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.*;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ReportService {
 
-  private final UserAnswerRepository answerRepo;
-  private final QuestionRepository questionRepo;
-  private final QuestionTagRepository tagRepo;
-  private final StudyReportClient studyReportClient; // study-service 연동
-
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-  /* ============ 개요 ============ */
+  private final ReportDailyRepository dailyRepository;
+  private final ReportTagSkillRepository tagSkillRepository;
+  private final StudyReportClient studyReportClient;
+  private final StreakService streakService;
+
   public Overview overview(String userId, String mode) {
+    List<ReportDaily> daily = dailyRepository.findByUserId(userId);
+    if (daily.isEmpty()) {
+      int streak = streakService.get(userId).getCurrentDays();
+      return new Overview(
+          0, 0, 0.0, 0.0,
+          0, 0,
+          streak,
+          0, 0, 0.0, 0.0, 0
+      );
+    }
+
     LocalDate today = LocalDate.now(KST);
+    LocalDate weekStart = today.minusDays(6);
+    LocalDate prevWeekStart = today.minusDays(13);
+    LocalDate prevWeekEnd = today.minusDays(7);
 
-    Instant thisWeekStart = today.minusDays(6).atStartOfDay(KST).toInstant();
-    Instant thisWeekEnd   = today.plusDays(1).atStartOfDay(KST).toInstant();
+    long totalSolved = daily.stream().mapToLong(ReportDaily::getSolvedCount).sum();
+    long totalCorrect = daily.stream().mapToLong(ReportDaily::getCorrectCount).sum();
+    double avgAcc = ratio(totalCorrect, totalSolved);
 
-    Instant prevWeekStart = today.minusDays(13).atStartOfDay(KST).toInstant();
-    Instant prevWeekEnd   = today.minusDays(6).atStartOfDay(KST).toInstant();
+    long weekSolved = daily.stream()
+        .filter(r -> !r.getDate().isBefore(weekStart))
+        .mapToLong(ReportDaily::getSolvedCount)
+        .sum();
+    long weekCorrect = daily.stream()
+        .filter(r -> !r.getDate().isBefore(weekStart))
+        .mapToLong(ReportDaily::getCorrectCount)
+        .sum();
+    double weekAcc = ratio(weekCorrect, weekSolved);
 
-    // 전체/주간 데이터 로드 후 모드 필터
-    List<UserAnswer> all = filterByMode(answerRepo.findAllByUser(userId), mode);
-    List<UserAnswer> thisWeek = filterByMode(answerRepo.findByUserAndRange(userId, thisWeekStart, thisWeekEnd), mode);
-    List<UserAnswer> prevWeek = filterByMode(answerRepo.findByUserAndRange(userId, prevWeekStart, prevWeekEnd), mode);
+    long prevWeekSolved = daily.stream()
+        .filter(r -> !r.getDate().isBefore(prevWeekStart) && !r.getDate().isAfter(prevWeekEnd))
+        .mapToLong(ReportDaily::getSolvedCount)
+        .sum();
+    long prevWeekCorrect = daily.stream()
+        .filter(r -> !r.getDate().isBefore(prevWeekStart) && !r.getDate().isAfter(prevWeekEnd))
+        .mapToLong(ReportDaily::getCorrectCount)
+        .sum();
+    double prevWeekAcc = ratio(prevWeekCorrect, prevWeekSolved);
 
-    long totalProblems = all.size();
-    long problemsThisWeek = thisWeek.size();
+    long totalMinutes = daily.stream().mapToLong(ReportDaily::getTimeSpentSec).sum() / 60;
+    long weekMinutes = daily.stream()
+        .filter(r -> !r.getDate().isBefore(weekStart))
+        .mapToLong(ReportDaily::getTimeSpentSec)
+        .sum() / 60;
+    long prevWeekMinutes = daily.stream()
+        .filter(r -> !r.getDate().isBefore(prevWeekStart) && !r.getDate().isAfter(prevWeekEnd))
+        .mapToLong(ReportDaily::getTimeSpentSec)
+        .sum() / 60;
 
-    double avgAcc = accuracy(all);
-    double thisWeekAcc = accuracy(thisWeek);
-    double prevWeekAcc = accuracy(prevWeek);
-    double weekDelta = round1(thisWeekAcc - prevWeekAcc);
-
-    long minutesAll = estimateStudyMinutes(all);
-    long minutesWeek = estimateStudyMinutes(thisWeek);
-
-    int streak = computeStreakDays(all);
+    int streak = streakService.get(userId).getCurrentDays();
 
     return new Overview(
-        totalProblems,
-        problemsThisWeek,
-        avgAcc,
-        weekDelta,
-        minutesAll,
-        minutesWeek,
-        streak
+        totalSolved,
+        weekSolved,
+        round1(avgAcc),
+        round1(weekAcc - prevWeekAcc),
+        totalMinutes,
+        weekMinutes,
+        streak,
+        prevWeekSolved,
+        totalCorrect,
+        round1(weekAcc),
+        round1(prevWeekAcc),
+        prevWeekMinutes
     );
   }
 
-  /* ============ 태그별 능력지수 ============ */
   public TagAbilityResp abilityByTag(String userId, String mode, int limit) {
-    List<Object[]> rows = tagRepo.aggregateByTag(userId, canonicalMode(mode), limit);
-    List<TagAbility> items = rows.stream().map(r -> {
-      String tag = String.valueOf(r[0]);
-      long correct = toLong(r[1]);
-      long total = toLong(r[2]);
-      double acc = total == 0 ? 0 : round1(100.0 * correct / total);
-      return new TagAbility(tag, correct, total, acc);
-    }).toList();
-    return new TagAbilityResp(items);
+    ExamMode examMode = parseMode(mode);
+    List<ReportTagSkill> skills = tagSkillRepository.findByUserIdAndExamModeOrderByTotalDesc(userId, examMode);
+    skills = skills.size() <= limit ? skills : skills.subList(0, limit);
+    List<TagAbility> items = skills.stream()
+        .map(skill -> new TagAbility(
+            skill.getTag(),
+            skill.getCorrect(),
+            skill.getTotal(),
+            skill.getAccuracy().doubleValue()
+        ))
+        .toList();
+    List<String> weaknessTags = items.stream()
+        .filter(item -> item.accuracy() < 70.0)
+        .sorted(Comparator.comparing(TagAbility::accuracy))
+        .map(TagAbility::tag)
+        .toList();
+    String message;
+    if (weaknessTags.isEmpty()) {
+      message = items.isEmpty()
+          ? "아직 리포트를 만들기 위한 데이터가 부족합니다. 학습을 시작해 보세요!"
+          : "태그별 정답률이 안정적으로 유지되고 있어요. 지금 흐름을 유지해 보세요!";
+    } else {
+      String highlight = String.join(", ", weaknessTags.subList(0, Math.min(3, weaknessTags.size())));
+      message = highlight + " 태그 정답률이 낮습니다. 약점 보완 세트를 추천해요.";
+    }
+    return new TagAbilityResp(items, weaknessTags, message);
   }
 
-  /* ============ 최근 학습 기록(최신순) ============ */
   public RecentRecordsResp recentRecords(String userId, int limit) {
-    // Feign 연동 (폴백에서 null/빈리스트 처리)
     RecentRecordsResp resp = studyReportClient.recent(userId, limit);
     if (resp == null || resp.records() == null) {
       return new RecentRecordsResp(List.of());
     }
-    // 혹시 정렬 안 되어 올 경우 대비하여 최신순 정렬
     List<RecentRecord> sorted = new ArrayList<>(resp.records());
     sorted.sort(Comparator.comparing(RecentRecord::date).reversed());
     return new RecentRecordsResp(sorted);
   }
 
-  /* ============ 내부 유틸 ============ */
-
-  private List<UserAnswer> filterByMode(List<UserAnswer> list, String mode) {
-    if (list.isEmpty()) return list;
-
-    // Question type 로딩
-    Map<Long, Question> qm = questionRepo.findAllById(
-        list.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet())
-    ).stream().collect(Collectors.toMap(Question::getId, it -> it));
-
-    boolean written = "WRITTEN".equalsIgnoreCase(mode);
-    return list.stream().filter(ua -> {
-      Question q = qm.get(ua.getQuestionId());
-      if (q == null) return false;
-      QuestionType t = q.getType();
-      return written
-          ? (t == QuestionType.OX || t == QuestionType.MCQ)
-          : (t == QuestionType.SHORT || t == QuestionType.LONG);
-    }).toList();
-  }
-
-  private double accuracy(List<UserAnswer> xs) {
-    if (xs.isEmpty()) return 0d;
-    long c = xs.stream().filter(UserAnswer::isCorrect).count();
-    return round1(100.0 * c / xs.size());
-  }
-
-  /** “답변 간격 5분 이내는 한 세션”으로 보고 총 학습 시간 추정(분) */
-  private long estimateStudyMinutes(List<UserAnswer> xs) {
-    if (xs.isEmpty()) return 0L;
-    List<Instant> ts = xs.stream().map(UserAnswer::getCreatedAt).sorted().toList();
-    long totalSec = 0;
-    Instant sessionStart = ts.get(0);
-    Instant prev = ts.get(0);
-    for (int i = 1; i < ts.size(); i++) {
-      Instant cur = ts.get(i);
-      long gap = Duration.between(prev, cur).toSeconds();
-      if (gap <= 300) { // 5분
-        prev = cur;
-      } else {
-        totalSec += Math.max(60, Duration.between(sessionStart, prev).toSeconds());
-        sessionStart = prev = cur;
-      }
+  private ExamMode parseMode(String mode) {
+    try {
+      return ExamMode.valueOf(mode.toUpperCase(Locale.ROOT));
+    } catch (Exception e) {
+      return ExamMode.WRITTEN;
     }
-    totalSec += Math.max(60, Duration.between(sessionStart, prev).toSeconds());
-    return totalSec / 60;
   }
 
-  private int computeStreakDays(List<UserAnswer> xs) {
-    if (xs.isEmpty()) return 0;
-    Set<LocalDate> days = xs.stream()
-        .map(a -> LocalDateTime.ofInstant(a.getCreatedAt(), KST).toLocalDate())
-        .collect(Collectors.toSet());
-    int streak = 0;
-    LocalDate cur = LocalDate.now(KST);
-    while (days.contains(cur)) { streak++; cur = cur.minusDays(1); }
-    return streak;
+  private double ratio(long numerator, long denominator) {
+    if (denominator == 0) return 0.0;
+    return (double) numerator / denominator * 100.0;
   }
 
-  private static double round1(double v) { return Math.round(v * 10.0) / 10.0; }
-  private static String canonicalMode(String mode) {
-    return ("PRACTICAL".equalsIgnoreCase(mode)) ? "PRACTICAL" : "WRITTEN";
-  }
-  private static long toLong(Object o) {
-    if (o instanceof Number n) return n.longValue();
-    return Long.parseLong(String.valueOf(o));
+  private double round1(double value) {
+    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).doubleValue();
   }
 }

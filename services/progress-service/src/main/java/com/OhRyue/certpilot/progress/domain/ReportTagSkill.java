@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.progress.domain;
 
+import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -21,8 +22,9 @@ public class ReportTagSkill {
   @Column(length=100, nullable=false)
   private String tag;
 
-  @Column(length=10, nullable=false)
-  private String examMode; // WRITTEN / PRACTICAL
+  @Enumerated(EnumType.STRING)
+  @Column(name = "exam_mode", length=10, nullable=false)
+  private ExamMode examMode;
 
   @Column(nullable=false)
   private int correct;

@@ -21,6 +21,9 @@ public class ReportWeekly {
   @Column(nullable=false)
   private int timeSpentSec;
 
+  @Column(nullable=false)
+  private int correctCount;
+
   @Column(nullable=false, precision = 5, scale = 2)
   private BigDecimal accuracy;
 

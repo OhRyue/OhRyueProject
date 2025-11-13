@@ -4,9 +4,11 @@ import com.OhRyue.certpilot.progress.domain.UserXpWallet;
 import com.OhRyue.certpilot.progress.domain.enums.XpReason;
 import com.OhRyue.certpilot.progress.service.XpService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "Progress - XP", description = "경험치 관리 APIs")
 @RestController
 @RequestMapping("/api/progress/xp")
 @RequiredArgsConstructor

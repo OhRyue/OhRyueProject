@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS report_daily (
   date           DATE NOT NULL,
   solved_count   INT NOT NULL DEFAULT 0,
   time_spent_sec INT NOT NULL DEFAULT 0,
+  correct_count  INT NOT NULL DEFAULT 0,
   accuracy       DECIMAL(5,2) NOT NULL DEFAULT 0.00,
   xp_gained      INT NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, date)
@@ -104,6 +105,7 @@ CREATE TABLE IF NOT EXISTS report_weekly (
   week_iso       VARCHAR(10)  NOT NULL,
   solved_count   INT NOT NULL DEFAULT 0,
   time_spent_sec INT NOT NULL DEFAULT 0,
+  correct_count  INT NOT NULL DEFAULT 0,
   accuracy       DECIMAL(5,2) NOT NULL DEFAULT 0.00,
   xp_gained      INT NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, week_iso)

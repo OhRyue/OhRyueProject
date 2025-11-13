@@ -4,4 +4,12 @@ import com.OhRyue.certpilot.progress.domain.ReportDaily;
 import com.OhRyue.certpilot.progress.domain.ReportDailyKey;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface ReportDailyRepository extends JpaRepository<ReportDaily, ReportDailyKey> {}
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+public interface ReportDailyRepository extends JpaRepository<ReportDaily, ReportDailyKey> {
+  Optional<ReportDaily> findByUserIdAndDate(String userId, LocalDate date);
+  List<ReportDaily> findByUserId(String userId);
+  List<ReportDaily> findByUserIdAndDateBetween(String userId, LocalDate start, LocalDate end);
+}

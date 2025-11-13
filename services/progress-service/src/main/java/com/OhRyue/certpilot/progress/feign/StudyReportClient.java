@@ -1,6 +1,7 @@
 package com.OhRyue.certpilot.progress.feign;
 
 import com.OhRyue.certpilot.progress.dto.ReportDtos.RecentRecordsResp;
+import com.OhRyue.certpilot.progress.dto.home.HomeDtos.HomeProgressCard;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -17,5 +18,11 @@ public interface StudyReportClient {
   RecentRecordsResp recent(
       @RequestParam("userId") String userId,
       @RequestParam(value = "limit", defaultValue = "30") int limit
+  );
+
+  @GetMapping("/report/progress-card")
+  HomeProgressCard progressCard(
+      @RequestParam("userId") String userId,
+      @RequestParam("certId") Long certId
   );
 }

@@ -1,5 +1,8 @@
 package com.OhRyue.certpilot.progress.domain.enums;
 
 public enum RankScope {
-  GLOBAL, FRIENDS
+  OVERALL,
+  WEEKLY,
+  HALL_OF_FAME,
+  FRIENDS
 }

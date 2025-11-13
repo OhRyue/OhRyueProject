@@ -5,7 +5,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @SpringBootApplication
-@EnableFeignClients(basePackages = "com.OhRyue.certpilot.study.service.llm")
+@EnableFeignClients(basePackages = {
+    "com.OhRyue.certpilot.study.service.llm",
+    "com.OhRyue.certpilot.study.client"
+})
 public class StudyApplication {
   public static void main(String[] args) {
     SpringApplication.run(StudyApplication.class, args);

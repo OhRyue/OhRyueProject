@@ -3,11 +3,13 @@ package com.OhRyue.certpilot.progress.controller;
 import com.OhRyue.certpilot.progress.domain.UserRankScore;
 import com.OhRyue.certpilot.progress.service.RankService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Tag(name = "Progress - Rank", description = "랭킹/점수 APIs")
 @RestController
 @RequestMapping("/api/progress/rank")
 @RequiredArgsConstructor

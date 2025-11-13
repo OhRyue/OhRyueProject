@@ -23,4 +23,6 @@ public interface UserAnswerRepository extends JpaRepository<UserAnswer, Long> {
     List<UserAnswer> findByUserAndRange(@Param("userId") String userId,
                                         @Param("from") Instant from,
                                         @Param("to") Instant to);
+
+    long countByUserId(String userId);
 }

@@ -23,7 +23,17 @@ public class ReportDtos {
       @Schema(description = "이번 주 학습 시간(분)", example = "320")
       long totalStudyMinutesThisWeek,
       @Schema(description = "연속 학습 일수", example = "7")
-      int streakDays
+      int streakDays,
+      @Schema(description = "지난 주(직전 7일) 문제 수", example = "210")
+      long problemsLastWeek,
+      @Schema(description = "총 정답 개수", example = "360")
+      long totalCorrect,
+      @Schema(description = "이번 주 평균 정답률(%)", example = "82.0")
+      double weekAccuracy,
+      @Schema(description = "지난 주 평균 정답률(%)", example = "77.0")
+      double prevWeekAccuracy,
+      @Schema(description = "지난 주 학습 시간(분)", example = "290")
+      long totalStudyMinutesLastWeek
   ) {}
 
   @Schema(name = "TagAbility", description = "태그별 능력치")
@@ -42,7 +52,11 @@ public class ReportDtos {
   public record TagAbilityResp(
       @ArraySchema(schema = @Schema(implementation = TagAbility.class),
           arraySchema = @Schema(description = "태그별 능력치 목록"))
-      List<TagAbility> items
+      List<TagAbility> items,
+      @Schema(description = "약점 태그 목록(정답률이 낮은 순)", example = "[\"#데이터베이스\", \"#운영체제\"]")
+      List<String> weaknessTags,
+      @Schema(description = "약점 요약 메시지", example = "다음 태그 정답률이 낮습니다: #데이터베이스, #운영체제")
+      String message
   ) {}
 
   @Schema(name = "RecentRecord", description = "최근 학습 결과(최신순 카드 항목)")
