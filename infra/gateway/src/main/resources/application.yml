@@ -16,6 +16,12 @@ spring:
     gateway:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 1
+            redis-rate-limiter.burstCapacity: 600
+            redis-rate-limiter.requestedTokens: 6
+            key-resolver: "#{@userKeyResolver}"
 
       globalcors:
         add-to-simple-url-handler-mapping: true
@@ -36,12 +42,6 @@ spring:
           predicates:
             - Path=/api/study/**
           filters:
-            # 필요 시 다시 켜세요 (userKeyResolver 빈 준비 후)
-            # - name: RequestRateLimiter
-            #   args:
-            #     redis-rate-limiter.replenishRate: 10
-            #     redis-rate-limiter.burstCapacity: 20
-            #     key-resolver: "#{@userKeyResolver}"
             - AddRequestHeader=X-Forwarded-Prefix, /api/study
             - RewritePath=/api/study/(?<segment>.*), /${segment}
 
@@ -73,12 +73,16 @@ spring:
           predicates:
             - Path=/api/account/swagger-ui/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/account
+            - RewritePath=/api/account/(?<segment>swagger-ui/.*), /${segment}
 
         - id: account-openapi
           uri: lb://account-service
           predicates:
             - Path=/api/account/v3/api-docs/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/account
+            - RewritePath=/api/account/(?<segment>v3/api-docs.*), /${segment}
 
         # --- progress ---
         - id: progress-service
@@ -92,12 +96,16 @@ spring:
           predicates:
             - Path=/api/progress/swagger-ui/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/progress
+            - RewritePath=/api/progress/(?<segment>swagger-ui/.*), /${segment}
 
         - id: progress-openapi
           uri: lb://progress-service
           predicates:
             - Path=/api/progress/v3/api-docs/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/progress
+            - RewritePath=/api/progress/(?<segment>v3/api-docs.*), /${segment}
 
         # --- cert ---
         - id: cert-service
@@ -111,12 +119,16 @@ spring:
           predicates:
             - Path=/api/certs/swagger-ui/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/certs
+            - RewritePath=/api/certs/(?<segment>swagger-ui/.*), /${segment}
 
         - id: cert-openapi
           uri: lb://cert-service
           predicates:
             - Path=/api/certs/v3/api-docs/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/certs
+            - RewritePath=/api/certs/(?<segment>v3/api-docs.*), /${segment}
 
         # --- versus ---
         - id: versus-service
@@ -130,12 +142,39 @@ spring:
           predicates:
             - Path=/api/versus/swagger-ui/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/versus
+            - RewritePath=/api/versus/(?<segment>swagger-ui/.*), /${segment}
 
         - id: versus-openapi
           uri: lb://versus-service
           predicates:
             - Path=/api/versus/v3/api-docs/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/versus
+            - RewritePath=/api/versus/(?<segment>v3/api-docs.*), /${segment}
+
+        # --- community ---
+        - id: community-service
+          uri: lb://community-service
+          predicates:
+            - Path=/api/community/**
+          filters:
+
+        - id: community-swagger-ui
+          uri: lb://community-service
+          predicates:
+            - Path=/api/community/swagger-ui/**
+          filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/community
+            - RewritePath=/api/community/(?<segment>swagger-ui/.*), /${segment}
+
+        - id: community-openapi
+          uri: lb://community-service
+          predicates:
+            - Path=/api/community/v3/api-docs/**
+          filters:  
+            - AddRequestHeader=X-Forwarded-Prefix, /api/community
+            - RewritePath=/api/community/(?<segment>v3/api-docs.*), /${segment}
 
 management:
   endpoints:

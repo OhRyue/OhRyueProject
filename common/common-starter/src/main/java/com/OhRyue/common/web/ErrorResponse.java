@@ -1,4 +1,4 @@
-package com.ohryue.common.web;
+package com.OhRyue.common.web;
 
 
 import java.time.LocalDateTime;

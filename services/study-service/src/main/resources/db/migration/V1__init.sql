@@ -21,14 +21,12 @@ CREATE TABLE IF NOT EXISTS topic (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS concept (
-  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
-  topic_id      BIGINT        NOT NULL,
-  sections_json JSON          NOT NULL,
-  created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_concept_topic (topic_id),
-  CONSTRAINT fk_concept_topic FOREIGN KEY (topic_id) REFERENCES topic(id)
-    ON DELETE CASCADE ON UPDATE RESTRICT
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  topic_id    BIGINT        NOT NULL,
+  content     TEXT          NULL,
+  blocks_json JSON          NULL,
+  updated_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_concept_topic (topic_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 /* =========================================================
