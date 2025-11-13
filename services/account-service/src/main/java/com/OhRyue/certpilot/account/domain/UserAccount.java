@@ -31,9 +31,10 @@ public class UserAccount {
   @Column(name = "password_hash", nullable = false, length = 255)
   private String passwordHash;
 
+  @Builder.Default
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 16)
-  private AccountStatus status = AccountStatus.ACTIVE;
+  private AccountStatus status = AccountStatus.BLOCKED;
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;

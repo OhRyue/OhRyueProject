@@ -1,11 +1,16 @@
 package com.OhRyue.certpilot.account.dto;
 
 import com.OhRyue.certpilot.account.domain.ExamMode;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 public class GoalCertDtos {
 
-  @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+  @Getter
+  @Setter
+  @NoArgsConstructor
+  @AllArgsConstructor
+  @Builder
   public static class GoalResponse {
     private Long id;
     private String userId;
@@ -15,10 +20,18 @@ public class GoalCertDtos {
     private Integer ddayCached;
   }
 
-  @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+  @Getter
+  @Setter
+  @NoArgsConstructor
+  @AllArgsConstructor
+  @Builder
   public static class GoalUpsertRequest {
+    @NotNull
     private Long certId;
-    private ExamMode targetExamMode;  // WRITTEN / PRACTICAL
-    private Long targetRoundId;       // null 허용
+
+    @NotNull
+    private ExamMode targetExamMode;
+
+    private Long targetRoundId;
   }
 }

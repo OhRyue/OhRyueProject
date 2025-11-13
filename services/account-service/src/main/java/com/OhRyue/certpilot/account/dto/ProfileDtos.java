@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.account.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
 public class ProfileDtos {
@@ -15,6 +16,7 @@ public class ProfileDtos {
 
   @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
   public static class ProfileUpdateRequest {
+    @NotBlank
     private String nickname;
     private String avatarUrl;
     private String timezone;

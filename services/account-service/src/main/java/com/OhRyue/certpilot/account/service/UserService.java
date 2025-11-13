@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -27,27 +28,24 @@ public class UserService {
     this.passwordEncoder = passwordEncoder;
   }
 
-  // 회원 가입
-  public UserAccount register(String username, String rawPassword, String email) {
-    // 1) username(id) 중복 검사
-    if (userAccountRepository.findById(username).isPresent()) {
-      throw new IllegalArgumentException("이미 존재하는 사용자명입니다.");
+  public UserAccount register(String email, String rawPassword) {
+    String normalizedEmail = email.trim().toLowerCase();
+
+    if (userAccountRepository.findByEmail(normalizedEmail).isPresent()) {
+      throw new IllegalArgumentException("이미 등록된 이메일입니다.");
     }
 
-    // 2) email 중복 검사
-    if (userAccountRepository.findByEmail(email).isPresent()) {
-      throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
+    if (userAccountRepository.findById(normalizedEmail).isPresent()) {
+      throw new IllegalArgumentException("이미 존재하는 사용자입니다.");
     }
 
-    // 3) 비밀번호 암호화 (BCrypt)
     String encodedPassword = passwordEncoder.encode(rawPassword);
 
-    // 4) 유저 생성 (초기에는 BLOCKED로 저장 → 이메일 인증 후 ACTIVE)
     UserAccount user = UserAccount.builder()
-        .id(username)                         // PK = username
-        .email(email)
+        .id(normalizedEmail)
+        .email(normalizedEmail)
         .passwordHash(encodedPassword)
-        .status(AccountStatus.BLOCKED)        // 이메일 인증 전
+        .status(AccountStatus.BLOCKED)
         .createdAt(LocalDateTime.now())
         .lastLoginAt(null)
         .build();
@@ -55,9 +53,9 @@ public class UserService {
     return userAccountRepository.save(user);
   }
 
-  // 로그인
-  public UserAccount login(String username, String rawPassword) {
-    UserAccount user = userAccountRepository.findById(username)
+  public UserAccount login(String email, String rawPassword) {
+    String normalizedEmail = email.trim().toLowerCase();
+    UserAccount user = userAccountRepository.findByEmail(normalizedEmail)
         .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
 
     if (user.getStatus() != AccountStatus.ACTIVE) {
@@ -84,14 +82,12 @@ public class UserService {
     return user;
   }
 
-  // 사용자 조회(username=id 기반)
-  public Optional<UserAccount> findByUsername(String username) {
-    return userAccountRepository.findById(username);
+  public Optional<UserAccount> findById(String userId) {
+    return userAccountRepository.findById(userId);
   }
 
-  // 이메일 인증 완료 → status = ACTIVE 저장
   public void enableUser(String email) {
-    UserAccount user = userAccountRepository.findByEmail(email)
+    UserAccount user = userAccountRepository.findByEmail(email.toLowerCase(Locale.ROOT))
         .orElseThrow(() -> new IllegalArgumentException("해당 이메일의 사용자가 없습니다."));
 
     user.setStatus(AccountStatus.ACTIVE);   // 인증 완료

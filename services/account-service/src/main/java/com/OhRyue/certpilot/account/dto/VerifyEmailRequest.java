@@ -1,11 +1,17 @@
 package com.OhRyue.certpilot.account.dto;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
 public class VerifyEmailRequest {
+  @Email
+  @NotBlank
   private String email;
-  private String code; // 사용자가 입력한 인증코드
+
+  @NotBlank
+  private String code;
 }

@@ -1,13 +1,18 @@
 package com.OhRyue.certpilot.account.controller;
 
 import com.OhRyue.certpilot.account.domain.UserProfile;
-import com.OhRyue.certpilot.account.dto.ProfileDtos.*;
+import com.OhRyue.certpilot.account.dto.ProfileDtos.ProfileResponse;
+import com.OhRyue.certpilot.account.dto.ProfileDtos.ProfileUpdateRequest;
 import com.OhRyue.certpilot.account.service.ProfileService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "Account - Profile", description = "사용자 프로필 APIs")
 @RestController
 @RequestMapping("/api/account/profile")
 @RequiredArgsConstructor
@@ -15,22 +20,26 @@ public class ProfileController {
 
   private final ProfileService profileService;
 
-  @GetMapping("/me")
+  /* -------- 프로필 조회 -------- */
+  @Operation(summary = "내 프로필 조회")
+  @GetMapping
   public ResponseEntity<ProfileResponse> myProfile(Authentication auth) {
     String userId = auth.getName();
-    UserProfile p = profileService.get(userId);
+    UserProfile profile = profileService.get(userId);
     return ResponseEntity.ok(ProfileResponse.builder()
-        .userId(p.getUserId())
-        .nickname(p.getNickname())
-        .avatarUrl(p.getAvatarUrl())
-        .timezone(p.getTimezone())
-        .lang(p.getLang())
+        .userId(profile.getUserId())
+        .nickname(profile.getNickname())
+        .avatarUrl(profile.getAvatarUrl())
+        .timezone(profile.getTimezone())
+        .lang(profile.getLang())
         .build());
   }
 
-  @PutMapping("/me")
+  /* -------- 프로필 수정 -------- */
+  @Operation(summary = "내 프로필 갱신")
+  @PutMapping
   public ResponseEntity<ProfileResponse> updateMyProfile(Authentication auth,
-                                                         @RequestBody ProfileUpdateRequest req) {
+                                                         @RequestBody @Valid ProfileUpdateRequest req) {
     String userId = auth.getName();
     UserProfile saved = profileService.upsert(
         UserProfile.builder()

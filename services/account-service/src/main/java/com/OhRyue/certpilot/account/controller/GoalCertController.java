@@ -3,11 +3,15 @@ package com.OhRyue.certpilot.account.controller;
 import com.OhRyue.certpilot.account.domain.UserGoalCert;
 import com.OhRyue.certpilot.account.dto.GoalCertDtos.*;
 import com.OhRyue.certpilot.account.service.GoalCertService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "Account - GoalCert", description = "목표 자격증 관리 APIs")
 @RestController
 @RequestMapping("/api/account/goal")
 @RequiredArgsConstructor
@@ -15,7 +19,9 @@ public class GoalCertController {
 
   private final GoalCertService goalCertService;
 
-  @GetMapping("/me")
+  /* -------- 목표 조회 -------- */
+  @Operation(summary = "내 목표 자격증 조회")
+  @GetMapping
   public ResponseEntity<GoalResponse> myGoal(Authentication auth) {
     String userId = auth.getName();
     return goalCertService.getByUser(userId)
@@ -27,12 +33,14 @@ public class GoalCertController {
             .targetRoundId(g.getTargetRoundId())
             .ddayCached(g.getDdayCached())
             .build()))
-        .orElse(ResponseEntity.ok().body(null));
+        .orElse(ResponseEntity.noContent().build());
   }
 
-  @PutMapping("/me")
+  /* -------- 목표 설정/수정 -------- */
+  @Operation(summary = "내 목표 자격증 설정/수정")
+  @PutMapping
   public ResponseEntity<GoalResponse> upsertMyGoal(Authentication auth,
-                                                   @RequestBody GoalUpsertRequest req) {
+                                                   @RequestBody @Valid GoalUpsertRequest req) {
     String userId = auth.getName();
     UserGoalCert saved = goalCertService.upsert(
         UserGoalCert.builder()
