@@ -103,11 +103,11 @@ CREATE TABLE IF NOT EXISTS topic (
 -- 개념(리치 블록)
 -- =========================
 CREATE TABLE IF NOT EXISTS concept (
-  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-  topic_id     BIGINT NOT NULL,
-  content      TEXT NULL,
-  blocks_json  JSON NULL,
-  updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  topic_id      BIGINT NOT NULL,
+  sections_json JSON NOT NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                        ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_concept_topic
     FOREIGN KEY (topic_id) REFERENCES topic(id)

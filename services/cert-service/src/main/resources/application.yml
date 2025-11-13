@@ -1,4 +1,56 @@
-server.port: 8084
-spring.application.name: cert-service
-management.endpoints.web.exposure.include: '*'
-eureka.client.serviceUrl.defaultZone: http://discovery:8761/eureka
+server:
+  port: 8084
+
+spring:
+  application:
+    name: cert-service
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 3000
+            readTimeout: 3000
+            loggerLevel: basic
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://discovery:8761/eureka
+
+cert:
+  qnet:
+    key: ${CERT_QNET_SERVICE_KEY:}
+    base-url: https://openapi.q-net.or.kr/api/service/rest
+    data-url: https://apis.data.go.kr/B490007
+    timeout: 3000
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      qnetClient:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+      datagoClient:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+  retry:
+    instances:
+      qnetClient:
+        maxAttempts: 3
+        waitDuration: 500ms
+      datagoClient:
+        maxAttempts: 3
+        waitDuration: 500ms

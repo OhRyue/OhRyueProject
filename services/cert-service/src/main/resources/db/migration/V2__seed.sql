@@ -164,12 +164,11 @@ ON DUPLICATE KEY UPDATE title=VALUES(title), emoji=VALUES(emoji), order_no=VALUE
 
 -- =========================================
 -- 6) CONCEPT (대표 세세항목 블록 샘플)
---  - blocks_json: 섹션 배열 + 블록들(문단/리스트/이미지/표 등) 구조 예시
+--  - sections_json: 섹션 배열 + 블록들(문단/리스트/이미지/표 등) 구조 예시
 -- =========================================
-INSERT INTO concept (topic_id, content, blocks_json)
+INSERT INTO concept (topic_id, sections_json)
 VALUES
   (11101,
-   '현행 시스템의 아키텍처/프로세스/데이터 흐름을 파악해 요구 파생을 위한 근거를 수집합니다.',
    JSON_OBJECT(
      'sections', JSON_ARRAY(
        JSON_OBJECT(
@@ -195,7 +194,6 @@ VALUES
    )
   ),
   (11102,
-   '요구사항은 기능/비기능으로 나누어 명세하고, 모호성을 제거합니다.',
    JSON_OBJECT(
      'sections', JSON_ARRAY(
        JSON_OBJECT(
@@ -216,7 +214,6 @@ VALUES
    )
   ),
   (11103,
-   '분석 모델은 요구사항을 구조화해 이해관계자 간 의사소통을 돕습니다.',
    JSON_OBJECT(
      'sections', JSON_ARRAY(
        JSON_OBJECT(
@@ -230,7 +227,6 @@ VALUES
    )
   )
 ON DUPLICATE KEY UPDATE
-  content=VALUES(content),
-  blocks_json=VALUES(blocks_json);
+  sections_json=VALUES(sections_json);
 
 SET FOREIGN_KEY_CHECKS = 1;

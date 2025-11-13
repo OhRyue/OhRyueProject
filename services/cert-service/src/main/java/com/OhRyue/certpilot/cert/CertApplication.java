@@ -1,11 +1,18 @@
 package com.OhRyue.certpilot.cert;
 
-import org.springframework.boot.*;
-import org.springframework.boot.autoconfigure.*;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
+@EnableFeignClients
+@EnableScheduling
+@EnableCaching
 public class CertApplication {
-  public static void main(String[] a){
-    SpringApplication.run(CertApplication.class,a);
+
+  public static void main(String[] args) {
+    SpringApplication.run(CertApplication.class, args);
   }
 }
