@@ -1,484 +1,873 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.certpilot.study.client.ProgressHookClient;
 import com.OhRyue.certpilot.study.domain.*;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.domain.enums.QuestionType;
-import com.OhRyue.certpilot.study.dto.WrittenDtos.*;
-import com.OhRyue.certpilot.study.dto.ReviewDtos.*;
-import com.OhRyue.certpilot.study.dto.WrongRecapDtos.*;
+import com.OhRyue.certpilot.study.dto.FlowDtos;
+import com.OhRyue.certpilot.study.dto.ReviewDtos;
+import com.OhRyue.certpilot.study.dto.WrittenDtos;
+import com.OhRyue.certpilot.study.dto.WrongRecapDtos;
 import com.OhRyue.certpilot.study.repository.*;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.*;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+@Transactional
 public class WrittenService {
 
-  private final TopicRepository topicRepo;
-  private final ConceptRepository conceptRepo;
-  private final QuestionRepository questionRepo;
-  private final QuestionChoiceRepository choiceRepo;
-  private final UserProgressRepository progressRepo;
+  private static final int MINI_SIZE = 4;
+  private static final int MCQ_SIZE = 5;
+  private static final int REVIEW_SIZE = 20;
 
-  private final UserAnswerRepository answerRepo;
-  private final QuestionTagRepository tagRepo;
-  private final AIExplanationService ai;
-  private final TopicTreeService topicTree;
+  private final TopicRepository topicRepository;
+  private final ConceptRepository conceptRepository;
+  private final QuestionRepository questionRepository;
+  private final QuestionChoiceRepository choiceRepository;
+  private final QuestionTagRepository questionTagRepository;
+  private final UserAnswerRepository userAnswerRepository;
+  private final UserProgressRepository userProgressRepository;
+  private final StudySessionManager sessionManager;
+  private final AIExplanationService aiExplanationService;
+  private final TopicTreeService topicTreeService;
+  private final ProgressHookClient progressHookClient;
+  private final ObjectMapper objectMapper;
 
   /* ========================= 개념 ========================= */
 
-  public ConceptResp loadConcept(Long topicId) {
-    var topic = topicRepo.findById(topicId).orElseThrow(() -> new NoSuchElementException("Topic not found: " + topicId));
-    var conceptOpt = conceptRepo.findByTopicId(topicId);
+  @Transactional(readOnly = true)
+  public WrittenDtos.ConceptResp loadConcept(Long topicId) {
+    Topic topic = topicRepository.findById(topicId)
+        .orElseThrow(() -> new NoSuchElementException("Topic not found: %d".formatted(topicId)));
+    Optional<Concept> conceptOpt = conceptRepository.findByTopicId(topicId);
 
-    String topicTitle = topic.getTitle();
-    List<ConceptResp.Section> sections = List.of();
+    List<WrittenDtos.ConceptResp.Section> sections = conceptOpt
+        .map(concept -> ConceptMapper.toSections(concept.getSectionsJson()))
+        .orElse(List.of());
 
-    if (conceptOpt.isPresent()) {
-      var concept = conceptOpt.get();
-      var json = concept.getBlocksJson();
-      if (json != null && !json.isBlank()) {
-        try {
-          com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
-          com.fasterxml.jackson.databind.JsonNode root = om.readTree(json);
-          var arr = root.get("sections");
-
-          List<ConceptResp.Section> list = new ArrayList<>();
-          if (arr != null && arr.isArray()) {
-            for (var node : arr) {
-              int orderNo = node.hasNonNull("orderNo") ? node.get("orderNo").asInt() : 0;
-              String subCode = node.hasNonNull("subCode") ? node.get("subCode").asText() : "";
-              String secTitle = node.hasNonNull("title") ? node.get("title").asText() : "";
-              int importance = node.hasNonNull("importance") ? node.get("importance").asInt() : 0;
-
-              List<ConceptResp.Block> blocks = new ArrayList<>();
-              var blocksNode = node.get("blocks");
-              if (blocksNode != null && blocksNode.isArray()) {
-                for (var b : blocksNode) {
-                  String type    = b.hasNonNull("type")    ? b.get("type").asText() : null;
-                  String text    = b.hasNonNull("text")    ? b.get("text").asText() : null;
-                  String url     = b.hasNonNull("url")     ? b.get("url").asText() : null;
-                  String alt     = b.hasNonNull("alt")     ? b.get("alt").asText() : null;
-                  String caption = b.hasNonNull("caption") ? b.get("caption").asText() : null;
-
-                  List<String> items = new ArrayList<>();
-                  List<String> headers = new ArrayList<>();
-                  List<List<String>> rows = new ArrayList<>();
-
-                  var itemsNode = b.get("items");
-                  if (itemsNode != null && itemsNode.isArray()) itemsNode.forEach(it -> items.add(it.asText()));
-                  var headersNode = b.get("headers");
-                  if (headersNode != null && headersNode.isArray()) headersNode.forEach(h -> headers.add(h.asText()));
-                  var rowsNode = b.get("rows");
-                  if (rowsNode != null && rowsNode.isArray()) {
-                    for (var r : rowsNode) {
-                      List<String> row = new ArrayList<>();
-                      r.forEach(cell -> row.add(cell.asText()));
-                      rows.add(row);
-                    }
-                  }
-                  blocks.add(new ConceptResp.Block(type, text, items, url, alt, caption, headers, rows));
-                }
-              }
-              list.add(new ConceptResp.Section(orderNo, subCode, secTitle, importance, blocks));
-            }
-          }
-          list.sort(Comparator.comparing(ConceptResp.Section::orderNo));
-          sections = List.copyOf(list);
-        } catch (Exception ignore) {
-          sections = List.of();
-        }
-      }
-    }
-    return new ConceptResp(topicId, topicTitle, sections);
+    return new WrittenDtos.ConceptResp(topicId, topic.getTitle(), sections);
   }
 
   /* ========================= 미니체크(OX) ========================= */
 
-  public MiniSet miniSet(Long topicId) {
-    List<Question> pool = questionRepo.findAll().stream()
-        .filter(q -> Objects.equals(q.getTopicId(), topicId))
-        .filter(q -> q.getType() == QuestionType.OX)
-        .sorted(Comparator.comparingLong(Question::getId))
-        .collect(Collectors.toList());
-    Collections.shuffle(pool);
+  @Transactional(readOnly = true)
+  public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> miniSet(String userId, Long topicId) {
+    List<Question> questions = questionRepository.pickRandomByTopic(
+        topicId, ExamMode.WRITTEN, QuestionType.OX, PageRequest.of(0, MINI_SIZE));
 
-    List<MiniQuestion> items = pool.stream()
-        .limit(4)
-        .map(q -> new MiniQuestion(q.getId(), nzs(q.getText())))
+    List<WrittenDtos.MiniQuestion> items = questions.stream()
+        .map(q -> new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse("")))
         .toList();
 
-    return new MiniSet(items);
+    StudySession session = sessionManager.ensureMicroSession(userId, topicId, ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+    Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+    boolean passed = Boolean.TRUE.equals(miniMeta.get("passed"));
+
+    String status = passed ? "COMPLETE" : "IN_PROGRESS";
+    String nextStep = passed ? "MICRO_MCQ" : null;
+
+    return new FlowDtos.StepEnvelope<>(
+        session.getId(),
+        "MICRO",
+        "MICRO_MINI",
+        status,
+        nextStep,
+        sessionManager.loadMeta(session),
+        new WrittenDtos.MiniSet(items)
+    );
   }
 
-  @Transactional
-  public MiniSubmitResp submitMini(MiniSubmitReq req) {
-    List<Long> ids = req.answers().stream().map(MiniAnswer::questionId).toList();
-    Map<Long, Question> qsById = questionRepo.findAllById(ids).stream()
-        .collect(Collectors.toMap(Question::getId, it -> it));
+  public FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> submitMini(WrittenDtos.MiniSubmitReq req) {
+    Map<Long, Question> questionMap = fetchQuestions(req.answers().stream()
+        .map(WrittenDtos.MiniAnswer::questionId).toList(), QuestionType.OX);
 
-    int correctCnt = 0;
-    List<MiniSubmitItem> items = new ArrayList<>();
-    List<Long> wrongIds = new ArrayList<>();
+    StudySession session = sessionManager.ensureMicroSession(
+        req.userId(), req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+    int baseOrder = sessionManager.items(session.getId()).size();
 
-    for (MiniAnswer a : req.answers()) {
-      Question q = require(qsById.get(a.questionId()), "Question not found: " + a.questionId());
+    int correctCount = 0;
+    List<WrittenDtos.MiniSubmitItem> resultItems = new ArrayList<>();
+    List<Long> wrongQuestionIds = new ArrayList<>();
 
-      boolean correct = Objects.equals(q.getOxAnswer(), a.answer());
-      if (correct) correctCnt++; else wrongIds.add(q.getId());
-
-      String baseExpl = nzs(q.getExplanation());
-      String aiExpl = ""; // 미니체크는 AI 해설 미사용
-
-      answerRepo.save(UserAnswer.builder()
-          .userId(req.userId())
-          .questionId(q.getId())
-          .correct(correct)
-          .answerText(String.valueOf(a.answer()))
-          .createdAt(Instant.now())
-          .build());
-
-      items.add(new MiniSubmitItem(q.getId(), correct, baseExpl, aiExpl));
-    }
-
-    boolean passed = (correctCnt == req.answers().size());
-
-    UserProgress p = progressRepo
-        .findByUserIdAndTopicIdAndExamMode(req.userId(), req.topicId(), ExamMode.WRITTEN)
-        .orElseGet(() -> UserProgress.builder()
-            .userId(req.userId())
-            .topicId(req.topicId())
-            .examMode(ExamMode.WRITTEN)
-            .build());
-    p.setMiniTotal(req.answers().size());
-    p.setMiniCorrect(correctCnt);
-    p.setMiniPassed(passed);
-    p.setUpdatedAt(Instant.now());
-    progressRepo.save(p);
-
-    return new MiniSubmitResp(req.answers().size(), correctCnt, passed, items, wrongIds);
-  }
-
-  /* ========================= 문제세트(객관식) ========================= */
-
-  public McqSet mcqSet(Long topicId, String userId) {
-    List<Question> pool = questionRepo.findAll().stream()
-        .filter(q -> Objects.equals(q.getTopicId(), topicId))
-        .filter(q -> q.getType() == QuestionType.MCQ)
-        .sorted(Comparator.comparingLong(Question::getId))
-        .collect(Collectors.toList());
-    Collections.shuffle(pool);
-
-    List<Question> picked = pool.stream().limit(5).toList();
-
-    List<McqQuestion> dto = picked.stream().map(q -> {
-      List<McqChoice> choices = choiceRepo.findByQuestionId(q.getId()).stream()
-          .sorted(Comparator.comparing(QuestionChoice::getLabel))
-          .map(c -> new McqChoice(c.getLabel(), nzs(c.getText())))
-          .toList();
-      return new McqQuestion(q.getId(), nzs(q.getText()), choices, q.getImageUrl());
-    }).toList();
-
-    return new McqSet(dto);
-  }
-
-  @Transactional
-  public McqSubmitResp submitMcq(McqSubmitReq req) {
-    // 1) 입력 질문 조회
-    List<Long> ids = req.answers().stream().map(McqAnswer::questionId).toList();
-    List<Question> qs = questionRepo.findAllById(ids);
-
-    // 2) 필기는 '객관식(MCQ)'만 허용
-    boolean allMcq = qs.stream().allMatch(q -> q.getType() == QuestionType.MCQ);
-    if (!allMcq) {
-      throw new IllegalArgumentException("Written MCQ submit only accepts MCQ questions.");
-    }
-
-    // 3) 정답 맵 구성 (isCorrect() 사용)
-    Map<Long, String> correctMap = new HashMap<>();
-    for (Question q : qs) {
-      for (QuestionChoice c : choiceRepo.findByQuestionId(q.getId())) {
-        if (c.isCorrect()) {
-          correctMap.put(q.getId(), c.getLabel());
-          break;
-        }
-      }
-    }
-
-    int correctCnt = 0;
-    List<McqSubmitItem> items = new ArrayList<>();
-    List<Long> wrongIds = new ArrayList<>();
-
-    // 4) 채점/저장
-    for (McqAnswer a : req.answers()) {
-      String correctLabel = correctMap.get(a.questionId()); // 없으면 null -> 오답 처리
-      boolean ok = Objects.equals(correctLabel, a.label());
-      if (ok) correctCnt++; else wrongIds.add(a.questionId());
-
-      Question q = qs.stream()
-          .filter(x -> Objects.equals(x.getId(), a.questionId()))
-          .findFirst().orElseThrow();
-
-      String baseExpl = nzs(q.getExplanation());
-      String aiExpl = ok ? "" : nzs(ai.explainWrongForMCQ(a.label(), correctLabel, q));
-
-      answerRepo.save(UserAnswer.builder()
-          .userId(req.userId())
-          .questionId(a.questionId())
-          .correct(ok)
-          .answerText(a.label())
-          .createdAt(Instant.now())
-          .build());
-
-      items.add(new McqSubmitItem(a.questionId(), ok, correctLabel, baseExpl, aiExpl));
-    }
-
-    // 5) 진행도 업데이트
-    UserProgress p = progressRepo
-        .findByUserIdAndTopicIdAndExamMode(req.userId(), req.topicId(), ExamMode.WRITTEN)
-        .orElseGet(() -> UserProgress.builder()
-            .userId(req.userId())
-            .topicId(req.topicId())
-            .examMode(ExamMode.WRITTEN)
-            .build());
-    p.setMcqTotal(req.answers().size());
-    p.setMcqCorrect(correctCnt);
-    p.setUpdatedAt(Instant.now());
-    progressRepo.save(p);
-
-    return new McqSubmitResp(req.answers().size(), correctCnt, items, wrongIds);
-  }
-
-  /* ========================= 요약(필기 완료) ========================= */
-
-  public SummaryResp summary(String userId, Long topicId) {
-    UserProgress p = progressRepo.findByUserIdAndTopicIdAndExamMode(userId, topicId, ExamMode.WRITTEN)
-        .orElseThrow(() -> new NoSuchElementException("진행 정보가 없습니다."));
-
-    int miniT = nz(p.getMiniTotal());
-    int miniC = nz(p.getMiniCorrect());
-    boolean miniPassed = Boolean.TRUE.equals(p.isMiniPassed());
-    int mcqT  = nz(p.getMcqTotal());
-    int mcqC  = nz(p.getMcqCorrect());
-
-    // 정책: 미니 전부 정답 + MCQ 전부 정답
-    boolean completed = miniPassed && (mcqT > 0 && mcqC == mcqT);
-
-    int streak = computeStreakDays(userId);
-    String aiSummary = ai.summarizeWrittenKorean(userId, topicId, miniT, miniC, mcqT, mcqC, completed, streak);
-
-    return new SummaryResp(miniT, miniC, miniPassed, mcqT, mcqC, aiSummary, completed);
-  }
-
-  /* ========================= 리뷰(필기) 세트/제출 ========================= */
-
-  public ReviewSet reviewSet(Long rootTopicId) {
-    Set<Long> topicIds = topicTree.descendantIds(rootTopicId);
-    List<Question> pool = questionRepo.findAll().stream()
-        .filter(q -> topicIds.contains(q.getTopicId()))
-        .filter(q -> q.getType() == QuestionType.MCQ)
-        .collect(Collectors.toList());
-    Collections.shuffle(pool);
-    List<Question> pick = pool.stream().limit(20).toList();
-
-    var items = pick.stream().map(q -> {
-      var choices = choiceRepo.findByQuestionId(q.getId()).stream()
-          .sorted(Comparator.comparing(QuestionChoice::getLabel))
-          .map(c -> new ReviewQuestion.Choice(c.getLabel(), nzs(c.getText())))
-          .toList();
-      return new ReviewQuestion(q.getId(), nzs(q.getText()), choices, q.getImageUrl());
-    }).toList();
-
-    return new ReviewSet(items);
-  }
-
-  @Transactional
-  public McqSubmitResp reviewSubmitWritten(McqSubmitReq req) {
-    return submitMcq(req);
-  }
-
-  /* ========================= 틀린문제 다시보기 ========================= */
-
-  /**
-   * 내부 기본 스캔 한도(scanMax)는 200으로 설정.
-   */
-  public WrongRecapSet wrongRecap(Long topicId, String userId, int limit) {
-    return wrongRecap(topicId, userId, limit, 200);
-  }
-
-  /**
-   * 최근 틀린 문제 다시보기(토픽 범위)
-   *
-   * @param topicId 토픽 ID
-   * @param userId  사용자 ID
-   * @param limit   반환할 아이템 개수 (예: 20)
-   * @param scanMax 최근 틀린 로그에서 최대 스캔할 문항 개수 (중복 제거 전 한도, 예: 200)
-   */
-  public WrongRecapSet wrongRecap(Long topicId, String userId, int limit, int scanMax) {
-    if (limit <= 0) limit = 20;
-    if (scanMax < limit) scanMax = Math.max(limit, 50); // 안전 최소치
-
-    // 최근 틀린 로그 역순으로 수집(최신 우선)
-    List<UserAnswer> wrongLogs = answerRepo.findAll().stream()
-        .filter(a -> Objects.equals(a.getUserId(), userId))
-        .filter(a -> !a.isCorrect())
-        .sorted(Comparator.comparing(UserAnswer::getCreatedAt).reversed())
-        .toList();
-
-    // 중복 questionId 제거하여 최근부터 최대 scanMax개까지만 담기
-    LinkedHashSet<Long> wrongQids = new LinkedHashSet<>();
-    for (UserAnswer a : wrongLogs) {
-      wrongQids.add(a.getQuestionId());
-      if (wrongQids.size() >= scanMax) break;
-    }
-
-    // 해당 토픽 범위의 문항만 필터
-    List<Question> pool = questionRepo.findAllById(wrongQids).stream()
-        .filter(q -> Objects.equals(q.getTopicId(), topicId))
-        .sorted(Comparator.comparing(Question::getId))
-        .toList();
-
-    // DTO 빌드
-    List<WrongRecapSet.Item> items = new ArrayList<>();
-    for (Question q : pool) {
-      String myAns = wrongLogs.stream()
-          .filter(a -> Objects.equals(a.getQuestionId(), q.getId()))
-          .findFirst().map(UserAnswer::getAnswerText).orElse("");
-
-      String correctAns;
-      switch (q.getType()) {
-        case OX -> correctAns = String.valueOf(q.getOxAnswer());
-        case MCQ -> {
-          String corr = choiceRepo.findByQuestionId(q.getId()).stream()
-              .filter(QuestionChoice::isCorrect)
-              .map(QuestionChoice::getLabel)
-              .findFirst().orElse("");
-          correctAns = corr;
-        }
-        default -> correctAns = ""; // SHORT/LONG 등 서술형은 정답 개념이 없으면 빈값
+    for (int idx = 0; idx < req.answers().size(); idx++) {
+      WrittenDtos.MiniAnswer answer = req.answers().get(idx);
+      Question question = questionMap.get(answer.questionId());
+      if (question == null) {
+        throw new NoSuchElementException("Question not found: " + answer.questionId());
       }
 
-      items.add(new WrongRecapSet.Item(
-          q.getId(), q.getType().name(), nzs(q.getText()),
-          nzs(myAns), correctAns, nzs(q.getExplanation()), q.getImageUrl()
+      String correctAnswer = Optional.ofNullable(question.getAnswerKey()).orElse("").trim();
+      String userAnswer = Boolean.TRUE.equals(answer.answer()) ? "O" : "X";
+      boolean isCorrect = correctAnswer.equalsIgnoreCase(userAnswer);
+      if (isCorrect) correctCount++; else wrongQuestionIds.add(question.getId());
+
+      String explanation = Optional.ofNullable(question.getSolutionText()).orElse("");
+      resultItems.add(new WrittenDtos.MiniSubmitItem(question.getId(), isCorrect, explanation, ""));
+
+      String answerJson = toJson(Map.of(
+          "answer", userAnswer,
+          "correct", isCorrect,
+          "submittedAt", Instant.now().toString()
       ));
-      if (items.size() >= limit) break;
+
+      StudySessionItem item = sessionManager.upsertItem(
+          session,
+          question.getId(),
+          baseOrder + idx + 1,
+          answerJson,
+          isCorrect,
+          isCorrect ? 100 : 0,
+          null
+      );
+
+      persistUserAnswer(req.userId(), question, userAnswer, isCorrect, 100, session, item, "MICRO_MINI");
+      pushProgressHook(req.userId(), ExamMode.WRITTEN, QuestionType.OX, isCorrect, 100, question.getId());
+      updateProgress(req.userId(), question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
     }
 
-    return new WrongRecapSet(items);
+    boolean passed = correctCount == req.answers().size();
+    Map<String, Object> miniMeta = new HashMap<>();
+    miniMeta.put("total", req.answers().size());
+    miniMeta.put("correct", correctCount);
+    miniMeta.put("passed", passed);
+    miniMeta.put("wrongQuestionIds", wrongQuestionIds);
+    miniMeta.put("lastSubmittedAt", Instant.now().toString());
+    sessionManager.saveStepMeta(session, "mini", miniMeta);
+
+    String status = passed ? "COMPLETE" : "IN_PROGRESS";
+    String nextStep = passed ? "MICRO_MCQ" : "MICRO_MINI";
+
+    return new FlowDtos.StepEnvelope<>(
+        session.getId(),
+        "MICRO",
+        "MICRO_MINI",
+        status,
+        nextStep,
+        sessionManager.loadMeta(session),
+        new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, passed, resultItems, wrongQuestionIds)
+    );
   }
 
-  public WrongRecapSet wrongRecapByIds(String ids, String userId) {
-    List<Long> qids = Arrays.stream(ids.split(","))
+  /* ========================= MCQ ========================= */
+
+  @Transactional(readOnly = true)
+  public FlowDtos.StepEnvelope<WrittenDtos.McqSet> mcqSet(Long topicId, String userId) {
+    StudySession session = sessionManager.ensureMicroSession(
+        userId, topicId, ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+
+    Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+    boolean miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+    if (!miniPassed) {
+      throw new IllegalStateException("MINI_STEP_NOT_PASSED");
+    }
+
+    Map<String, Object> mcqMeta = sessionManager.loadStepMeta(session, "mcq");
+    boolean completed = Boolean.TRUE.equals(mcqMeta.get("completed"));
+
+    List<Question> questions = questionRepository.pickRandomByTopic(
+        topicId, ExamMode.WRITTEN, QuestionType.MCQ, PageRequest.of(0, MCQ_SIZE));
+
+    List<WrittenDtos.McqQuestion> items = questions.stream()
+        .map(q -> new WrittenDtos.McqQuestion(
+            q.getId(),
+            Optional.ofNullable(q.getStem()).orElse(""),
+            loadChoices(q.getId()),
+            q.getImageUrl()
+        ))
+        .toList();
+
+    String status = completed ? "COMPLETE" : "IN_PROGRESS";
+    String nextStep = completed ? "MICRO_SUMMARY" : null;
+
+    return new FlowDtos.StepEnvelope<>(
+        session.getId(),
+        "MICRO",
+        "MICRO_MCQ",
+        status,
+        nextStep,
+        sessionManager.loadMeta(session),
+        new WrittenDtos.McqSet(items)
+    );
+  }
+
+  public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> submitMcq(WrittenDtos.McqSubmitReq req) {
+    Map<Long, Question> questionMap = fetchQuestions(req.answers().stream()
+        .map(WrittenDtos.McqAnswer::questionId).toList(), QuestionType.MCQ);
+
+    StudySession session = sessionManager.ensureMicroSession(
+        req.userId(), req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+    Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+    if (!Boolean.TRUE.equals(miniMeta.get("passed"))) {
+      throw new IllegalStateException("MINI_STEP_NOT_PASSED");
+    }
+    int baseOrder = sessionManager.items(session.getId()).size();
+
+    int correctCount = 0;
+    List<WrittenDtos.McqSubmitItem> items = new ArrayList<>();
+    List<Long> wrongIds = new ArrayList<>();
+
+    for (int idx = 0; idx < req.answers().size(); idx++) {
+      WrittenDtos.McqAnswer answer = req.answers().get(idx);
+      Question question = questionMap.get(answer.questionId());
+      if (question == null) throw new NoSuchElementException("Question not found: " + answer.questionId());
+
+      String correctLabel = resolveCorrectChoice(question.getId());
+      boolean isCorrect = Objects.equals(correctLabel, answer.label());
+      if (isCorrect) correctCount++; else wrongIds.add(question.getId());
+
+      String dbExplanation = Optional.ofNullable(question.getSolutionText()).orElse("");
+      String aiExplanation = isCorrect ? "" :
+          aiExplanationService.explainWrongForMCQ(answer.label(), correctLabel, question);
+
+      items.add(new WrittenDtos.McqSubmitItem(
+          question.getId(),
+          isCorrect,
+          correctLabel,
+          dbExplanation,
+          aiExplanation
+      ));
+
+      Map<String, Object> answerPayload = new HashMap<>();
+      answerPayload.put("answer", answer.label());
+      answerPayload.put("correctLabel", correctLabel);
+      answerPayload.put("correct", isCorrect);
+      answerPayload.put("submittedAt", Instant.now().toString());
+      if (!aiExplanation.isBlank()) answerPayload.put("aiExplain", aiExplanation);
+
+      StudySessionItem item = sessionManager.upsertItem(
+          session,
+          question.getId(),
+          baseOrder + idx + 1,
+          toJson(answerPayload),
+          isCorrect,
+          isCorrect ? 100 : 0,
+          aiExplanation.isBlank() ? null : toJson(Map.of("explain", aiExplanation))
+      );
+
+      persistUserAnswer(req.userId(), question, answer.label(), isCorrect, 100, session, item, "MICRO_MCQ");
+      pushProgressHook(req.userId(), ExamMode.WRITTEN, QuestionType.MCQ, isCorrect, 100, question.getId());
+      updateProgress(req.userId(), question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
+    }
+
+    boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
+    double scorePct = items.isEmpty() ? 0.0 : (correctCount * 100.0) / items.size();
+
+    Map<String, Object> mcqMeta = new HashMap<>();
+    mcqMeta.put("total", req.answers().size());
+    mcqMeta.put("correct", correctCount);
+    mcqMeta.put("completed", allCorrect);
+    mcqMeta.put("scorePct", scorePct);
+    mcqMeta.put("wrongQuestionIds", wrongIds);
+    mcqMeta.put("lastSubmittedAt", Instant.now().toString());
+    sessionManager.saveStepMeta(session, "mcq", mcqMeta);
+
+    if (allCorrect) {
+      sessionManager.closeSession(session, scorePct, Map.of("finalScorePct", scorePct));
+    } else {
+      sessionManager.updateStatus(session, "OPEN");
+    }
+
+    return new FlowDtos.StepEnvelope<>(
+        session.getId(),
+        "MICRO",
+        "MICRO_MCQ",
+        allCorrect ? "COMPLETE" : "IN_PROGRESS",
+        allCorrect ? "MICRO_SUMMARY" : "MICRO_MCQ",
+        sessionManager.loadMeta(session),
+        new WrittenDtos.McqSubmitResp(req.answers().size(), correctCount, items, wrongIds)
+    );
+  }
+
+  /* ========================= 리뷰 ========================= */
+
+  @Transactional(readOnly = true)
+  public FlowDtos.StepEnvelope<ReviewDtos.ReviewSet> reviewSet(String userId, Long rootTopicId) {
+    Set<Long> topicIds = topicTreeService.descendantIds(rootTopicId);
+    if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
+
+    List<Question> questions = questionRepository.pickRandomByTopicIn(
+        topicIds, ExamMode.WRITTEN, QuestionType.MCQ, PageRequest.of(0, REVIEW_SIZE));
+
+    List<ReviewDtos.ReviewQuestion> items = questions.stream()
+        .map(q -> new ReviewDtos.ReviewQuestion(
+            q.getId(),
+            Optional.ofNullable(q.getStem()).orElse(""),
+            loadReviewChoices(q.getId()),
+            q.getImageUrl()
+        )).toList();
+
+    StudySession session = sessionManager.ensureReviewSession(
+        userId, rootTopicId, ExamMode.WRITTEN, REVIEW_SIZE);
+    Map<String, Object> reviewMeta = sessionManager.loadStepMeta(session, "review");
+    boolean completed = Boolean.TRUE.equals(reviewMeta.get("completed"));
+
+    String status = completed ? "COMPLETE" : "IN_PROGRESS";
+    String nextStep = completed ? "REVIEW_SUMMARY" : null;
+
+    return new FlowDtos.StepEnvelope<>(
+        session.getId(),
+        "REVIEW",
+        "REVIEW_SET",
+        status,
+        nextStep,
+        sessionManager.loadMeta(session),
+        new ReviewDtos.ReviewSet(items)
+    );
+  }
+
+  public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> reviewSubmitWritten(WrittenDtos.McqSubmitReq req, Long rootTopicId) {
+    Set<Long> rawIds = topicTreeService.descendantIds(rootTopicId);
+    Set<Long> topicIds = new HashSet<>(rawIds);
+    if (topicIds.isEmpty()) {
+      topicIds.add(rootTopicId);
+    }
+    final Set<Long> targetTopicIds = Set.copyOf(topicIds);
+
+    Map<Long, Question> questionMap = questionRepository.findByIdIn(
+        req.answers().stream().map(WrittenDtos.McqAnswer::questionId).toList())
+        .stream()
+        .filter(q -> q.getMode() == ExamMode.WRITTEN && targetTopicIds.contains(q.getTopicId()))
+        .collect(Collectors.toMap(Question::getId, q -> q));
+
+    StudySession session = sessionManager.ensureReviewSession(
+        req.userId(), rootTopicId, ExamMode.WRITTEN, REVIEW_SIZE);
+    int baseOrder = sessionManager.items(session.getId()).size();
+
+    int correctCount = 0;
+    List<WrittenDtos.McqSubmitItem> items = new ArrayList<>();
+    List<Long> wrongIds = new ArrayList<>();
+
+    for (int idx = 0; idx < req.answers().size(); idx++) {
+      WrittenDtos.McqAnswer answer = req.answers().get(idx);
+      Question question = questionMap.get(answer.questionId());
+      if (question == null) continue;
+
+      String correctLabel = resolveCorrectChoice(question.getId());
+      boolean isCorrect = Objects.equals(correctLabel, answer.label());
+      if (isCorrect) correctCount++; else wrongIds.add(question.getId());
+
+      String dbExplanation = Optional.ofNullable(question.getSolutionText()).orElse("");
+      String aiExplanation = isCorrect ? "" :
+          aiExplanationService.explainWrongForMCQ(answer.label(), correctLabel, question);
+
+      items.add(new WrittenDtos.McqSubmitItem(
+          question.getId(),
+          isCorrect,
+          correctLabel,
+          dbExplanation,
+          aiExplanation
+      ));
+
+      Map<String, Object> answerPayload = new HashMap<>();
+      answerPayload.put("answer", answer.label());
+      answerPayload.put("correctLabel", correctLabel);
+      answerPayload.put("correct", isCorrect);
+      answerPayload.put("submittedAt", Instant.now().toString());
+      if (!aiExplanation.isBlank()) answerPayload.put("aiExplain", aiExplanation);
+
+      StudySessionItem item = sessionManager.upsertItem(
+          session,
+          question.getId(),
+          baseOrder + idx + 1,
+          toJson(answerPayload),
+          isCorrect,
+          isCorrect ? 100 : 0,
+          aiExplanation.isBlank() ? null : toJson(Map.of("explain", aiExplanation))
+      );
+
+      persistUserAnswer(req.userId(), question, answer.label(), isCorrect, 100, session, item, "REVIEW_MCQ");
+    }
+
+    boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
+
+    Map<String, Object> reviewMeta = new HashMap<>();
+    reviewMeta.put("total", req.answers().size());
+    reviewMeta.put("correct", correctCount);
+    reviewMeta.put("completed", allCorrect);
+    reviewMeta.put("wrongQuestionIds", wrongIds);
+    reviewMeta.put("lastSubmittedAt", Instant.now().toString());
+    sessionManager.saveStepMeta(session, "review", reviewMeta);
+
+    if (allCorrect) {
+      double scorePct = req.answers().isEmpty() ? 0.0 : (correctCount * 100.0) / req.answers().size();
+      sessionManager.closeSession(session, scorePct, Map.of("reviewScorePct", scorePct));
+    } else {
+      sessionManager.updateStatus(session, "OPEN");
+    }
+
+    return new FlowDtos.StepEnvelope<>(
+        session.getId(),
+        "REVIEW",
+        "REVIEW_SET",
+        allCorrect ? "COMPLETE" : "IN_PROGRESS",
+        allCorrect ? "REVIEW_SUMMARY" : "REVIEW_SET",
+        sessionManager.loadMeta(session),
+        new WrittenDtos.McqSubmitResp(req.answers().size(), correctCount, items, wrongIds)
+    );
+  }
+
+  /* ========================= 요약 ========================= */
+
+  @Transactional(readOnly = true)
+  public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(String userId, Long topicId) {
+    StudySession session = sessionManager.latestMicroSession(userId, topicId).orElse(null);
+
+    int miniTotal = 0;
+    int miniCorrect = 0;
+    boolean miniPassed = false;
+
+    int mcqTotal = 0;
+    int mcqCorrect = 0;
+    boolean mcqCompleted = false;
+
+    List<String> weakTags = List.of();
+    Map<String, Object> meta = Map.of();
+    Long sessionId = null;
+
+    if (session != null) {
+      sessionId = session.getId();
+      Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+      Map<String, Object> mcqMeta = sessionManager.loadStepMeta(session, "mcq");
+
+      miniTotal = readInt(miniMeta, "total");
+      miniCorrect = readInt(miniMeta, "correct");
+      miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+
+      mcqTotal = readInt(mcqMeta, "total");
+      mcqCorrect = readInt(mcqMeta, "correct");
+      mcqCompleted = Boolean.TRUE.equals(mcqMeta.get("completed"));
+
+      meta = sessionManager.loadMeta(session);
+
+      List<UserAnswer> sessionAnswers = userAnswerRepository.findByUserIdAndSessionId(userId, sessionId).stream()
+          .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
+          .toList();
+      Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
+      Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
+          .filter(q -> Objects.equals(q.getTopicId(), topicId))
+          .collect(Collectors.toMap(Question::getId, q -> q));
+      List<UserAnswer> answers = sessionAnswers.stream()
+          .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
+          .toList();
+      weakTags = computeWeakTags(answers, questionCache);
+    }
+
+    int totalSolved = miniTotal + mcqTotal;
+    int totalCorrect = miniCorrect + mcqCorrect;
+    boolean completed = miniPassed && mcqCompleted;
+
+    String summary = aiExplanationService.summarizeWritten(
+        topicRepository.findById(topicId).map(Topic::getTitle).orElse(""),
+        totalSolved,
+        totalCorrect,
+        weakTags
+    );
+
+    WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
+        miniTotal,
+        miniCorrect,
+        miniPassed,
+        mcqTotal,
+        mcqCorrect,
+        summary,
+        completed
+    );
+
+    String status;
+    if (session == null) {
+      status = "NOT_STARTED";
+    } else {
+      status = completed ? "COMPLETE" : "IN_PROGRESS";
+    }
+
+    return new FlowDtos.StepEnvelope<>(
+        sessionId,
+        "MICRO",
+        "MICRO_SUMMARY",
+        status,
+        null,
+        meta,
+        payload
+    );
+  }
+
+  @Transactional(readOnly = true)
+  public WrongRecapDtos.WrongRecapSet wrongRecapBySession(String userId, Long sessionId, String stepCode) {
+    StudySession session = sessionManager.getSession(sessionId);
+    if (!session.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+
+    String stepKey = mapStepKey(stepCode);
+    List<Long> questionIds = sessionManager.wrongQuestionIds(sessionId, stepKey);
+    if (questionIds.isEmpty()) {
+      return new WrongRecapDtos.WrongRecapSet(List.of());
+    }
+
+    Map<Long, Question> questionCache = questionRepository.findAllById(questionIds).stream()
+        .filter(q -> q.getMode() == session.getExamMode())
+        .collect(Collectors.toMap(Question::getId, q -> q));
+    Map<Long, UserAnswer> latestAnswers = latestAnswerMap(userId);
+
+    List<WrongRecapDtos.WrongRecapSet.Item> items = questionIds.stream()
+        .map(questionCache::get)
+        .filter(Objects::nonNull)
+        .map(question -> toWrongRecapItem(question, latestAnswers))
+        .toList();
+    return new WrongRecapDtos.WrongRecapSet(items);
+  }
+
+  /* ========================= Wrong Recap ========================= */
+
+  @Transactional(readOnly = true)
+  public WrongRecapDtos.WrongRecapSet wrongRecap(Long topicId, String userId, int limit) {
+    List<UserAnswer> wrongAnswers = userAnswerRepository.findByUserId(userId).stream()
+        .filter(ans -> Boolean.FALSE.equals(ans.getCorrect()))
+        .sorted(Comparator.comparing(UserAnswer::getAnsweredAt).reversed())
+        .toList();
+
+    Set<Long> answerQuestionIds = wrongAnswers.stream()
+        .map(UserAnswer::getQuestionId)
+        .collect(Collectors.toSet());
+    Map<Long, Question> questionCache = questionRepository.findByIdIn(answerQuestionIds).stream()
+        .filter(q -> Objects.equals(q.getTopicId(), topicId))
+        .collect(Collectors.toMap(Question::getId, q -> q));
+    Map<Long, UserAnswer> latestAnswers = latestAnswerMap(userId);
+
+    LinkedHashSet<Long> questionIds = new LinkedHashSet<>();
+    for (UserAnswer ans : wrongAnswers) {
+      if (questionCache.containsKey(ans.getQuestionId())) {
+        questionIds.add(ans.getQuestionId());
+        if (questionIds.size() >= Math.max(limit, 50)) break;
+  }
+}
+
+    List<WrongRecapDtos.WrongRecapSet.Item> items = questionIds.stream()
+        .map(questionCache::get)
+        .filter(Objects::nonNull)
+        .map(question -> toWrongRecapItem(question, latestAnswers))
+        .limit(limit)
+        .toList();
+
+    return new WrongRecapDtos.WrongRecapSet(items);
+  }
+
+  @Transactional(readOnly = true)
+  public WrongRecapDtos.WrongRecapSet wrongRecapByIds(String ids, String userId) {
+    List<Long> questionIds = Arrays.stream(ids.split(","))
         .map(String::trim)
-        .filter(s -> !s.isBlank())
+        .filter(s -> !s.isEmpty())
         .map(Long::valueOf)
         .distinct()
-        .limit(200)
         .toList();
 
-    if (qids.isEmpty()) return new WrongRecapSet(List.of());
+    Map<Long, UserAnswer> latestAnswers = latestAnswerMap(userId);
+    List<WrongRecapDtos.WrongRecapSet.Item> items = questionRepository.findAllById(questionIds).stream()
+        .map(question -> toWrongRecapItem(question, latestAnswers))
+        .toList();
 
-    Map<Long, Question> qm = questionRepo.findAllById(qids).stream()
-        .collect(Collectors.toMap(Question::getId, it -> it));
-
-    Map<Long, String> myLatestAns = new HashMap<>();
-    if (userId != null && !userId.isBlank()) {
-      answerRepo.findAll().stream()
-          .filter(a -> Objects.equals(a.getUserId(), userId))
-          .filter(a -> qids.contains(a.getQuestionId()))
-          .collect(Collectors.groupingBy(UserAnswer::getQuestionId,
-              Collectors.maxBy(Comparator.comparing(UserAnswer::getCreatedAt))))
-          .forEach((qid, opt) -> myLatestAns.put(qid, opt.map(UserAnswer::getAnswerText).orElse("")));
-    }
-
-    List<WrongRecapSet.Item> items = new ArrayList<>();
-    for (Long qid : qids) {
-      Question q = qm.get(qid);
-      if (q == null) continue;
-
-      String correctAns;
-      switch (q.getType()) {
-        case OX -> correctAns = String.valueOf(q.getOxAnswer());
-        case MCQ -> {
-          String corr = choiceRepo.findByQuestionId(q.getId()).stream()
-              .filter(QuestionChoice::isCorrect)
-              .map(QuestionChoice::getLabel)
-              .findFirst().orElse("");
-          correctAns = corr;
-        }
-        default -> correctAns = "";
-      }
-
-      String myAns = myLatestAns.getOrDefault(qid, "");
-
-      items.add(new WrongRecapSet.Item(
-          q.getId(), q.getType().name(), nzs(q.getText()),
-          nzs(myAns), correctAns, nzs(q.getExplanation()), q.getImageUrl()
-      ));
-    }
-
-    return new WrongRecapSet(items);
-  }
-
-  /* ========================= 유틸 ========================= */
-  private static <T> T require(T v, String msg) { if (v == null) throw new NoSuchElementException(msg); return v; }
-  private static String nzs(String s) { return (s == null) ? "" : s; }
-  private static int nz(Integer v) { return v == null ? 0 : v; }
-
-  private int computeStreakDays(String userId) {
-    ZoneId KST = ZoneId.of("Asia/Seoul");
-    Set<LocalDate> days = answerRepo.findAll().stream()
-        .filter(a -> Objects.equals(a.getUserId(), userId))
-        .map(a -> LocalDateTime.ofInstant(a.getCreatedAt(), KST).toLocalDate())
-        .collect(Collectors.toSet());
-    if (days.isEmpty()) return 0;
-
-    int streak = 0;
-    LocalDate cur = LocalDate.now(KST);
-    while (days.contains(cur)) { streak++; cur = cur.minusDays(1); }
-    return streak;
+    return new WrongRecapDtos.WrongRecapSet(items);
   }
 
   /* ========================= 즉시 채점 ========================= */
-  @Transactional
-  public MiniGradeOneResp gradeOneMini(MiniGradeOneReq req) {
-    MiniSubmitReq batch = new MiniSubmitReq(
+
+  public WrittenDtos.MiniGradeOneResp gradeOneMini(WrittenDtos.MiniGradeOneReq req) {
+    FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> envelope = submitMini(new WrittenDtos.MiniSubmitReq(
         req.userId(),
         req.topicId(),
-        List.of(new MiniAnswer(req.questionId(), req.answer()))
-    );
-    MiniSubmitResp r = submitMini(batch);
-    MiniSubmitItem item = r.items().isEmpty()
-        ? new MiniSubmitItem(req.questionId(), false, "", "")
-        : r.items().get(0);
-    return new MiniGradeOneResp(item.correct(), item.explanation());
+        List.of(new WrittenDtos.MiniAnswer(req.questionId(), req.answer()))
+    ));
+
+    WrittenDtos.MiniSubmitResp resp = envelope.payload();
+    WrittenDtos.MiniSubmitItem item = resp.items().isEmpty()
+        ? new WrittenDtos.MiniSubmitItem(req.questionId(), false, "", "")
+        : resp.items().get(0);
+
+    return new WrittenDtos.MiniGradeOneResp(item.correct(), item.explanation());
   }
 
-  @Transactional
-  public McqGradeOneResp gradeOneMcq(McqGradeOneReq req) {
-    McqSubmitReq batch = new McqSubmitReq(
+  public WrittenDtos.McqGradeOneResp gradeOneMcq(WrittenDtos.McqGradeOneReq req) {
+    FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> envelope = submitMcq(new WrittenDtos.McqSubmitReq(
         req.userId(),
         req.topicId(),
-        List.of(new McqAnswer(req.questionId(), req.label()))
-    );
-    McqSubmitResp r = submitMcq(batch);
+        List.of(new WrittenDtos.McqAnswer(req.questionId(), req.label()))
+    ));
 
-    McqSubmitItem item = r.items().isEmpty()
-        ? new McqSubmitItem(req.questionId(), false, "", "", "")
-        : r.items().get(0);
+    WrittenDtos.McqSubmitResp resp = envelope.payload();
+    WrittenDtos.McqSubmitItem item = resp.items().isEmpty()
+        ? new WrittenDtos.McqSubmitItem(req.questionId(), false, "", "", "")
+        : resp.items().get(0);
 
-    return new McqGradeOneResp(
+    return new WrittenDtos.McqGradeOneResp(
         item.correct(),
         item.correctLabel(),
         item.explanation(),
         item.aiExplanation()
     );
+  }
+
+  /* ========================= 내부 유틸 ========================= */
+
+  private Map<Long, Question> fetchQuestions(List<Long> ids, QuestionType expectedType) {
+    List<Question> questions = questionRepository.findByIdIn(ids);
+    return questions.stream()
+        .filter(q -> q.getMode() == ExamMode.WRITTEN && q.getType() == expectedType)
+        .collect(Collectors.toMap(Question::getId, q -> q));
+  }
+
+  private List<WrittenDtos.McqChoice> loadChoices(Long questionId) {
+    return choiceRepository.findByQuestionId(questionId).stream()
+        .sorted(Comparator.comparing(QuestionChoice::getLabel))
+        .map(choice -> new WrittenDtos.McqChoice(choice.getLabel(), choice.getContent()))
+        .toList();
+  }
+
+  private List<ReviewDtos.ReviewQuestion.Choice> loadReviewChoices(Long questionId) {
+    return choiceRepository.findByQuestionId(questionId).stream()
+        .sorted(Comparator.comparing(QuestionChoice::getLabel))
+        .map(choice -> new ReviewDtos.ReviewQuestion.Choice(choice.getLabel(), choice.getContent()))
+        .toList();
+  }
+
+  private String resolveCorrectChoice(Long questionId) {
+    return choiceRepository.findByQuestionId(questionId).stream()
+        .filter(QuestionChoice::isCorrect)
+        .map(QuestionChoice::getLabel)
+        .findFirst()
+        .orElse("");
+  }
+
+  private void persistUserAnswer(String userId,
+                                 Question question,
+                                 String answerText,
+                                 boolean correct,
+                                 int score,
+                                 StudySession session,
+                                 StudySessionItem item,
+                                 String source) {
+    UserAnswer userAnswer = UserAnswer.builder()
+        .userId(userId)
+        .questionId(question.getId())
+        .examMode(question.getMode())
+        .questionType(question.getType())
+        .answeredAt(Instant.now())
+        .userAnswerJson(toJson(Map.of("answer", answerText, "correct", correct, "score", score)))
+        .correct(correct)
+        .score(score)
+        .source(source)
+        .sessionId(session.getId())
+        .sessionItemId(item.getId())
+        .build();
+    userAnswerRepository.save(userAnswer);
+  }
+
+  private void updateProgress(String userId, Long topicId, ExamMode mode, boolean correct, int score) {
+    UserProgress progress = userProgressRepository.findByUserIdAndTopicId(userId, topicId)
+        .orElseGet(() -> UserProgress.builder()
+            .userId(userId)
+            .topicId(topicId)
+            .writtenDoneCnt(0)
+            .practicalDoneCnt(0)
+            .writtenAccuracy(0.0)
+            .practicalAvgScore(0.0)
+            .updatedAt(Instant.now())
+            .build());
+
+    if (mode == ExamMode.WRITTEN) {
+      int total = Optional.ofNullable(progress.getWrittenDoneCnt()).orElse(0);
+      double acc = Optional.ofNullable(progress.getWrittenAccuracy()).orElse(0.0);
+      progress.setWrittenDoneCnt(total + 1);
+      double newAcc = ((acc * total) + (correct ? 100 : 0)) / (total + 1);
+      progress.setWrittenAccuracy(Math.round(newAcc * 10.0) / 10.0);
+    } else {
+      int total = Optional.ofNullable(progress.getPracticalDoneCnt()).orElse(0);
+      double avg = Optional.ofNullable(progress.getPracticalAvgScore()).orElse(0.0);
+      progress.setPracticalDoneCnt(total + 1);
+      double newAvg = ((avg * total) + score) / (total + 1);
+      progress.setPracticalAvgScore(Math.round(newAvg * 10.0) / 10.0);
+    }
+    progress.setLastStudiedAt(Instant.now());
+    progress.setUpdatedAt(Instant.now());
+    userProgressRepository.save(progress);
+  }
+
+  private void pushProgressHook(String userId, ExamMode mode, QuestionType type, boolean correct, int score, Long questionId) {
+    List<String> tags = questionTagRepository.findTagsByQuestionId(questionId);
+    ProgressHookClient.SubmitPayload payload = new ProgressHookClient.SubmitPayload(
+        userId,
+        mode.name(),
+        type.name(),
+        correct,
+        score,
+        tags,
+        "STUDY_SERVICE"
+    );
+    try {
+      progressHookClient.submit(payload);
+    } catch (Exception ignored) {
+      // hook failure is non-blocking
+    }
+  }
+
+  private WrongRecapDtos.WrongRecapSet.Item toWrongRecapItem(Question question, Map<Long, UserAnswer> latestAnswers) {
+    String stem = Optional.ofNullable(question.getStem()).orElse("");
+    String solution = Optional.ofNullable(question.getSolutionText()).orElse("");
+    String correctAnswer = switch (question.getType()) {
+      case OX -> Optional.ofNullable(question.getAnswerKey()).orElse("");
+      case MCQ -> resolveCorrectChoice(question.getId());
+      default -> "";
+    };
+
+    String userAnswer = Optional.ofNullable(latestAnswers.get(question.getId()))
+        .map(ans -> Optional.ofNullable(ans.getUserAnswerJson()).orElse("{}"))
+        .orElse("{}");
+
+    return new WrongRecapDtos.WrongRecapSet.Item(
+        question.getId(),
+        question.getType().name(),
+        stem,
+        userAnswer,
+        correctAnswer,
+        solution,
+        question.getImageUrl()
+    );
+  }
+
+  private List<String> computeWeakTags(List<UserAnswer> answers, Map<Long, Question> questionCache) {
+    Map<Long, List<String>> tagCache = new HashMap<>();
+    Map<String, int[]> stats = new HashMap<>();
+
+    for (UserAnswer answer : answers) {
+      Question question = questionCache.get(answer.getQuestionId());
+      if (question == null) continue;
+      List<String> tags = tagCache.computeIfAbsent(question.getId(),
+          id -> questionTagRepository.findTagsByQuestionId(id));
+      for (String tag : tags) {
+        int[] values = stats.computeIfAbsent(tag, t -> new int[2]);
+        values[0] += 1;
+        if (Boolean.TRUE.equals(answer.getCorrect())) values[1] += 1;
+      }
+    }
+
+    return stats.entrySet().stream()
+        .filter(e -> e.getValue()[0] >= 3) // 최소 시도 3회
+        .filter(e -> e.getValue()[1] * 1.0 / e.getValue()[0] < 0.7)
+        .map(Map.Entry::getKey)
+        .sorted()
+        .toList();
+  }
+
+  private String toJson(Map<String, Object> payload) {
+    try {
+      return objectMapper.writeValueAsString(payload);
+    } catch (JsonProcessingException e) {
+      return "{}";
+    }
+  }
+
+  private Map<Long, UserAnswer> latestAnswerMap(String userId) {
+    return userAnswerRepository.findByUserId(userId).stream()
+        .collect(Collectors.groupingBy(
+            UserAnswer::getQuestionId,
+            Collectors.collectingAndThen(
+                Collectors.maxBy(Comparator.comparing(UserAnswer::getAnsweredAt)),
+                opt -> opt.orElse(null)
+            )
+        ));
+  }
+
+  private static class ConceptMapper {
+    private static final ObjectMapper mapper = new ObjectMapper();
+
+    private static List<WrittenDtos.ConceptResp.Section> toSections(String json) {
+      if (json == null || json.isBlank()) return List.of();
+      try {
+        var root = mapper.readTree(json);
+        var sectionsNode = root.path("sections");
+        if (!sectionsNode.isArray()) return List.of();
+        List<WrittenDtos.ConceptResp.Section> sections = new ArrayList<>();
+        sectionsNode.forEach(node -> sections.add(new WrittenDtos.ConceptResp.Section(
+            node.path("orderNo").asInt(),
+            node.path("subCode").asText(""),
+            node.path("title").asText(""),
+            node.path("importance").asInt(0),
+            toBlocks(node.path("blocks"))
+        )));
+        sections.sort(Comparator.comparing(WrittenDtos.ConceptResp.Section::orderNo));
+        return sections;
+      } catch (Exception e) {
+        return List.of();
+      }
+    }
+
+    private static List<WrittenDtos.ConceptResp.Block> toBlocks(com.fasterxml.jackson.databind.JsonNode blocksNode) {
+      if (!blocksNode.isArray()) return List.of();
+      List<WrittenDtos.ConceptResp.Block> blocks = new ArrayList<>();
+      blocksNode.forEach(block -> blocks.add(new WrittenDtos.ConceptResp.Block(
+          block.path("type").asText(null),
+          block.path("text").asText(null),
+          toList(block.path("items")),
+          block.path("url").asText(null),
+          block.path("alt").asText(null),
+          block.path("caption").asText(null),
+          toList(block.path("headers")),
+          toMatrix(block.path("rows"))
+      )));
+      return blocks;
+    }
+
+    private static List<String> toList(com.fasterxml.jackson.databind.JsonNode node) {
+      if (!node.isArray()) return List.of();
+      List<String> list = new ArrayList<>();
+      node.forEach(n -> list.add(n.asText()));
+      return list;
+    }
+
+    private static List<List<String>> toMatrix(com.fasterxml.jackson.databind.JsonNode node) {
+      if (!node.isArray()) return List.of();
+      List<List<String>> rows = new ArrayList<>();
+      node.forEach(row -> {
+        List<String> cols = new ArrayList<>();
+        row.forEach(col -> cols.add(col.asText()));
+        rows.add(cols);
+      });
+      return rows;
+    }
+  }
+
+  private int readInt(Map<String, Object> meta, String key) {
+    Object value = meta.get(key);
+    if (value instanceof Number number) {
+      return number.intValue();
+    }
+    if (value instanceof String str && !str.isBlank()) {
+      try {
+        return Integer.parseInt(str);
+      } catch (NumberFormatException ignored) {
+      }
+    }
+    return 0;
+  }
+
+
+  private String mapStepKey(String stepCode) {
+    if (stepCode == null || stepCode.isBlank()) {
+      return "mcq";
+    }
+    return switch (stepCode) {
+      case "MICRO_MINI" -> "mini";
+      case "MICRO_MCQ" -> "mcq";
+      case "REVIEW_SET", "REVIEW_MCQ" -> "review";
+      default -> "mcq";
+    };
   }
 }

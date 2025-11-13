@@ -9,4 +9,6 @@ import java.util.List;
 public interface TopicRepository extends JpaRepository<Topic, Long> {
   List<Topic> findByParentId(Long parentId);
   List<Topic> findByExamMode(ExamMode examMode);
+  List<Topic> findByCertId(Long certId);
+  long countByCertId(Long certId);
 }

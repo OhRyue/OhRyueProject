@@ -55,6 +55,21 @@ public class PracticalDtos {
             List<Long> wrongQuestionIds         // 방금 세트의 오답 문제 ID들(score<60)
     ) {}
 
+    @Schema(description = "실기 리뷰 제출 요청")
+    public record PracticalReviewSubmitReq(
+            String userId,
+            Long rootTopicId,
+            List<PracticalAnswer> answers
+    ) {}
+
+    @Schema(description = "실기 리뷰 제출 응답")
+    public record PracticalReviewSubmitResp(
+            int total,
+            int avgScore,
+            List<PracticalSubmitItem> items,
+            List<Long> wrongQuestionIds
+    ) {}
+
     /* ---------- 즉시 채점 ---------- */
 
     // 실기 즉시 채점 요청

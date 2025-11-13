@@ -4,6 +4,7 @@ import com.OhRyue.certpilot.study.config.RecommendationProperties;
 import com.OhRyue.certpilot.study.domain.AnswerLog;
 import com.OhRyue.certpilot.study.domain.Question;
 import com.OhRyue.certpilot.study.domain.enums.Difficulty;
+import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.domain.enums.QuestionType;
 import com.OhRyue.certpilot.study.dto.RecommendationDtos.*;
 import com.OhRyue.certpilot.study.repository.AnswerLogRepository;
@@ -97,9 +98,11 @@ public class RecommendationService {
     // 3) 기간/난이도/타입 필터
     Instant after = Instant.now().minus(recentD, ChronoUnit.DAYS);
 
-    List<Question> pool = qRepo.findByIdInAndDifficultyInAndTypeIn(
-        candidates, difficulties, List.of(QuestionType.MCQ)
-    );
+    List<Question> pool = qRepo.findByIdIn(candidates).stream()
+        .filter(q -> q.getMode() == ExamMode.WRITTEN)
+        .filter(q -> q.getType() == QuestionType.MCQ)
+        .filter(q -> difficulties.contains(q.getDifficulty()))
+        .toList();
     if (pool.isEmpty()) return new TagQuizSet(List.of());
 
     // 4) 캐시: 문제별 태그
@@ -202,9 +205,14 @@ public class RecommendationService {
     // 12) DTO 변환(보기 포함)
     List<QuizQ> out = finalSet.stream().map(q -> {
       var choices = choiceRepo.findByQuestionId(q.getId()).stream()
-          .map(c -> new QuizQ.Choice(c.getLabel(), c.getText()))
+          .map(c -> new QuizQ.Choice(c.getLabel(), c.getContent()))
           .toList();
-      return new QuizQ(q.getId(), q.getText(), q.getDifficulty().name(), choices);
+      return new QuizQ(
+          q.getId(),
+          Optional.ofNullable(q.getStem()).orElse(""),
+          Optional.ofNullable(q.getDifficulty()).map(Enum::name).orElse(Difficulty.NORMAL.name()),
+          choices
+      );
     }).toList();
 
     return new TagQuizSet(out);

@@ -4,11 +4,16 @@ import com.OhRyue.certpilot.study.domain.UserAnswer;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.time.Instant;
 import java.util.List;
 
 public interface UserAnswerRepository extends JpaRepository<UserAnswer, Long> {
 
   List<UserAnswer> findByUserId(String userId);
+
+  List<UserAnswer> findByUserIdAndAnsweredAtAfter(String userId, Instant answeredAt);
+
+  List<UserAnswer> findByUserIdAndSessionId(String userId, Long sessionId);
 
   /* 태그별 성취: tag, correct, total */
   @Query("""

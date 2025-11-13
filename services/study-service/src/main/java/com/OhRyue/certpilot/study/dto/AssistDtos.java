@@ -18,13 +18,15 @@ public class AssistDtos {
   @Schema(description = "카테고리(주제) 기반 시작 요청: topicIds 범위에서 n문제")
   public record CategoryStartReq(
       @Schema(description = "출제 범위 토픽 ID 목록") List<Long> topicIds,
-      @Schema(description = "출제 문항 수(권장: 10/20/50)") int count
+      @Schema(description = "출제 문항 수(권장: 10/20/50)") int count,
+      @Schema(description = "대상 사용자 ID", nullable = true) String userId
   ) {}
 
   @Schema(description = "난이도 기반 시작 요청: 선택 난이도에서 n문제")
   public record DifficultyStartReq(
       @Schema(description = "난이도(EASY|NORMAL|HARD)") @NotNull Difficulty difficulty,
-      @Schema(description = "출제 문항 수(권장: 10/20/50)") int count
+      @Schema(description = "출제 문항 수(권장: 10/20/50)") int count,
+      @Schema(description = "대상 사용자 ID", nullable = true) String userId
   ) {}
 
   @Schema(description = "약점 보완 시작 요청: 최근 통계로 약한 토픽/난이도를 추출해 n문제")

@@ -1,13 +1,23 @@
 package com.OhRyue.certpilot.study.domain;
 
+import com.OhRyue.certpilot.study.domain.enums.ExamMode;
+import com.OhRyue.certpilot.study.domain.enums.QuestionType;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
 
 @Entity
-@Table(name = "user_answer")
-@Getter @Setter
+@Table(
+    name = "user_answer",
+    indexes = {
+        @Index(name = "ix_uans_user_time", columnList = "user_id, answered_at"),
+        @Index(name = "ix_uans_question_time", columnList = "question_id, answered_at"),
+        @Index(name = "ix_uans_user_question_time", columnList = "user_id, question_id, answered_at")
+    }
+)
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -23,22 +33,39 @@ public class UserAnswer {
   @Column(name = "question_id", nullable = false)
   private Long questionId;
 
-  @Column(nullable = false)
-  private boolean correct;       // 정오 표기 (실기는 score로 PASS/FAIL 판정)
+  @Enumerated(EnumType.STRING)
+  @Column(name = "exam_mode", nullable = false, length = 16)
+  private ExamMode examMode;
 
-  @Column(nullable = true)
-  private Integer score;         // 실기 점수(0~100). 필기는 null 가능
+  @Enumerated(EnumType.STRING)
+  @Column(name = "question_type", nullable = false, length = 16)
+  private QuestionType questionType;
 
-  @Column(name = "answer_text", nullable = true, length = 2000)
-  private String answerText;     // 사용자가 입력/선택한 답(라벨/서술)
+  @Column(name = "answered_at", nullable = false)
+  private Instant answeredAt;
 
-  @Column(name = "created_at", nullable = false)
-  private Instant createdAt;
+  @Column(name = "user_answer_json", columnDefinition = "JSON")
+  private String userAnswerJson;
+
+  @Column(name = "is_correct")
+  private Boolean correct;
+
+  @Column(name = "score")
+  private Integer score;
+
+  @Column(name = "source", length = 30)
+  private String source;
+
+  @Column(name = "session_id")
+  private Long sessionId;
+
+  @Column(name = "session_item_id")
+  private Long sessionItemId;
 
   @PrePersist
-  void prePersist() {
-    if (createdAt == null) {
-      createdAt = Instant.now();
+  void onCreate() {
+    if (answeredAt == null) {
+      answeredAt = Instant.now();
     }
   }
 }

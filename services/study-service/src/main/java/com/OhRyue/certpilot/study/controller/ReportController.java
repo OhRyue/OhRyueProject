@@ -21,6 +21,13 @@ public class ReportController {
     return report.summary(userId);
   }
 
+  @Operation(summary = "학습 진행 카드 요약")
+  @GetMapping("/progress-card")
+  public ProgressCardResp progressCard(@RequestParam String userId,
+                                       @RequestParam Long certId) {
+    return report.progressCard(userId, certId);
+  }
+
   @Operation(summary = "최근 학습 결과(일자별)")
   @GetMapping("/recent-daily")
   public RecentResultsResp recent(@RequestParam String userId,

@@ -16,4 +16,5 @@ public class LlmProperties {
   private String baseUrl = "http://llm-server:8080";
   private String apiKey = "";
   private int timeoutMs = 3000;
+  private String model = "gpt-4o-mini";
 }

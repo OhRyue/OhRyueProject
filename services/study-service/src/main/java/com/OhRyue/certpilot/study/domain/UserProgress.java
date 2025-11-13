@@ -1,21 +1,25 @@
 package com.OhRyue.certpilot.study.domain;
 
-import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
 
-@Entity @Getter @Setter
-@NoArgsConstructor @AllArgsConstructor @Builder
+@Entity
 @Table(
     name = "user_progress",
-    indexes = {
-        @Index(name = "idx_user_topic", columnList = "user_id,topic_id")
-    }
+    uniqueConstraints = @UniqueConstraint(name = "uq_progress_user_topic", columnNames = {"user_id", "topic_id"}),
+    indexes = @Index(name = "ix_progress_updated", columnList = "updated_at")
 )
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class UserProgress {
-  @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
   @Column(name = "user_id", nullable = false, length = 100)
@@ -24,25 +28,36 @@ public class UserProgress {
   @Column(name = "topic_id", nullable = false)
   private Long topicId;
 
-  @Enumerated(EnumType.STRING)
-  @Column(name = "exam_mode", length = 20)
-  private ExamMode examMode;
+  @Column(name = "written_done_cnt", nullable = false)
+  private Integer writtenDoneCnt;
 
-  @Column(name = "mini_total")
-  private int miniTotal;      // 출제 수(미니체크)
+  @Column(name = "practical_done_cnt", nullable = false)
+  private Integer practicalDoneCnt;
 
-  @Column(name = "mini_correct")
-  private int miniCorrect;    // 정답 수(미니체크)
+  @Column(name = "written_accuracy", nullable = false)
+  private Double writtenAccuracy;
 
-  @Column(name = "mini_passed")
-  private boolean miniPassed; // 모두 정답(통과)
+  @Column(name = "practical_avg_score", nullable = false)
+  private Double practicalAvgScore;
 
-  @Column(name = "mcq_total")
-  private int mcqTotal;       // 객관식 출제 수
+  @Column(name = "last_studied_at")
+  private Instant lastStudiedAt;
 
-  @Column(name = "mcq_correct")
-  private int mcqCorrect;     // 객관식 정답 수
-
-  @Column(name = "updated_at")
+  @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
+
+  @PrePersist
+  void onCreate() {
+    Instant now = Instant.now();
+    if (updatedAt == null) updatedAt = now;
+    if (writtenDoneCnt == null) writtenDoneCnt = 0;
+    if (practicalDoneCnt == null) practicalDoneCnt = 0;
+    if (writtenAccuracy == null) writtenAccuracy = 0.0;
+    if (practicalAvgScore == null) practicalAvgScore = 0.0;
+  }
+
+  @PreUpdate
+  void onUpdate() {
+    updatedAt = Instant.now();
+  }
 }

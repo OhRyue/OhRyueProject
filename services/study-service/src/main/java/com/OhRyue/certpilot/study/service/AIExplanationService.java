@@ -3,7 +3,7 @@ package com.OhRyue.certpilot.study.service;
 import com.OhRyue.certpilot.study.domain.Question;
 import com.OhRyue.certpilot.study.domain.QuestionChoice;
 import com.OhRyue.certpilot.study.repository.QuestionChoiceRepository;
-import com.OhRyue.certpilot.study.service.llm.LlmClient;
+import com.OhRyue.certpilot.study.service.llm.AiClient;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -16,183 +16,210 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AIExplanationService {
 
-  private final LlmClient llm;
-  private final QuestionChoiceRepository choiceRepo;
-
-  // 공통 이름(레지스트리 키)
   private static final String CB = "llm";
+  private static final String FALLBACK_EXPLAIN = "오답 해설을 불러오지 못했습니다. 정답 해설을 먼저 확인하세요.";
+  private static final String FALLBACK_GRADE_MSG = "채점 실패 — 재시도 바랍니다.";
 
-  /* ==== OX 오답 해설 ==== */
-  @Retry(name = CB, fallbackMethod = "fallbackExplainWrongForOX")
-  @CircuitBreaker(name = CB, fallbackMethod = "fallbackExplainWrongForOX")
-  public String explainWrongForOX(String userAnswer, Question q) {
-    var req = new LlmClient.LlmExplainReq(
-        "WRITTEN", "OX", "ko-KR",
-        null, q.getId(), q.getTopicId(), Collections.emptyList(),
-        nzs(q.getText()), null,
-        userAnswer, String.valueOf(q.getOxAnswer()),
-        nzs(q.getExplanation()),
-        Map.of("tone","encouraging","bullet",true,"maxTokens",200),
-        Map.of("traceId", UUID.randomUUID().toString())
+  private final AiClient aiClient;
+  private final QuestionChoiceRepository choiceRepository;
+
+  /* ===================== 필기: OX 오답 해설 ===================== */
+  @Retry(name = CB, fallbackMethod = "fallbackExplainOx")
+  @CircuitBreaker(name = CB, fallbackMethod = "fallbackExplainOx")
+  public String explainWrongForOX(boolean userAnswer, Question question) {
+    AiClient.ExplainRequest request = new AiClient.ExplainRequest(
+        "WRITTEN",
+        "OX",
+        question.getStem(),
+        List.of(),
+        normalizeAnswerKey(question.getAnswerKey()),
+        userAnswer ? "O" : "X",
+        question.getSolutionText(),
+        Map.of(
+            "questionId", question.getId(),
+            "topicId", question.getTopicId()
+        )
     );
-    var resp = llm.explain(req);
-    return nzs(resp.explanation());
-  }
-  /* 표준 폴백(시그니처: 원본 파라미터 + Throwable) */
-  private String fallbackExplainWrongForOX(String userAnswer, Question q, Throwable t) {
-    return "오답 포인트: 핵심 개념을 다시 확인해보세요.";
+
+    AiClient.ExplainResponse response = aiClient.explain(request);
+    if (response == null) {
+      return FALLBACK_EXPLAIN;
+    }
+    return Optional.ofNullable(response.whyWrong()).filter(s -> !s.isBlank()).orElse(FALLBACK_EXPLAIN);
   }
 
-  /* ==== MCQ 오답 해설 ==== */
-  @Retry(name = CB, fallbackMethod = "fallbackExplainWrongForMCQ")
-  @CircuitBreaker(name = CB, fallbackMethod = "fallbackExplainWrongForMCQ")
-  public String explainWrongForMCQ(String userLabel, String correctLabel, Question q) {
-    List<LlmClient.Choice> choices = choiceRepo.findByQuestionId(q.getId()).stream()
+  private String fallbackExplainOx(boolean userAnswer, Question question, Throwable throwable) {
+    return FALLBACK_EXPLAIN;
+  }
+
+  /* ===================== 필기: MCQ 오답 해설 ===================== */
+  @Retry(name = CB, fallbackMethod = "fallbackExplainMcq")
+  @CircuitBreaker(name = CB, fallbackMethod = "fallbackExplainMcq")
+  public String explainWrongForMCQ(String userLabel, String correctLabel, Question question) {
+    List<AiClient.Choice> choices = choiceRepository.findByQuestionId(question.getId()).stream()
         .sorted(Comparator.comparing(QuestionChoice::getLabel))
-        .map(c -> new LlmClient.Choice(c.getLabel(), nzs(c.getText())))
+        .map(choice -> new AiClient.Choice(choice.getLabel(), choice.getContent()))
         .collect(Collectors.toList());
 
-    var req = new LlmClient.LlmExplainReq(
-        "WRITTEN", "MCQ", "ko-KR",
-        null, q.getId(), q.getTopicId(), Collections.emptyList(),
-        nzs(q.getText()), choices,
-        userLabel, correctLabel,
-        nzs(q.getExplanation()),
-        Map.of("tone","encouraging","bullet",true,"maxTokens",300),
-        Map.of("traceId", UUID.randomUUID().toString())
+    AiClient.ExplainRequest request = new AiClient.ExplainRequest(
+        "WRITTEN",
+        "MCQ",
+        question.getStem(),
+        choices,
+        correctLabel,
+        userLabel,
+        question.getSolutionText(),
+        Map.of(
+            "questionId", question.getId(),
+            "topicId", question.getTopicId()
+        )
     );
-    var resp = llm.explain(req);
-    return nzs(resp.explanation());
-  }
-  private String fallbackExplainWrongForMCQ(String userLabel, String correctLabel, Question q, Throwable t) {
-    return "오답 포인트: 선지의 차이를 비교해보세요.";
-  }
 
-  /* ==== 실기(주관식) 채점/해설 ==== */
-  @Retry(name = CB, fallbackMethod = "fallbackExplainAndScorePractical")
-  @CircuitBreaker(name = CB, fallbackMethod = "fallbackExplainAndScorePractical")
-  public PracticalResult explainAndScorePractical(String type, Question q, String userText) {
-    var req = new LlmClient.LlmExplainReq(
-        "PRACTICAL", type, "ko-KR",
-        null, q.getId(), q.getTopicId(), Collections.emptyList(),
-        nzs(q.getText()), null,
-        nzs(userText), null,
-        nzs(q.getExplanation()),
-        Map.of("tone","instructor","bullet",true,"maxTokens",400,"scoreRubric","0-100"),
-        Map.of("traceId", UUID.randomUUID().toString())
-    );
-    var resp = llm.explain(req);
-    Integer score = null;
-    if (resp != null && resp.confidence() != null) {
-      score = clamp((int)Math.round(resp.confidence() * 100.0));
+    AiClient.ExplainResponse response = aiClient.explain(request);
+    if (response == null) {
+      return FALLBACK_EXPLAIN;
     }
-    if (score == null) score = heuristicScore(q, userText);
-    String aiExpl = (resp != null && resp.explanation()!=null)
-        ? resp.explanation()
-        : "채점 근거: 핵심 키워드 일치/불일치를 기준으로 평가했습니다.";
-    return new PracticalResult(score, aiExpl);
-  }
-  private PracticalResult fallbackExplainAndScorePractical(String type, Question q, String userText, Throwable t) {
-    return new PracticalResult(heuristicScore(q, userText),
-        "AI 서버 응답 지연으로 간이 채점 결과를 제공합니다. 핵심 키워드 포함 여부를 기준으로 평가했습니다.");
+    return Optional.ofNullable(response.whyWrong()).filter(s -> !s.isBlank()).orElse(FALLBACK_EXPLAIN);
   }
 
-  /* ==== (수정) 필기 요약 ==== */
-  @Retry(name = CB, fallbackMethod = "fallbackSummarizeWrittenKorean")
-  @CircuitBreaker(name = CB, fallbackMethod = "fallbackSummarizeWrittenKorean")
-  public String summarizeWrittenKorean(String userId, Long topicId,
-                                       int miniTotal, int miniCorrect,
-                                       int mcqTotal, int mcqCorrect,
-                                       boolean completed, int streakDays) {
-    String prompt = """
-          당신은 정보처리기사 학습 코치입니다. 다음 지표를 바탕으로 한국어 2~4문장의 코칭 요약을 작성하세요.
-          - 모드: 필기(WRITTEN)
-          - 사용자: %s
-          - 토픽: %d
-          - 미니체크: %d/%d
-          - 객관식: %d/%d
-          - 완료 여부: %s
-          - 연속 학습: %d일
-          """.formatted(userId, topicId, miniCorrect, miniTotal, mcqCorrect, mcqTotal,
-        completed ? "완료" : "미완료", streakDays);
+  private String fallbackExplainMcq(String userLabel, String correctLabel, Question question, Throwable throwable) {
+    return FALLBACK_EXPLAIN;
+  }
 
-    var req = new LlmClient.LlmExplainReq(
-        "WRITTEN", "SUMMARY", "ko-KR",
-        userId, null, topicId, Collections.emptyList(),
-        prompt, null, null, null,
-        "요약과 한 줄 팁을 제공해 주세요.",
-        Map.of("tone","coach","bullet",false,"maxTokens",280),
-        Map.of("traceId", UUID.randomUUID().toString(), "task","written_summary")
+  /* ===================== 실기: 채점 + 해설 ===================== */
+  @Retry(name = CB, fallbackMethod = "fallbackGradePractical")
+  @CircuitBreaker(name = CB, fallbackMethod = "fallbackGradePractical")
+  public PracticalResult explainAndScorePractical(Question question, String userAnswerText) {
+    AiClient.GradeRequest request = new AiClient.GradeRequest(
+        question.getStem(),
+        question.getSolutionText(),
+        userAnswerText,
+        Map.of(
+            "questionId", question.getId(),
+            "topicId", question.getTopicId()
+        )
     );
-    var resp = llm.explain(req);
-    String text = (resp != null && resp.explanation()!=null) ? resp.explanation().trim() : "";
-    if (!text.isEmpty()) return clampLen(text, 600);
-    return fallbackSummarizeWrittenKorean(userId, topicId, miniTotal, miniCorrect, mcqTotal, mcqCorrect, completed, streakDays, null);
-  }
-  private String fallbackSummarizeWrittenKorean(String userId, Long topicId,
-                                                int miniTotal, int miniCorrect,
-                                                int mcqTotal, int mcqCorrect,
-                                                boolean completed, int streakDays, Throwable t) {
-    int denom = Math.max(1, miniTotal + mcqTotal);
-    int acc = Math.round((miniCorrect + mcqCorrect) * 100f / denom);
-    String tip = (acc >= 85) ? "정확도가 높습니다. 다음 세부항목으로 범위를 넓혀보세요. 💡"
-        : (acc >= 60) ? "오답이 잦은 태그를 중심으로 보조학습을 권합니다. 💡"
-        : "개념 → OX 재확인 후 쉬운 난이도로 문제 수를 줄여 집중해보세요. 💡";
-    return "오늘은 OX %d문제 중 %d개, 객관식 %d문제 중 %d개를 맞혔습니다. 연속 학습 %d일을 이어가고 있어요. %s"
-        .formatted(miniTotal, miniCorrect, mcqTotal, mcqCorrect, streakDays, tip);
+
+    AiClient.GradeResponse response = aiClient.grade(request);
+    if (response == null) {
+      int score = heuristicScore(question, userAnswerText);
+      return new PracticalResult(score, FALLBACK_GRADE_MSG, List.of());
+    }
+
+    int score = Optional.ofNullable(response.score()).orElse(heuristicScore(question, userAnswerText));
+    String explain = Optional.ofNullable(response.explain()).filter(s -> !s.isBlank()).orElse(FALLBACK_GRADE_MSG);
+    List<String> tips = Optional.ofNullable(response.tips()).orElse(List.of());
+
+    return new PracticalResult(clamp(score), explain, tips);
   }
 
-  /* ==== (유지) 실기 요약 ==== */
-  @Retry(name = CB, fallbackMethod = "fallbackSummarizePracticalKorean")
-  @CircuitBreaker(name = CB, fallbackMethod = "fallbackSummarizePracticalKorean")
-  public String summarizePracticalKorean(String userId, Long topicId,
-                                         int total, int avgScore, int streakDays) {
-    String prompt = """
-          당신은 정보처리기사 실기 학습 코치입니다. 아래 지표를 바탕으로 한국어 2~4문장 요약과 한 줄 팁을 작성하세요.
-          - 사용자: %s
-          - 토픽: %d
-          - 풀이 문항 수: %d
-          - 평균 점수(0~100): %d
-          - 연속 학습: %d일
-          """.formatted(userId, topicId, total, avgScore, streakDays);
+  private PracticalResult fallbackGradePractical(Question question, String userAnswerText, Throwable throwable) {
+    int score = heuristicScore(question, userAnswerText);
+    return new PracticalResult(score, FALLBACK_GRADE_MSG, List.of());
+  }
 
-    var req = new LlmClient.LlmExplainReq(
-        "PRACTICAL", "SUMMARY", "ko-KR",
-        userId, null, topicId, Collections.emptyList(),
-        prompt, null, null, null,
-        "요약과 한 줄 팁을 제공해 주세요.",
-        Map.of("tone","coach","bullet",false,"maxTokens",300),
-        Map.of("traceId", UUID.randomUUID().toString(), "task","practical_summary")
+  /* ===================== 필기 요약 ===================== */
+  @Retry(name = CB, fallbackMethod = "fallbackWrittenSummary")
+  @CircuitBreaker(name = CB, fallbackMethod = "fallbackWrittenSummary")
+  public String summarizeWritten(String topicName, int total, int correct, List<String> weakTags) {
+    double acc = total == 0 ? 0.0 : (correct * 100.0) / total;
+    AiClient.SummaryRequest request = new AiClient.SummaryRequest(
+        topicName,
+        Map.of("total", total, "correct", correct, "accPct", String.format(Locale.ROOT, "%.1f", acc)),
+        List.of(),
+        weakTags,
+        Map.of("mode", "WRITTEN")
     );
-    var resp = llm.explain(req);
-    String text = (resp != null && resp.explanation()!=null) ? resp.explanation().trim() : "";
-    if (!text.isEmpty()) return clampLen(text, 600);
-    return fallbackSummarizePracticalKorean(userId, topicId, total, avgScore, streakDays, null);
-  }
-  private String fallbackSummarizePracticalKorean(String userId, Long topicId,
-                                                  int total, int avgScore, int streakDays, Throwable t) {
-    String tip = (avgScore >= 85)
-        ? "키워드-근거-예시 구조를 유지해 고득점을 안정화하세요. 🔧"
-        : (avgScore >= 60)
-        ? "오답 키워드를 3개로 요약하고 바로 재서술 훈련을 해보세요. 🔧"
-        : "핵심 용어 정의→한 문장 설명→예시 순으로 짧게 훈련해 보세요. 🔧";
-    return "실기 %d문제를 풀어 평균 %d점을 기록했습니다. %s".formatted(total, avgScore, tip);
+    AiClient.SummaryResponse response = aiClient.summary(request);
+    if (response == null) {
+      return defaultWrittenSummary(total, correct);
+    }
+    String oneLiner = Optional.ofNullable(response.oneLiner()).orElse("");
+    List<String> bullets = Optional.ofNullable(response.bullets()).orElse(List.of());
+    String nextReco = Optional.ofNullable(response.nextReco()).orElse("");
+
+    return assembleSummary(oneLiner, bullets, nextReco);
   }
 
-  // 이하 유틸/레코드 동일
-  private static int heuristicScore(Question q, String userText) { /* 동일 */
-    String base = nzs(q.getExplanation()).toLowerCase(Locale.ROOT);
-    String ans  = nzs(userText).toLowerCase(Locale.ROOT);
-    if (base.isBlank() || ans.isBlank()) return 0;
-    String[] toks = Arrays.stream(base.split("[^a-zA-Z0-9가-힣]+"))
-        .filter(s -> s.length() >= 2).limit(6).toArray(String[]::new);
-    if (toks.length == 0) return 0;
-    long hit = Arrays.stream(toks).filter(ans::contains).count();
-    return clamp((int)Math.round((hit * 100.0) / toks.length));
+  private String fallbackWrittenSummary(String topicName, int total, int correct, List<String> weakTags, Throwable throwable) {
+    return defaultWrittenSummary(total, correct);
   }
-  private static int clamp(int v){ return Math.max(0, Math.min(100, v)); }
-  private static String clampLen(String s, int max){ return s == null ? "" : (s.length() <= max ? s : s.substring(0, max)); }
-  private static String nzs(String s){ return s==null? "": s; }
 
-  public record PracticalResult(Integer score, String explanation) {}
+  /* ===================== 실기 요약 ===================== */
+  @Retry(name = CB, fallbackMethod = "fallbackPracticalSummary")
+  @CircuitBreaker(name = CB, fallbackMethod = "fallbackPracticalSummary")
+  public String summarizePractical(String topicName, int total, int avgScore, List<String> mistakes) {
+    AiClient.SummaryRequest request = new AiClient.SummaryRequest(
+        topicName,
+        Map.of("total", total, "avgScore", avgScore),
+        List.of(),
+        mistakes,
+        Map.of("mode", "PRACTICAL")
+    );
+
+    AiClient.SummaryResponse response = aiClient.summary(request);
+    if (response == null) {
+      return defaultPracticalSummary(total, avgScore);
+    }
+    String oneLiner = Optional.ofNullable(response.oneLiner()).orElse("");
+    List<String> bullets = Optional.ofNullable(response.bullets()).orElse(List.of());
+    String nextReco = Optional.ofNullable(response.nextReco()).orElse("");
+    return assembleSummary(oneLiner, bullets, nextReco);
+  }
+
+  private String fallbackPracticalSummary(String topicName, int total, int avgScore, List<String> mistakes, Throwable throwable) {
+    return defaultPracticalSummary(total, avgScore);
+  }
+
+  /* ===================== 유틸 ===================== */
+  private static String normalizeAnswerKey(String answerKey) {
+    if (answerKey == null) return "";
+    return answerKey.trim();
+  }
+
+  private static String assembleSummary(String oneLiner, List<String> bullets, String nextReco) {
+    StringBuilder builder = new StringBuilder();
+    if (!oneLiner.isBlank()) {
+      builder.append(oneLiner.trim());
+    }
+    if (!bullets.isEmpty()) {
+      if (builder.length() > 0) builder.append("\n");
+      bullets.forEach(b -> builder.append("• ").append(b).append("\n"));
+    }
+    if (!nextReco.isBlank()) {
+      if (builder.length() > 0) builder.append("\n");
+      builder.append("Next: ").append(nextReco.trim());
+    }
+    return builder.toString().strip();
+  }
+
+  private static String defaultWrittenSummary(int total, int correct) {
+    double acc = total == 0 ? 0.0 : (correct * 100.0) / total;
+    return "필기 학습을 마쳤습니다. 총 " + total + "문제 중 " + correct + "문제를 맞혀 정확도 " +
+        String.format(Locale.ROOT, "%.1f", acc) + "% 입니다. 오답 태그를 중심으로 복습을 이어가세요.";
+  }
+
+  private static String defaultPracticalSummary(int total, int avgScore) {
+    return "실기 학습을 마쳤습니다. 총 " + total + "문제를 풀어 평균 " + avgScore + "점을 기록했습니다. " +
+        "핵심 키워드를 정리하고 재서술 훈련을 반복해보세요.";
+  }
+
+  private static int heuristicScore(Question question, String userText) {
+    String reference = Optional.ofNullable(question.getSolutionText()).orElse("").toLowerCase(Locale.ROOT);
+    String answer = Optional.ofNullable(userText).orElse("").toLowerCase(Locale.ROOT);
+    if (reference.isBlank() || answer.isBlank()) return 0;
+    String[] tokens = Arrays.stream(reference.split("[^a-zA-Z0-9가-힣]+"))
+        .filter(s -> s.length() >= 2)
+        .limit(6)
+        .toArray(String[]::new);
+    if (tokens.length == 0) return 0;
+    long matches = Arrays.stream(tokens).filter(answer::contains).count();
+    return clamp((int) Math.round(matches * 100.0 / tokens.length));
+  }
+
+  private static int clamp(int value) {
+    return Math.max(0, Math.min(100, value));
+  }
+
+  public record PracticalResult(int score, String explain, List<String> tips) {}
 }

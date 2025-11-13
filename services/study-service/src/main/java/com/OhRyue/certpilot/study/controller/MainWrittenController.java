@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.controller;
 
+import com.OhRyue.certpilot.study.dto.FlowDtos;
 import com.OhRyue.certpilot.study.dto.WrittenDtos.*;
 import com.OhRyue.certpilot.study.service.WrittenService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,13 +34,14 @@ public class MainWrittenController {
   /* ========= 필기학습: 미니체크(OX) ========= */
   @Operation(summary = "미니체크 세트(4문) 불러오기")
   @GetMapping("/mini/{topicId}")
-  public MiniSet miniSet(@PathVariable Long topicId) {
-    return written.miniSet(topicId);
+  public FlowDtos.StepEnvelope<MiniSet> miniSet(@PathVariable Long topicId,
+                                                @RequestParam String userId) {
+    return written.miniSet(userId, topicId);
   }
 
   @Operation(summary = "미니체크 제출", description = "전부 정답 시 miniPassed=true로 진행도 반영")
   @PostMapping("/mini/submit")
-  public MiniSubmitResp submitMini(@RequestBody @Valid MiniSubmitReq req) {
+  public FlowDtos.StepEnvelope<MiniSubmitResp> submitMini(@RequestBody @Valid MiniSubmitReq req) {
     return written.submitMini(req);
   }
 
@@ -52,13 +54,14 @@ public class MainWrittenController {
   /* ========= 필기학습: 객관식(MCQ) ========= */
   @Operation(summary = "MCQ 세트(5문) 불러오기")
   @GetMapping("/mcq/{topicId}")
-  public McqSet mcqSet(@PathVariable Long topicId, @RequestParam(required = false) String userId) {
+  public FlowDtos.StepEnvelope<McqSet> mcqSet(@PathVariable Long topicId,
+                                             @RequestParam String userId) {
     return written.mcqSet(topicId, userId);
   }
 
   @Operation(summary = "MCQ 제출", description = "정답/오답 기록 저장 및 AI 오답 해설 제공")
   @PostMapping("/mcq/submit")
-  public McqSubmitResp submitMcq(@RequestBody @Valid McqSubmitReq req) {
+  public FlowDtos.StepEnvelope<McqSubmitResp> submitMcq(@RequestBody @Valid McqSubmitReq req) {
     return written.submitMcq(req);
   }
 
@@ -71,20 +74,23 @@ public class MainWrittenController {
   /* ========= 필기학습: 요약 ========= */
   @Operation(summary = "필기 학습 요약", description = "미니/MCQ 결과를 바탕으로 완료 여부 및 AI 요약을 제공합니다.")
   @GetMapping("/summary")
-  public SummaryResp summary(@RequestParam String userId, @RequestParam Long topicId) {
+  public FlowDtos.StepEnvelope<SummaryResp> summary(@RequestParam String userId,
+                                                    @RequestParam Long topicId) {
     return written.summary(userId, topicId);
   }
 
   /* ========= 필기학습: 리뷰(총정리) ========= */
   @Operation(summary = "필기 리뷰 세트(20문) - 루트 토픽 기준 하위 토픽 전체")
   @GetMapping("/review/{rootTopicId}")
-  public com.OhRyue.certpilot.study.dto.ReviewDtos.ReviewSet review(@PathVariable Long rootTopicId) {
-    return written.reviewSet(rootTopicId);
+  public FlowDtos.StepEnvelope<com.OhRyue.certpilot.study.dto.ReviewDtos.ReviewSet> review(@PathVariable Long rootTopicId,
+                                                                                           @RequestParam String userId) {
+    return written.reviewSet(userId, rootTopicId);
   }
 
   @Operation(summary = "필기 리뷰 제출(= 객관식 제출과 동일)")
   @PostMapping("/review/submit")
-  public McqSubmitResp reviewSubmit(@RequestBody @Valid McqSubmitReq req) {
-    return written.reviewSubmitWritten(req);
+  public FlowDtos.StepEnvelope<McqSubmitResp> reviewSubmit(@RequestParam Long rootTopicId,
+                                                           @RequestBody @Valid McqSubmitReq req) {
+    return written.reviewSubmitWritten(req, rootTopicId);
   }
 }

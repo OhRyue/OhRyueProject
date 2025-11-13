@@ -29,9 +29,19 @@ public class QuestionChoice {
   @Column(name = "label", nullable = false, length = 1)
   private String label;   // 'A' ~ 'D'
 
-  @Column(name = "text", nullable = false, length = 1000)
-  private String text;
+  @Column(name = "content", nullable = false, length = 1000)
+  private String content;
 
   @Column(name = "is_correct", nullable = false)
   private boolean correct;
+
+  @Column(name = "created_at", nullable = false)
+  private java.time.Instant createdAt;
+
+  @PrePersist
+  void onCreate() {
+    if (createdAt == null) {
+      createdAt = java.time.Instant.now();
+    }
+  }
 }
