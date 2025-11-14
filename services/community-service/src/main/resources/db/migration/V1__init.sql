@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS post_category (
 CREATE TABLE IF NOT EXISTS post (
   id            BIGINT AUTO_INCREMENT PRIMARY KEY,
   category_id   TINYINT NOT NULL,
-  author_id     VARCHAR(100) NOT NULL,         -- 실제 작성자 ID
+  author_id     VARCHAR(100) NOT NULL,         -- 실제 작성자 ID(account.user_id)
   is_anonymous  TINYINT(1) NOT NULL DEFAULT 0, -- 익명 노출 여부
   title         VARCHAR(200) NOT NULL,
   content       MEDIUMTEXT NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS post (
   INDEX ix_post_category_time (category_id, created_at),
   INDEX ix_post_author_time (author_id, created_at),
   INDEX ix_post_created (created_at),
-  FULLTEXT KEY ft_post_title_content (title, content)  -- MySQL 8 InnoDB 풀텍스트
+  FULLTEXT KEY ft_post_title_content (title, content)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 댓글
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS comment (
 -- 좋아요(게시글/댓글 공용)
 CREATE TABLE IF NOT EXISTS reaction (
   id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-  target_type ENUM('POST','COMMENT') NOT NULL,
+  target_type ENUM('POST','COMMENT') NOT NULL, -- ReactionTargetType과 매핑
   target_id   BIGINT NOT NULL,
   user_id     VARCHAR(100) NOT NULL,
   created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS reaction (
   INDEX ix_reaction_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 조회 로그(선택: Unique View/오늘의 게시글 집계에 활용)
+-- 조회 로그(Unique View/오늘의 게시글 집계 용)
 CREATE TABLE IF NOT EXISTS post_view_log (
   id         BIGINT AUTO_INCREMENT PRIMARY KEY,
   post_id    BIGINT NOT NULL,
@@ -63,6 +63,27 @@ CREATE TABLE IF NOT EXISTS post_view_log (
   viewed_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX ix_view_post_time (post_id, viewed_at),
   INDEX ix_view_user_time (user_id, viewed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 신고 테이블 (ModerationDtos.ReportRequest/Response 대응)
+CREATE TABLE IF NOT EXISTS post_report (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  target_type VARCHAR(20) NOT NULL,   -- 'POST' / 'COMMENT' (ReactionTargetType.name() 기준)
+  target_id   BIGINT NOT NULL,
+  reporter_id VARCHAR(100) NOT NULL,
+  reason      VARCHAR(500),
+  status      VARCHAR(20) NOT NULL DEFAULT 'PENDING',  -- PENDING / RESOLVED / REJECTED 등
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMP NULL,
+  UNIQUE KEY uq_post_report (target_type, target_id, reporter_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 차단 테이블 (ModerationDtos.BlockRequest/BlockEntry 대응)
+CREATE TABLE IF NOT EXISTS user_block (
+  user_id         VARCHAR(100) NOT NULL,
+  blocked_user_id VARCHAR(100) NOT NULL,
+  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, blocked_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -162,18 +162,23 @@ public class WrittenService {
 
     @Transactional
     public FlowDtos.StepEnvelope<WrittenDtos.McqSet> mcqSet(Long topicId, String userId) {
+        // 1) 세션 확보
         StudySession session = sessionManager.ensureMicroSession(
                 userId, topicId, ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
 
+        // 2) 미니체크 통과 여부 확인(통과 못 했으면 MCQ 진입 불가)
         Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
         boolean miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
         if (!miniPassed) {
+            // 컨트롤러 단에서 500 대신 409/400으로 매핑해서 써도 됨
             throw new IllegalStateException("MINI_STEP_NOT_PASSED");
         }
 
+        // 3) MCQ 메타(이미 완료한 상태인지 여부)
         Map<String, Object> mcqMeta = sessionManager.loadStepMeta(session, "mcq");
         boolean completed = Boolean.TRUE.equals(mcqMeta.get("completed"));
 
+        // 4) 랜덤 MCQ 5문 추출
         List<Question> questions = questionRepository.pickRandomByTopic(
                 topicId, ExamMode.WRITTEN, QuestionType.MCQ, PageRequest.of(0, MCQ_SIZE));
 
@@ -629,25 +634,29 @@ public class WrittenService {
                 .collect(Collectors.toMap(Question::getId, q -> q));
     }
 
+    // ====== MCQ 보기 로딩 / 정답 조회 ======
+
     private List<WrittenDtos.McqChoice> loadChoices(Long questionId) {
-        return choiceRepository.findByQuestionId(questionId).stream()
-                .sorted(Comparator.comparing(QuestionChoice::getLabel))
-                .map(choice -> new WrittenDtos.McqChoice(choice.getLabel(), choice.getContent()))
+        return choiceRepository.findByQuestionIdOrderByLabelAsc(questionId).stream()
+                .map(choice -> new WrittenDtos.McqChoice(
+                        choice.getLabel(),
+                        choice.getContent()
+                ))
                 .toList();
     }
 
     private List<ReviewDtos.ReviewQuestion.Choice> loadReviewChoices(Long questionId) {
-        return choiceRepository.findByQuestionId(questionId).stream()
-                .sorted(Comparator.comparing(QuestionChoice::getLabel))
-                .map(choice -> new ReviewDtos.ReviewQuestion.Choice(choice.getLabel(), choice.getContent()))
+        return choiceRepository.findByQuestionIdOrderByLabelAsc(questionId).stream()
+                .map(choice -> new ReviewDtos.ReviewQuestion.Choice(
+                        choice.getLabel(),
+                        choice.getContent()
+                ))
                 .toList();
     }
 
     private String resolveCorrectChoice(Long questionId) {
-        return choiceRepository.findByQuestionId(questionId).stream()
-                .filter(QuestionChoice::isCorrect)
+        return choiceRepository.findFirstByQuestionIdAndCorrectTrue(questionId)
                 .map(QuestionChoice::getLabel)
-                .findFirst()
                 .orElse("");
     }
 
