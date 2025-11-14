@@ -10,87 +10,108 @@ import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Optional;
 
-/**
- * 최신 스키마(user_account) 기반 UserService
- * - 회원가입: PK=id(username), status=BLOCKED 로 저장 → 이메일 인증 시 ACTIVE 전환
- * - 로그인: id(username)로 조회, 상태 ACTIVE 확인, 비밀번호 검증
- *   (시드 {noop} 계정과의 호환을 위해 noop 비교 로직 포함)
- */
 @Service
 public class UserService {
 
-  private final UserAccountRepository userAccountRepository;
-  private final PasswordEncoder passwordEncoder;
+    private final UserAccountRepository userAccountRepository;
+    private final PasswordEncoder passwordEncoder;
 
-  public UserService(UserAccountRepository userAccountRepository,
-                     PasswordEncoder passwordEncoder) {
-    this.userAccountRepository = userAccountRepository;
-    this.passwordEncoder = passwordEncoder;
-  }
-
-  public UserAccount register(String email, String rawPassword) {
-    String normalizedEmail = email.trim().toLowerCase();
-
-    if (userAccountRepository.findByEmail(normalizedEmail).isPresent()) {
-      throw new IllegalArgumentException("이미 등록된 이메일입니다.");
+    public UserService(UserAccountRepository userAccountRepository,
+                       PasswordEncoder passwordEncoder) {
+        this.userAccountRepository = userAccountRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
-    if (userAccountRepository.findById(normalizedEmail).isPresent()) {
-      throw new IllegalArgumentException("이미 존재하는 사용자입니다.");
+    /**
+     * 이메일 인증이 끝난 시점에서 실제 가입 처리
+     * - userId = PK
+     * - status = ACTIVE 로 바로 저장
+     */
+    public UserAccount register(String userId, String email, String rawPassword) {
+        String normalizedUserId = userId.trim();
+        String normalizedEmail = normalizeEmail(email);
+
+        if (userAccountRepository.findById(normalizedUserId).isPresent()) {
+            throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
+        }
+        if (userAccountRepository.findByEmail(normalizedEmail).isPresent()) {
+            throw new IllegalArgumentException("이미 등록된 이메일입니다.");
+        }
+
+        String encodedPassword = passwordEncoder.encode(rawPassword);
+
+        UserAccount user = UserAccount.builder()
+                .id(normalizedUserId)
+                .email(normalizedEmail)
+                .passwordHash(encodedPassword)
+                .status(AccountStatus.ACTIVE) // 이메일 인증 후 생성되므로 ACTIVE
+                .createdAt(LocalDateTime.now())
+                .lastLoginAt(null)
+                .build();
+
+        return userAccountRepository.save(user);
     }
 
-    String encodedPassword = passwordEncoder.encode(rawPassword);
+    /**
+     * 로그인: userId + password
+     */
+    public UserAccount login(String userId, String rawPassword) {
+        String normalizedUserId = userId.trim();
 
-    UserAccount user = UserAccount.builder()
-        .id(normalizedEmail)
-        .email(normalizedEmail)
-        .passwordHash(encodedPassword)
-        .status(AccountStatus.BLOCKED)
-        .createdAt(LocalDateTime.now())
-        .lastLoginAt(null)
-        .build();
+        UserAccount user = userAccountRepository.findById(normalizedUserId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
 
-    return userAccountRepository.save(user);
-  }
+        if (!user.isActive()) {
+            throw new IllegalStateException("이메일 인증 후 로그인 가능합니다.");
+        }
 
-  public UserAccount login(String email, String rawPassword) {
-    String normalizedEmail = email.trim().toLowerCase();
-    UserAccount user = userAccountRepository.findByEmail(normalizedEmail)
-        .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
+        String hash = user.getPasswordHash();
+        boolean matched;
+        if (hash != null && hash.startsWith("{noop}")) {
+            // 시드 계정 호환용
+            matched = rawPassword.equals(hash.substring("{noop}".length()));
+        } else {
+            matched = passwordEncoder.matches(rawPassword, hash);
+        }
 
-    if (user.getStatus() != AccountStatus.ACTIVE) {
-      throw new IllegalStateException("이메일 인증 후 로그인 가능합니다.");
+        if (!matched) {
+            throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+        }
+
+        user.setLastLoginAt(LocalDateTime.now());
+        return userAccountRepository.save(user);
     }
 
-    // 시드 호환: password_hash 가 {noop}로 시작하면 평문 비교, 아니면 BCrypt 비교
-    String hash = user.getPasswordHash();
-    boolean matched;
-    if (hash != null && hash.startsWith("{noop}")) {
-      matched = rawPassword.equals(hash.substring("{noop}".length()));
-    } else {
-      matched = passwordEncoder.matches(rawPassword, hash);
+    public Optional<UserAccount> findById(String userId) {
+        return userAccountRepository.findById(userId);
     }
 
-    if (!matched) {
-      throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+    public Optional<UserAccount> findByEmail(String email) {
+        return userAccountRepository.findByEmail(normalizeEmail(email));
     }
 
-    // 마지막 로그인 시각 갱신(선택)
-    user.setLastLoginAt(LocalDateTime.now());
-    userAccountRepository.save(user);
+    public boolean isUserIdDuplicate(String userId) {
+        if (userId == null) return false;
+        return userAccountRepository.findById(userId.trim()).isPresent();
+    }
 
-    return user;
-  }
+    public boolean isEmailDuplicate(String email) {
+        if (email == null) return false;
+        return userAccountRepository.findByEmail(normalizeEmail(email)).isPresent();
+    }
 
-  public Optional<UserAccount> findById(String userId) {
-    return userAccountRepository.findById(userId);
-  }
+    /**
+     * (구 플로우용) BLOCKED → ACTIVE 전환이 필요한 경우에만 사용
+     */
+    public void enableUser(String email) {
+        UserAccount user = userAccountRepository.findByEmail(normalizeEmail(email))
+                .orElseThrow(() -> new IllegalArgumentException("해당 이메일의 사용자가 없습니다."));
 
-  public void enableUser(String email) {
-    UserAccount user = userAccountRepository.findByEmail(email.toLowerCase(Locale.ROOT))
-        .orElseThrow(() -> new IllegalArgumentException("해당 이메일의 사용자가 없습니다."));
+        user.setStatus(AccountStatus.ACTIVE);
+        userAccountRepository.save(user);
+    }
 
-    user.setStatus(AccountStatus.ACTIVE);   // 인증 완료
-    userAccountRepository.save(user);
-  }
+    private String normalizeEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+    }
 }

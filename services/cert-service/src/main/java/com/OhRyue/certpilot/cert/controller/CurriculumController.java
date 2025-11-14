@@ -17,7 +17,7 @@ import java.util.NoSuchElementException;
 
 @Tag(name = "Curriculum(토픽/개념)")
 @RestController
-@RequestMapping("/api/certs")
+@RequestMapping("/api/cert")
 @RequiredArgsConstructor
 public class CurriculumController {
 

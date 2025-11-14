@@ -34,13 +34,13 @@ public class JwtTokenProvider {
   }
 
   // 토큰 생성 (로그인 성공 시 사용)
-  public String generateToken(String username) {
+  public String generateToken(String userId) {
     long now = System.currentTimeMillis();
     Date issuedAt = new Date(now);
     Date expiryAt = new Date(now + validityInMs);
 
     return Jwts.builder()
-        .setSubject(username)                       // 토큰 주체 (유저 이름=PK)
+        .setSubject(userId)                       // 토큰 주체 (유저 이름=PK)
         .claim("role", "USER")                      // 스키마에 role 없음 → 기본 USER
         .setIssuedAt(issuedAt)                      // 발급 시간
         .setExpiration(expiryAt)                    // 만료 시간
@@ -49,13 +49,13 @@ public class JwtTokenProvider {
   }
 
   // Refresh Token 생성
-  public String generateRefreshToken(String username) {
+  public String generateRefreshToken(String userId) {
     long now = System.currentTimeMillis();
     Date issuedAt = new Date(now);
     Date expiryAt = new Date(now + 1000L * 60 * 60 * 24 * 7); // 7일
 
     return Jwts.builder()
-        .setSubject(username)
+        .setSubject(userId)
         .claim("role", "USER")
         .setIssuedAt(issuedAt)
         .setExpiration(expiryAt)
@@ -63,7 +63,7 @@ public class JwtTokenProvider {
         .compact();
   }
 
-  // 토큰에서 username 추출
+  // 토큰에서 userId 추출
   public String getUsernameFromToken(String token) {
     return Jwts.parserBuilder()
         .setSigningKey(key)

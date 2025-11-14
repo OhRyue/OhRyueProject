@@ -17,7 +17,7 @@ import java.util.Locale;
 import java.util.Set;
 
 @RestController
-@RequestMapping("/api/certs/external")
+@RequestMapping("/api/cert/external")
 @RequiredArgsConstructor
 @Tag(name = "External Q-Net API")
 public class ExternalCertController {

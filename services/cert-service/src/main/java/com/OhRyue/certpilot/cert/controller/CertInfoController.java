@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Cert - Info", description = "자격증 정보 조회")
 @RestController
-@RequestMapping("/api/certs")
+@RequestMapping("/api/cert")
 @RequiredArgsConstructor
 public class CertInfoController {
 
