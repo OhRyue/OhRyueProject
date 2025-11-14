@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.certpilot.study.client.CurriculumGateway;
 import com.OhRyue.certpilot.study.client.ProgressHookClient;
 import com.OhRyue.certpilot.study.domain.*;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
@@ -28,8 +29,6 @@ public class WrittenService {
     private static final int MCQ_SIZE = 5;
     private static final int REVIEW_SIZE = 20;
 
-    private final TopicRepository topicRepository;
-    private final ConceptRepository conceptRepository;
     private final QuestionRepository questionRepository;
     private final QuestionChoiceRepository choiceRepository;
     private final QuestionTagRepository questionTagRepository;
@@ -41,19 +40,27 @@ public class WrittenService {
     private final ProgressHookClient progressHookClient;
     private final ObjectMapper objectMapper;
 
+    // cert-service 커리큘럼 연동
+    private final CurriculumGateway curriculumGateway;
+
     /* ========================= 개념 ========================= */
 
     @Transactional(readOnly = true)
     public WrittenDtos.ConceptResp loadConcept(Long topicId) {
-        Topic topic = topicRepository.findById(topicId)
-                .orElseThrow(() -> new NoSuchElementException("Topic not found: %d".formatted(topicId)));
-        Optional<Concept> conceptOpt = conceptRepository.findByTopicId(topicId);
 
-        List<WrittenDtos.ConceptResp.Section> sections = conceptOpt
-                .map(concept -> ConceptMapper.toSections(concept.getBlocksJson()))
-                .orElse(List.of());
+        // Resilience4j 서킷브레이커가 적용된 게이트웨이 호출
+        CurriculumGateway.CurriculumConcept concept =
+                curriculumGateway.getConceptWithTopic(topicId);
 
-        return new WrittenDtos.ConceptResp(topicId, topic.getTitle(), sections);
+        // sections_json → Section 리스트 변환 (기존 ConceptMapper 재사용)
+        List<WrittenDtos.ConceptResp.Section> sections =
+                ConceptMapper.toSections(concept.sectionsJson());
+
+        return new WrittenDtos.ConceptResp(
+                concept.topicId(),
+                concept.topicTitle(),
+                sections
+        );
     }
 
     /* ========================= 미니체크(OX) ========================= */
@@ -475,8 +482,17 @@ public class WrittenService {
         int totalCorrect = miniCorrect + mcqCorrect;
         boolean completed = miniPassed && mcqCompleted;
 
-        String summary = aiExplanationService.summarizeWritten(
-                topicRepository.findById(topicId).map(Topic::getTitle).orElse(""),
+        // 🔽 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
+        String topicTitle = "";
+        try {
+            CurriculumGateway.CurriculumConcept curriculum = curriculumGateway.getConceptWithTopic(topicId);
+            topicTitle = curriculum.topicTitle();
+        } catch (Exception ignored) {
+            // 커리큘럼 장애 시 요약은 "제목 없음"으로라도 진행
+        }
+
+        String summaryText = aiExplanationService.summarizeWritten(
+                topicTitle,
                 totalSolved,
                 totalCorrect,
                 weakTags
@@ -488,7 +504,7 @@ public class WrittenService {
                 miniPassed,
                 mcqTotal,
                 mcqCorrect,
-                summary,
+                summaryText,
                 completed
         );
 

@@ -1,10 +1,10 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.certpilot.study.client.CurriculumGateway;
 import com.OhRyue.certpilot.study.client.ProgressHookClient;
 import com.OhRyue.certpilot.study.domain.Question;
 import com.OhRyue.certpilot.study.domain.StudySession;
 import com.OhRyue.certpilot.study.domain.StudySessionItem;
-import com.OhRyue.certpilot.study.domain.Topic;
 import com.OhRyue.certpilot.study.domain.UserAnswer;
 import com.OhRyue.certpilot.study.domain.UserProgress;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
@@ -13,7 +13,10 @@ import com.OhRyue.certpilot.study.dto.FlowDtos;
 import com.OhRyue.certpilot.study.dto.PracticalDtos;
 import com.OhRyue.certpilot.study.dto.WrittenDtos;
 import com.OhRyue.certpilot.study.dto.WrongRecapDtos;
-import com.OhRyue.certpilot.study.repository.*;
+import com.OhRyue.certpilot.study.repository.QuestionRepository;
+import com.OhRyue.certpilot.study.repository.QuestionTagRepository;
+import com.OhRyue.certpilot.study.repository.UserAnswerRepository;
+import com.OhRyue.certpilot.study.repository.UserProgressRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +38,6 @@ public class PracticalService {
     private static final int REVIEW_SIZE = 20;
 
     private final QuestionRepository questionRepository;
-    private final TopicRepository topicRepository;
     private final QuestionTagRepository questionTagRepository;
     private final UserAnswerRepository userAnswerRepository;
     private final UserProgressRepository userProgressRepository;
@@ -44,6 +46,9 @@ public class PracticalService {
     private final TopicTreeService topicTreeService;
     private final ProgressHookClient progressHookClient;
     private final ObjectMapper objectMapper;
+
+    // cert-service 커리큘럼 연동 (토픽 제목/개념 조회용)
+    private final CurriculumGateway curriculumGateway;
 
     /* ========================= 미니체크(OX) ========================= */
 
@@ -503,8 +508,17 @@ public class PracticalService {
         int totalSolved = miniTotal + practicalTotal;
         int totalPassed = miniCorrect + practicalPassed;
 
+        // 🔽 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
+        String topicTitle = "";
+        try {
+            CurriculumGateway.CurriculumConcept curriculum = curriculumGateway.getConceptWithTopic(topicId);
+            topicTitle = curriculum.topicTitle();
+        } catch (Exception ignored) {
+            // 커리큘럼 장애 시에도 요약은 진행
+        }
+
         String summary = aiExplanationService.summarizePractical(
-                topicCacheTitle(topicId),
+                topicTitle,
                 totalSolved,
                 (int) Math.round(avgScore),
                 mistakes
@@ -663,12 +677,6 @@ public class PracticalService {
                 .flatMap(q -> questionTagRepository.findTagsByQuestionId(q.getId()).stream())
                 .distinct()
                 .toList();
-    }
-
-    private String topicCacheTitle(Long topicId) {
-        return topicRepository.findById(topicId)
-                .map(Topic::getTitle)
-                .orElse("");
     }
 
     private String toJson(Object payload) {

@@ -1,41 +1,13 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-/* =========================================================
- * 토픽/개념
- * ========================================================= */
-CREATE TABLE IF NOT EXISTS topic (
-  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-  cert_id      BIGINT        NOT NULL,
-  parent_id    BIGINT        NULL,
-  code         VARCHAR(50)   NOT NULL,
-  title        VARCHAR(200)  NOT NULL,
-  emoji        VARCHAR(10)   NULL,
-  order_no     INT           NOT NULL DEFAULT 0,
-  exam_mode    ENUM('WRITTEN','PRACTICAL') NOT NULL,
-  created_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_topic (cert_id, code),
-  INDEX ix_topic_parent (parent_id),
-  INDEX ix_topic_mode (exam_mode)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS concept (
-  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-  topic_id    BIGINT        NOT NULL,
-  content     TEXT          NULL,
-  blocks_json JSON          NULL,
-  updated_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_concept_topic (topic_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-/* =========================================================
- * 문제 뱅크
- * ========================================================= */
+-- =========================================================
+-- 문제 뱅크
+-- =========================================================
 CREATE TABLE IF NOT EXISTS question (
   id             BIGINT AUTO_INCREMENT PRIMARY KEY,
   cert_id        BIGINT        NOT NULL,
-  topic_id       BIGINT        NOT NULL,
+  topic_id       BIGINT        NOT NULL,  -- 논리 FK (cert-service.topic.id), FK 제약 없음
   mode           ENUM('WRITTEN','PRACTICAL') NOT NULL,
   type           ENUM('OX','MCQ','SHORT','LONG') NOT NULL,
   difficulty     ENUM('EASY','NORMAL','HARD') NOT NULL DEFAULT 'NORMAL',
@@ -78,9 +50,9 @@ CREATE TABLE IF NOT EXISTS question_tag (
     ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-/* =========================================================
- * 학습 세션 및 진행
- * ========================================================= */
+-- =========================================================
+-- 학습 세션 및 진행
+-- =========================================================
 CREATE TABLE IF NOT EXISTS study_session (
   id               BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id          VARCHAR(100) NOT NULL,
@@ -138,7 +110,7 @@ CREATE TABLE IF NOT EXISTS user_answer (
 CREATE TABLE IF NOT EXISTS user_progress (
   id                   BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id              VARCHAR(100) NOT NULL,
-  topic_id             BIGINT NOT NULL,
+  topic_id             BIGINT NOT NULL,  -- 논리 FK (cert.topic)
   written_done_cnt     INT NOT NULL DEFAULT 0,
   practical_done_cnt   INT NOT NULL DEFAULT 0,
   written_accuracy     DECIMAL(5,2) NOT NULL DEFAULT 0.00,
@@ -149,9 +121,9 @@ CREATE TABLE IF NOT EXISTS user_progress (
   INDEX ix_progress_updated (updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-/* =========================================================
- * AI 로그
- * ========================================================= */
+-- =========================================================
+-- AI 로그
+-- =========================================================
 CREATE TABLE IF NOT EXISTS ai_grade_log (
   id          BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id     VARCHAR(100) NOT NULL,
