@@ -4,6 +4,7 @@ import com.OhRyue.certpilot.study.dto.FlowDtos;
 import com.OhRyue.certpilot.study.dto.WrittenDtos.*;
 import com.OhRyue.certpilot.study.service.WrittenService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Main - Written(필기)")
 @RestController
 @RequestMapping("/api/study/written")
+@SecurityRequirement(name = "JWT")
 @RequiredArgsConstructor
 public class MainWrittenController {
 

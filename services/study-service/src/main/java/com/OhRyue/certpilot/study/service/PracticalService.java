@@ -28,730 +28,740 @@ import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class PracticalService {
 
-  private static final int MINI_SIZE = 4;
-  private static final int PRACTICAL_SIZE = 5;
-  private static final int REVIEW_SIZE = 20;
+    private static final int MINI_SIZE = 4;
+    private static final int PRACTICAL_SIZE = 5;
+    private static final int REVIEW_SIZE = 20;
 
-  private final QuestionRepository questionRepository;
-  private final TopicRepository topicRepository;
-  private final QuestionTagRepository questionTagRepository;
-  private final UserAnswerRepository userAnswerRepository;
-  private final UserProgressRepository userProgressRepository;
-  private final StudySessionManager sessionManager;
-  private final AIExplanationService aiExplanationService;
-  private final TopicTreeService topicTreeService;
-  private final ProgressHookClient progressHookClient;
-  private final ObjectMapper objectMapper;
+    private final QuestionRepository questionRepository;
+    private final TopicRepository topicRepository;
+    private final QuestionTagRepository questionTagRepository;
+    private final UserAnswerRepository userAnswerRepository;
+    private final UserProgressRepository userProgressRepository;
+    private final StudySessionManager sessionManager;
+    private final AIExplanationService aiExplanationService;
+    private final TopicTreeService topicTreeService;
+    private final ProgressHookClient progressHookClient;
+    private final ObjectMapper objectMapper;
 
-  /* ========================= 미니체크(OX) ========================= */
+    /* ========================= 미니체크(OX) ========================= */
 
-  @Transactional(readOnly = true)
-  public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> miniSet(String userId, Long topicId) {
-    StudySession session = sessionManager.ensureMicroSession(
-        userId, topicId, ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
+    @Transactional
+    public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> miniSet(String userId, Long topicId) {
+        StudySession session = sessionManager.ensureMicroSession(
+                userId, topicId, ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
 
-    Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
-    boolean passed = Boolean.TRUE.equals(miniMeta.get("passed"));
+        Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+        boolean passed = Boolean.TRUE.equals(miniMeta.get("passed"));
 
-    List<Question> questions = questionRepository.pickRandomByTopic(
-        topicId, ExamMode.PRACTICAL, QuestionType.OX, PageRequest.of(0, MINI_SIZE));
-    List<WrittenDtos.MiniQuestion> items = questions.stream()
-        .map(q -> new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse("")))
-        .toList();
+        List<Question> questions = questionRepository.pickRandomByTopic(
+                topicId, ExamMode.PRACTICAL, QuestionType.OX, PageRequest.of(0, MINI_SIZE));
+        List<WrittenDtos.MiniQuestion> items = questions.stream()
+                .map(q -> new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse("")))
+                .toList();
 
-    String status = passed ? "COMPLETE" : "IN_PROGRESS";
-    String next = passed ? "PRACTICAL_SET" : null;
+        String status = passed ? "COMPLETE" : "IN_PROGRESS";
+        String next = passed ? "PRACTICAL_SET" : null;
 
-    return new FlowDtos.StepEnvelope<>(
-        session.getId(),
-        "PRACTICAL",
-        "PRACTICAL_MINI",
-        status,
-        next,
-        sessionManager.loadMeta(session),
-        new WrittenDtos.MiniSet(items)
-    );
-  }
-
-  @Transactional
-  public FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> submitMini(WrittenDtos.MiniSubmitReq req) {
-    Map<Long, Question> questionMap = questionRepository.findByIdIn(
-        req.answers().stream().map(WrittenDtos.MiniAnswer::questionId).toList())
-        .stream()
-        .filter(q -> q.getMode() == ExamMode.PRACTICAL && q.getType() == QuestionType.OX)
-        .collect(Collectors.toMap(Question::getId, q -> q));
-
-    StudySession session = sessionManager.ensureMicroSession(
-        req.userId(), req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
-    int baseOrder = sessionManager.items(session.getId()).size();
-
-    int correctCount = 0;
-    List<WrittenDtos.MiniSubmitItem> items = new ArrayList<>();
-    List<Long> wrongIds = new ArrayList<>();
-
-    for (int idx = 0; idx < req.answers().size(); idx++) {
-      WrittenDtos.MiniAnswer answer = req.answers().get(idx);
-      Question question = questionMap.get(answer.questionId());
-      if (question == null) {
-        throw new NoSuchElementException("Invalid OX question: " + answer.questionId());
-      }
-
-      String userAnswer = Boolean.TRUE.equals(answer.answer()) ? "O" : "X";
-      String correctAnswer = Optional.ofNullable(question.getAnswerKey()).orElse("").trim();
-      boolean correct = correctAnswer.equalsIgnoreCase(userAnswer);
-      if (correct) {
-        correctCount++;
-      } else {
-        wrongIds.add(question.getId());
-      }
-
-      String explanation = Optional.ofNullable(question.getSolutionText()).orElse("");
-      items.add(new WrittenDtos.MiniSubmitItem(question.getId(), correct, explanation, ""));
-
-      Map<String, Object> answerJson = new HashMap<>();
-      answerJson.put("answer", userAnswer);
-      answerJson.put("correct", correct);
-      answerJson.put("submittedAt", Instant.now().toString());
-
-      StudySessionItem item = sessionManager.upsertItem(
-          session,
-          question.getId(),
-          baseOrder + idx + 1,
-          toJson(answerJson),
-          correct,
-          correct ? 100 : 0,
-          null
-      );
-
-      persistUserAnswer(req.userId(), question, userAnswer, correct, correct ? 100 : 0, session, item, "PRACTICAL_MINI");
-      pushProgressHook(req.userId(), QuestionType.OX, correct, correct ? 100 : 0, question.getId());
+        return new FlowDtos.StepEnvelope<>(
+                session.getId(),
+                "PRACTICAL",
+                "PRACTICAL_MINI",
+                status,
+                next,
+                sessionManager.loadMeta(session),
+                new WrittenDtos.MiniSet(items)
+        );
     }
 
-    boolean passed = wrongIds.isEmpty() && !items.isEmpty();
-
-    Map<String, Object> miniMeta = new HashMap<>();
-    miniMeta.put("total", req.answers().size());
-    miniMeta.put("correct", correctCount);
-    miniMeta.put("passed", passed);
-    miniMeta.put("wrongQuestionIds", wrongIds);
-    miniMeta.put("lastSubmittedAt", Instant.now().toString());
-    sessionManager.saveStepMeta(session, "mini", miniMeta);
-
-    if (!passed) {
-      sessionManager.updateStatus(session, "OPEN");
-    }
-
-    return new FlowDtos.StepEnvelope<>(
-        session.getId(),
-        "PRACTICAL",
-        "PRACTICAL_MINI",
-        passed ? "COMPLETE" : "IN_PROGRESS",
-        passed ? "PRACTICAL_SET" : "PRACTICAL_MINI",
-        sessionManager.loadMeta(session),
-        new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, passed, items, wrongIds)
-    );
-  }
-
-  public WrittenDtos.MiniGradeOneResp gradeOneMini(WrittenDtos.MiniGradeOneReq req) {
-    FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> envelope = submitMini(new WrittenDtos.MiniSubmitReq(
-        req.userId(),
-        req.topicId(),
-        List.of(new WrittenDtos.MiniAnswer(req.questionId(), req.answer()))
-    ));
-    WrittenDtos.MiniSubmitItem item = envelope.payload().items().isEmpty()
-        ? new WrittenDtos.MiniSubmitItem(req.questionId(), false, "", "")
-        : envelope.payload().items().get(0);
-    return new WrittenDtos.MiniGradeOneResp(item.correct(), item.explanation());
-  }
-
-  @Transactional(readOnly = true)
-  public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalSet(String userId, Long topicId) {
-    int size = PRACTICAL_SIZE;
-    List<Question> shortQuestions = questionRepository.pickRandomByTopic(
-        topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, size));
-    List<Question> longQuestions = questionRepository.pickRandomByTopic(
-        topicId, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, size));
-
-    List<Question> combined = Stream.concat(shortQuestions.stream(), longQuestions.stream())
-        .distinct()
-        .limit(size)
-        .toList();
-
-    List<PracticalDtos.PracticalQuestion> items = combined.stream()
-        .map(q -> new PracticalDtos.PracticalQuestion(
-            q.getId(),
-            q.getType().name(),
-            Optional.ofNullable(q.getStem()).orElse(""),
-            q.getImageUrl()))
-        .toList();
-
-    StudySession session = sessionManager.ensureMicroSession(
-        userId, topicId, ExamMode.PRACTICAL, MINI_SIZE + size);
-    Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
-    if (!Boolean.TRUE.equals(miniMeta.get("passed"))) {
-      throw new IllegalStateException("PRACTICAL_MINI_NOT_PASSED");
-    }
-    Map<String, Object> practicalMeta = sessionManager.loadStepMeta(session, "practical");
-    boolean completed = Boolean.TRUE.equals(practicalMeta.get("completed"));
-    String status = completed ? "COMPLETE" : "IN_PROGRESS";
-    String next = completed ? "PRACTICAL_SUMMARY" : null;
-
-    return new FlowDtos.StepEnvelope<>(
-        session.getId(),
-        "PRACTICAL",
-        "PRACTICAL_SET",
-        status,
-        next,
-        sessionManager.loadMeta(session),
-        new PracticalDtos.PracticalSet(items)
-    );
-  }
-
-  public FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> submitPractical(PracticalDtos.PracticalSubmitReq req) {
-    Map<Long, Question> questionMap = questionRepository.findByIdIn(
-        req.answers().stream().map(PracticalDtos.PracticalAnswer::questionId).toList())
-        .stream()
-        .filter(q -> q.getMode() == ExamMode.PRACTICAL)
-        .collect(Collectors.toMap(Question::getId, q -> q));
-
-    StudySession session = sessionManager.ensureMicroSession(
-        req.userId(), req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
-    Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
-    if (!Boolean.TRUE.equals(miniMeta.get("passed"))) {
-      throw new IllegalStateException("PRACTICAL_MINI_NOT_PASSED");
-    }
-    int baseOrder = sessionManager.items(session.getId()).size();
-
-    List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
-    List<Long> wrongIds = new ArrayList<>();
-    int totalScore = 0;
-
-    for (int idx = 0; idx < req.answers().size(); idx++) {
-      PracticalDtos.PracticalAnswer answer = req.answers().get(idx);
-      Question question = questionMap.get(answer.questionId());
-      if (question == null || !isPractical(question)) {
-        throw new NoSuchElementException("Invalid practical question: " + answer.questionId());
-      }
-
-      AIExplanationService.PracticalResult result = aiExplanationService.explainAndScorePractical(
-          question, answer.userText());
-      int score = Optional.ofNullable(result.score()).orElse(0);
-      boolean passed = score >= 60;
-      totalScore += score;
-      if (!passed) wrongIds.add(question.getId());
-
-      items.add(new PracticalDtos.PracticalSubmitItem(
-          question.getId(),
-          score,
-          Optional.ofNullable(question.getSolutionText()).orElse(""),
-          result.explain()
-      ));
-
-      Map<String, Object> answerJson = new HashMap<>();
-      answerJson.put("answer", Optional.ofNullable(answer.userText()).orElse(""));
-      answerJson.put("score", score);
-      answerJson.put("passed", passed);
-      answerJson.put("tips", result.tips());
-
-      StudySessionItem item = sessionManager.upsertItem(
-          session,
-          question.getId(),
-          baseOrder + idx + 1,
-          toJson(answerJson),
-          passed,
-          score,
-          toJson(Map.of("explain", result.explain(), "tips", result.tips()))
-      );
-
-      persistUserAnswer(req.userId(), question, answer.userText(), passed, score, session, item, "MICRO_PRACTICAL");
-      pushProgressHook(req.userId(), question.getType(), passed, score, question.getId());
-      updateProgress(req.userId(), question.getTopicId(), score);
-    }
-
-    int total = items.size();
-    double scorePct = total == 0 ? 0.0 : totalScore * 1.0 / total;
-    boolean allPassed = total > 0 && wrongIds.isEmpty();
-
-    Map<String, Object> practicalMeta = new HashMap<>();
-    practicalMeta.put("total", total);
-    practicalMeta.put("avgScore", total == 0 ? 0 : scorePct);
-    practicalMeta.put("completed", allPassed);
-    practicalMeta.put("wrongQuestionIds", wrongIds);
-    practicalMeta.put("lastSubmittedAt", Instant.now().toString());
-    sessionManager.saveStepMeta(session, "practical", practicalMeta);
-
-    if (allPassed) {
-      sessionManager.closeSession(session, scorePct, Map.of("avgScore", scorePct));
-    } else {
-      sessionManager.updateStatus(session, "OPEN");
-    }
-
-    return new FlowDtos.StepEnvelope<>(
-        session.getId(),
-        "PRACTICAL",
-        "PRACTICAL_SET",
-        allPassed ? "COMPLETE" : "IN_PROGRESS",
-        allPassed ? "PRACTICAL_SUMMARY" : "PRACTICAL_SET",
-        sessionManager.loadMeta(session),
-        new PracticalDtos.PracticalSubmitResp(
-            total,
-            total == 0 ? 0 : (int) Math.round(scorePct),
-            items,
-            wrongIds
-        )
-    );
-  }
-
-  @Transactional(readOnly = true)
-  public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalReviewSet(String userId, Long rootTopicId) {
-    Set<Long> topicIds = topicTreeService.descendantIds(rootTopicId);
-    if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
-
-    List<Question> questions = Stream.of(
-            questionRepository.pickRandomByTopicIn(topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, REVIEW_SIZE)),
-            questionRepository.pickRandomByTopicIn(topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, REVIEW_SIZE))
-        ).flatMap(List::stream)
-        .distinct()
-        .limit(REVIEW_SIZE)
-        .toList();
-
-    List<PracticalDtos.PracticalQuestion> items = questions.stream()
-        .map(q -> new PracticalDtos.PracticalQuestion(
-            q.getId(),
-            q.getType().name(),
-            Optional.ofNullable(q.getStem()).orElse(""),
-            q.getImageUrl()))
-        .toList();
-
-    StudySession session = sessionManager.ensureReviewSession(
-        userId, rootTopicId, ExamMode.PRACTICAL, REVIEW_SIZE);
-    Map<String, Object> reviewMeta = sessionManager.loadStepMeta(session, "review");
-    boolean completed = Boolean.TRUE.equals(reviewMeta.get("completed"));
-    String status = completed ? "COMPLETE" : "IN_PROGRESS";
-    String next = completed ? "PRACTICAL_REVIEW_SUMMARY" : null;
-
-    return new FlowDtos.StepEnvelope<>(
-        session.getId(),
-        "REVIEW",
-        "PRACTICAL_REVIEW_SET",
-        status,
-        next,
-        sessionManager.loadMeta(session),
-        new PracticalDtos.PracticalSet(items)
-    );
-  }
-
-  public FlowDtos.StepEnvelope<PracticalDtos.PracticalReviewSubmitResp> practicalReviewSubmit(
-      PracticalDtos.PracticalReviewSubmitReq req) {
-    Set<Long> rawIds = topicTreeService.descendantIds(req.rootTopicId());
-    Set<Long> topicIds = new HashSet<>(rawIds);
-    if (topicIds.isEmpty()) {
-      topicIds.add(req.rootTopicId());
-    }
-
-    Map<Long, Question> questionMap = questionRepository.findByIdIn(
-        req.answers().stream().map(PracticalDtos.PracticalAnswer::questionId).toList())
-        .stream()
-        .filter(q -> q.getMode() == ExamMode.PRACTICAL && topicIds.contains(q.getTopicId()))
-        .collect(Collectors.toMap(Question::getId, q -> q));
-
-    StudySession session = sessionManager.ensureReviewSession(
-        req.userId(), req.rootTopicId(), ExamMode.PRACTICAL, REVIEW_SIZE);
-    int baseOrder = sessionManager.items(session.getId()).size();
-
-    List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
-    List<Long> wrongIds = new ArrayList<>();
-    int totalScore = 0;
-
-    for (int idx = 0; idx < req.answers().size(); idx++) {
-      PracticalDtos.PracticalAnswer answer = req.answers().get(idx);
-      Question question = questionMap.get(answer.questionId());
-      if (question == null) {
-        continue;
-      }
-
-      AIExplanationService.PracticalResult result = aiExplanationService.explainAndScorePractical(
-          question, answer.userText());
-      int score = Optional.ofNullable(result.score()).orElse(0);
-      boolean passed = score >= 60;
-      totalScore += score;
-      if (!passed) {
-        wrongIds.add(question.getId());
-      }
-
-      items.add(new PracticalDtos.PracticalSubmitItem(
-          question.getId(),
-          score,
-          Optional.ofNullable(question.getSolutionText()).orElse(""),
-          result.explain()
-      ));
-
-      Map<String, Object> answerJson = new HashMap<>();
-      answerJson.put("answer", Optional.ofNullable(answer.userText()).orElse(""));
-      answerJson.put("score", score);
-      answerJson.put("passed", passed);
-      answerJson.put("tips", result.tips());
-
-      StudySessionItem item = sessionManager.upsertItem(
-          session,
-          question.getId(),
-          baseOrder + idx + 1,
-          toJson(answerJson),
-          passed,
-          score,
-          toJson(Map.of("explain", result.explain(), "tips", result.tips()))
-      );
-
-      persistUserAnswer(req.userId(), question, answer.userText(), passed, score, session, item, "PRACTICAL_REVIEW");
-      pushProgressHook(req.userId(), question.getType(), passed, score, question.getId());
-    }
-
-    int total = items.size();
-    double avgScore = total == 0 ? 0.0 : totalScore * 1.0 / total;
-    boolean allPassed = total > 0 && wrongIds.isEmpty();
-
-    Map<String, Object> reviewMeta = new HashMap<>();
-    reviewMeta.put("total", total);
-    reviewMeta.put("avgScore", avgScore);
-    reviewMeta.put("completed", allPassed);
-    reviewMeta.put("wrongQuestionIds", wrongIds);
-    reviewMeta.put("lastSubmittedAt", Instant.now().toString());
-    sessionManager.saveStepMeta(session, "review", reviewMeta);
-
-    if (allPassed) {
-      sessionManager.closeSession(session, avgScore, Map.of("avgScore", avgScore));
-    } else {
-      sessionManager.updateStatus(session, "OPEN");
-    }
-
-    return new FlowDtos.StepEnvelope<>(
-        session.getId(),
-        "REVIEW",
-        "PRACTICAL_REVIEW_SET",
-        allPassed ? "COMPLETE" : "IN_PROGRESS",
-        allPassed ? "PRACTICAL_REVIEW_SUMMARY" : "PRACTICAL_REVIEW_SET",
-        sessionManager.loadMeta(session),
-        new PracticalDtos.PracticalReviewSubmitResp(
-            total,
-            total == 0 ? 0 : (int) Math.round(avgScore),
-            items,
-            wrongIds
-        )
-    );
-  }
-
-  @Transactional(readOnly = true)
-  public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(String userId, Long topicId) {
-    StudySession session = sessionManager.latestMicroSession(userId, topicId).orElse(null);
-
-    int miniTotal = 0;
-    int miniCorrect = 0;
-    boolean miniPassed = false;
-
-    int practicalTotal = 0;
-    int practicalPassed = 0;
-    double avgScore = 0.0;
-    boolean practicalCompleted = false;
-
-    List<String> mistakes = List.of();
-    Map<String, Object> meta = Map.of();
-    Long sessionId = null;
-
-    if (session != null) {
-      sessionId = session.getId();
-      Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
-      Map<String, Object> practicalMeta = sessionManager.loadStepMeta(session, "practical");
-
-      miniTotal = readInt(miniMeta, "total");
-      int miniWrong = readList(miniMeta, "wrongQuestionIds").size();
-      miniCorrect = Math.max(0, miniTotal - miniWrong);
-      miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
-
-      practicalTotal = readInt(practicalMeta, "total");
-      int practicalWrong = readList(practicalMeta, "wrongQuestionIds").size();
-      practicalPassed = Math.max(0, practicalTotal - practicalWrong);
-      avgScore = readDouble(practicalMeta, "avgScore");
-      practicalCompleted = Boolean.TRUE.equals(practicalMeta.get("completed"));
-
-      meta = sessionManager.loadMeta(session);
-
-      List<UserAnswer> sessionAnswers = userAnswerRepository.findByUserIdAndSessionId(userId, sessionId).stream()
-          .filter(ans -> ans.getExamMode() == ExamMode.PRACTICAL)
-          .toList();
-      Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
-      Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
-          .filter(q -> Objects.equals(q.getTopicId(), topicId))
-          .collect(Collectors.toMap(Question::getId, q -> q));
-      List<UserAnswer> topicAnswers = sessionAnswers.stream()
-          .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
-          .toList();
-      mistakes = collectMistakes(topicAnswers, questionCache);
-    }
-
-    boolean completed = miniPassed && practicalCompleted;
-    int totalSolved = miniTotal + practicalTotal;
-    int totalPassed = miniCorrect + practicalPassed;
-
-    String summary = aiExplanationService.summarizePractical(
-        topicCacheTitle(topicId),
-        totalSolved,
-        (int) Math.round(avgScore),
-        mistakes
-    );
-
-    WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
-        miniTotal,
-        miniCorrect,
-        miniPassed,
-        practicalTotal,
-        practicalPassed,
-        summary,
-        completed
-    );
-
-    String status;
-    if (session == null) {
-      status = "NOT_STARTED";
-    } else {
-      status = completed ? "COMPLETE" : "IN_PROGRESS";
-    }
-
-    return new FlowDtos.StepEnvelope<>(
-        sessionId,
-        "PRACTICAL",
-        "PRACTICAL_SUMMARY",
-        status,
-        null,
-        meta,
-        payload
-    );
-  }
-
-  public PracticalDtos.PracticalGradeOneResp gradeOnePractical(PracticalDtos.PracticalGradeOneReq req) {
-    FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> envelope = submitPractical(new PracticalDtos.PracticalSubmitReq(
-        req.userId(),
-        req.topicId(),
-        List.of(new PracticalDtos.PracticalAnswer(req.questionId(), req.userText()))
-    ));
-
-    PracticalDtos.PracticalSubmitResp resp = envelope.payload();
-    PracticalDtos.PracticalSubmitItem item = resp.items().isEmpty()
-        ? new PracticalDtos.PracticalSubmitItem(req.questionId(), 0, "", "")
-        : resp.items().get(0);
-
-    return new PracticalDtos.PracticalGradeOneResp(item.score(), item.baseExplanation(), item.aiExplanation());
-  }
-
-  @Transactional(readOnly = true)
-  public WrongRecapDtos.WrongRecapSet wrongRecapBySession(String userId, Long sessionId, String stepCode) {
-    StudySession session = sessionManager.getSession(sessionId);
-    if (!session.getUserId().equals(userId)) {
-      throw new IllegalStateException("세션 소유자가 아닙니다.");
-    }
-
-    String stepKey = mapStepKey(stepCode);
-    List<Long> questionIds = sessionManager.wrongQuestionIds(sessionId, stepKey);
-    if (questionIds.isEmpty()) {
-      return new WrongRecapDtos.WrongRecapSet(List.of());
-    }
-
-    Map<Long, Question> questionMap = questionRepository.findAllById(questionIds).stream()
-        .filter(q -> q.getMode() == ExamMode.PRACTICAL)
-        .collect(Collectors.toMap(Question::getId, q -> q));
-    Map<Long, UserAnswer> answers = latestAnswerMap(userId);
-
-    List<WrongRecapDtos.WrongRecapSet.Item> items = questionIds.stream()
-        .map(questionMap::get)
-        .filter(Objects::nonNull)
-        .map(question -> toWrongRecapItem(question, answers.get(question.getId())))
-        .toList();
-    return new WrongRecapDtos.WrongRecapSet(items);
-  }
-
-  /* ========================= Helper Methods ========================= */
-
-  private boolean isPractical(Question question) {
-    return question.getType() == QuestionType.SHORT || question.getType() == QuestionType.LONG;
-  }
-
-  private void persistUserAnswer(String userId,
-                                 Question question,
-                                 String answerText,
-                                 boolean correct,
-                                 int score,
-                                 StudySession session,
-                                 StudySessionItem item,
-                                 String source) {
-    UserAnswer userAnswer = UserAnswer.builder()
-        .userId(userId)
-        .questionId(question.getId())
-        .examMode(ExamMode.PRACTICAL)
-        .questionType(question.getType())
-        .answeredAt(Instant.now())
-        .userAnswerJson(toJson(Map.of(
-            "answer", Optional.ofNullable(answerText).orElse(""),
-            "score", score,
-            "passed", correct
-        )))
-        .correct(correct)
-        .score(score)
-        .source(source)
-        .sessionId(session.getId())
-        .sessionItemId(item.getId())
-        .build();
-    userAnswerRepository.save(userAnswer);
-  }
-
-  private void updateProgress(String userId, Long topicId, int score) {
-    UserProgress progress = userProgressRepository.findByUserIdAndTopicId(userId, topicId)
-        .orElseGet(() -> UserProgress.builder()
-            .userId(userId)
-            .topicId(topicId)
-            .writtenDoneCnt(0)
-            .practicalDoneCnt(0)
-            .writtenAccuracy(0.0)
-            .practicalAvgScore(0.0)
-            .updatedAt(Instant.now())
-            .build());
-
-    int total = Optional.ofNullable(progress.getPracticalDoneCnt()).orElse(0);
-    double avg = Optional.ofNullable(progress.getPracticalAvgScore()).orElse(0.0);
-    progress.setPracticalDoneCnt(total + 1);
-    double newAvg = ((avg * total) + score) / (total + 1);
-    progress.setPracticalAvgScore(Math.round(newAvg * 10.0) / 10.0);
-    progress.setLastStudiedAt(Instant.now());
-    progress.setUpdatedAt(Instant.now());
-    userProgressRepository.save(progress);
-  }
-
-  private void pushProgressHook(String userId, QuestionType type, boolean correct, int score, Long questionId) {
-    List<String> tags = questionTagRepository.findTagsByQuestionId(questionId);
-    ProgressHookClient.SubmitPayload payload = new ProgressHookClient.SubmitPayload(
-        userId,
-        ExamMode.PRACTICAL.name(),
-        type.name(),
-        correct,
-        score,
-        tags,
-        "STUDY_SERVICE"
-    );
-    try {
-      progressHookClient.submit(payload);
-    } catch (Exception ignored) {
-    }
-  }
-
-  private List<String> collectMistakes(List<UserAnswer> answers, Map<Long, Question> questionCache) {
-    return answers.stream()
-        .filter(ans -> Optional.ofNullable(ans.getScore()).orElse(0) < 60)
-        .map(ans -> questionCache.get(ans.getQuestionId()))
-        .filter(Objects::nonNull)
-        .flatMap(q -> questionTagRepository.findTagsByQuestionId(q.getId()).stream())
-        .distinct()
-        .toList();
-  }
-
-  private String topicCacheTitle(Long topicId) {
-    return topicRepository.findById(topicId)
-        .map(Topic::getTitle)
-        .orElse("");
-  }
-
-  private String toJson(Object payload) {
-    try {
-      return objectMapper.writeValueAsString(payload);
-    } catch (JsonProcessingException e) {
-      return "{}";
-    }
-  }
-
-  private Map<Long, UserAnswer> latestAnswerMap(String userId) {
-    return userAnswerRepository.findByUserId(userId).stream()
-        .collect(Collectors.groupingBy(
-            UserAnswer::getQuestionId,
-            Collectors.collectingAndThen(
-                Collectors.maxBy(Comparator.comparing(UserAnswer::getAnsweredAt)),
-                opt -> opt.orElse(null)
-            )
-        ));
-  }
-
-  private WrongRecapDtos.WrongRecapSet.Item toWrongRecapItem(Question question, UserAnswer answer) {
-    String stem = Optional.ofNullable(question.getStem()).orElse("");
-    String baseExplain = Optional.ofNullable(question.getSolutionText()).orElse("");
-    String userAnswerJson = answer == null ? "{}" : Optional.ofNullable(answer.getUserAnswerJson()).orElse("{}");
-    return new WrongRecapDtos.WrongRecapSet.Item(
-        question.getId(),
-        question.getType().name(),
-        stem,
-        userAnswerJson,
-        "",
-        baseExplain,
-        question.getImageUrl()
-    );
-  }
-
-  private int readInt(Map<String, Object> meta, String key) {
-    Object value = meta.get(key);
-    if (value instanceof Number number) {
-      return number.intValue();
-    }
-    if (value instanceof String str && !str.isBlank()) {
-      try {
-        return Integer.parseInt(str);
-      } catch (NumberFormatException ignored) {
-      }
-    }
-    return 0;
-  }
-
-  private double readDouble(Map<String, Object> meta, String key) {
-    Object value = meta.get(key);
-    if (value instanceof Number number) {
-      return number.doubleValue();
-    }
-    if (value instanceof String str && !str.isBlank()) {
-      try {
-        return Double.parseDouble(str);
-      } catch (NumberFormatException ignored) {
-      }
-    }
-    return 0.0;
-  }
-
-  @SuppressWarnings("unchecked")
-  private List<Long> readList(Map<String, Object> meta, String key) {
-    Object value = meta.get(key);
-    if (value instanceof List<?> list) {
-      List<Long> result = new ArrayList<>();
-      for (Object element : list) {
-        if (element instanceof Number number) {
-          result.add(number.longValue());
-        } else if (element instanceof String str && !str.isBlank()) {
-          try {
-            result.add(Long.parseLong(str));
-          } catch (NumberFormatException ignored) {
-          }
+    @Transactional
+    public FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> submitMini(WrittenDtos.MiniSubmitReq req) {
+        Map<Long, Question> questionMap = questionRepository.findByIdIn(
+                        req.answers().stream().map(WrittenDtos.MiniAnswer::questionId).toList())
+                .stream()
+                .filter(q -> q.getMode() == ExamMode.PRACTICAL && q.getType() == QuestionType.OX)
+                .collect(Collectors.toMap(Question::getId, q -> q));
+
+        StudySession session = sessionManager.ensureMicroSession(
+                req.userId(), req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
+        int baseOrder = sessionManager.items(session.getId()).size();
+
+        int correctCount = 0;
+        List<WrittenDtos.MiniSubmitItem> items = new ArrayList<>();
+        List<Long> wrongIds = new ArrayList<>();
+
+        for (int idx = 0; idx < req.answers().size(); idx++) {
+            WrittenDtos.MiniAnswer answer = req.answers().get(idx);
+            Question question = questionMap.get(answer.questionId());
+            if (question == null) {
+                throw new NoSuchElementException("Invalid OX question: " + answer.questionId());
+            }
+
+            String userAnswer = Boolean.TRUE.equals(answer.answer()) ? "O" : "X";
+            String correctAnswer = Optional.ofNullable(question.getAnswerKey()).orElse("").trim();
+            boolean correct = correctAnswer.equalsIgnoreCase(userAnswer);
+            if (correct) {
+                correctCount++;
+            } else {
+                wrongIds.add(question.getId());
+            }
+
+            String explanation = Optional.ofNullable(question.getSolutionText()).orElse("");
+            items.add(new WrittenDtos.MiniSubmitItem(question.getId(), correct, explanation, ""));
+
+            Map<String, Object> answerJson = new HashMap<>();
+            answerJson.put("answer", userAnswer);
+            answerJson.put("correct", correct);
+            answerJson.put("submittedAt", Instant.now().toString());
+
+            StudySessionItem item = sessionManager.upsertItem(
+                    session,
+                    question.getId(),
+                    baseOrder + idx + 1,
+                    toJson(answerJson),
+                    correct,
+                    correct ? 100 : 0,
+                    null
+            );
+
+            persistUserAnswer(req.userId(), question, userAnswer, correct, correct ? 100 : 0, session, item, "PRACTICAL_MINI");
+            pushProgressHook(req.userId(), QuestionType.OX, correct, correct ? 100 : 0, question.getId());
         }
-      }
-      return result;
-    }
-    return List.of();
-  }
 
-  private String mapStepKey(String stepCode) {
-    if (stepCode == null || stepCode.isBlank()) {
-      return "practical";
+        boolean passed = wrongIds.isEmpty() && !items.isEmpty();
+
+        Map<String, Object> miniMeta = new HashMap<>();
+        miniMeta.put("total", req.answers().size());
+        miniMeta.put("correct", correctCount);
+        miniMeta.put("passed", passed);
+        miniMeta.put("wrongQuestionIds", wrongIds);
+        miniMeta.put("lastSubmittedAt", Instant.now().toString());
+        sessionManager.saveStepMeta(session, "mini", miniMeta);
+
+        if (!passed) {
+            sessionManager.updateStatus(session, "OPEN");
+        }
+
+        return new FlowDtos.StepEnvelope<>(
+                session.getId(),
+                "PRACTICAL",
+                "PRACTICAL_MINI",
+                passed ? "COMPLETE" : "IN_PROGRESS",
+                passed ? "PRACTICAL_SET" : "PRACTICAL_MINI",
+                sessionManager.loadMeta(session),
+                new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, passed, items, wrongIds)
+        );
     }
-    return switch (stepCode) {
-      case "PRACTICAL_MINI" -> "mini";
-      case "PRACTICAL_SET", "MICRO_PRACTICAL" -> "practical";
-      case "PRACTICAL_REVIEW_SET", "PRACTICAL_REVIEW" -> "review";
-      default -> "practical";
-    };
-  }
+
+    public WrittenDtos.MiniGradeOneResp gradeOneMini(WrittenDtos.MiniGradeOneReq req) {
+        FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> envelope = submitMini(new WrittenDtos.MiniSubmitReq(
+                req.userId(),
+                req.topicId(),
+                List.of(new WrittenDtos.MiniAnswer(req.questionId(), req.answer()))
+        ));
+        WrittenDtos.MiniSubmitItem item = envelope.payload().items().isEmpty()
+                ? new WrittenDtos.MiniSubmitItem(req.questionId(), false, "", "")
+                : envelope.payload().items().get(0);
+        return new WrittenDtos.MiniGradeOneResp(item.correct(), item.explanation());
+    }
+
+    /* ========================= 실기 세트 ========================= */
+
+    @Transactional
+    public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalSet(String userId, Long topicId) {
+        int size = PRACTICAL_SIZE;
+        List<Question> shortQuestions = questionRepository.pickRandomByTopic(
+                topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, size));
+        List<Question> longQuestions = questionRepository.pickRandomByTopic(
+                topicId, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, size));
+
+        List<Question> combined = Stream.concat(shortQuestions.stream(), longQuestions.stream())
+                .distinct()
+                .limit(size)
+                .toList();
+
+        List<PracticalDtos.PracticalQuestion> items = combined.stream()
+                .map(q -> new PracticalDtos.PracticalQuestion(
+                        q.getId(),
+                        q.getType().name(),
+                        Optional.ofNullable(q.getStem()).orElse(""),
+                        q.getImageUrl()))
+                .toList();
+
+        StudySession session = sessionManager.ensureMicroSession(
+                userId, topicId, ExamMode.PRACTICAL, MINI_SIZE + size);
+        Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+        if (!Boolean.TRUE.equals(miniMeta.get("passed"))) {
+            throw new IllegalStateException("PRACTICAL_MINI_NOT_PASSED");
+        }
+        Map<String, Object> practicalMeta = sessionManager.loadStepMeta(session, "practical");
+        boolean completed = Boolean.TRUE.equals(practicalMeta.get("completed"));
+        String status = completed ? "COMPLETE" : "IN_PROGRESS";
+        String next = completed ? "PRACTICAL_SUMMARY" : null;
+
+        return new FlowDtos.StepEnvelope<>(
+                session.getId(),
+                "PRACTICAL",
+                "PRACTICAL_SET",
+                status,
+                next,
+                sessionManager.loadMeta(session),
+                new PracticalDtos.PracticalSet(items)
+        );
+    }
+
+    @Transactional
+    public FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> submitPractical(PracticalDtos.PracticalSubmitReq req) {
+        Map<Long, Question> questionMap = questionRepository.findByIdIn(
+                        req.answers().stream().map(PracticalDtos.PracticalAnswer::questionId).toList())
+                .stream()
+                .filter(q -> q.getMode() == ExamMode.PRACTICAL)
+                .collect(Collectors.toMap(Question::getId, q -> q));
+
+        StudySession session = sessionManager.ensureMicroSession(
+                req.userId(), req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
+        Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+        if (!Boolean.TRUE.equals(miniMeta.get("passed"))) {
+            throw new IllegalStateException("PRACTICAL_MINI_NOT_PASSED");
+        }
+        int baseOrder = sessionManager.items(session.getId()).size();
+
+        List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
+        List<Long> wrongIds = new ArrayList<>();
+        int totalScore = 0;
+
+        for (int idx = 0; idx < req.answers().size(); idx++) {
+            PracticalDtos.PracticalAnswer answer = req.answers().get(idx);
+            Question question = questionMap.get(answer.questionId());
+            if (question == null || !isPractical(question)) {
+                throw new NoSuchElementException("Invalid practical question: " + answer.questionId());
+            }
+
+            AIExplanationService.PracticalResult result = aiExplanationService.explainAndScorePractical(
+                    question, answer.userText());
+            int score = Optional.ofNullable(result.score()).orElse(0);
+            boolean passed = score >= 60;
+            totalScore += score;
+            if (!passed) wrongIds.add(question.getId());
+
+            items.add(new PracticalDtos.PracticalSubmitItem(
+                    question.getId(),
+                    score,
+                    Optional.ofNullable(question.getSolutionText()).orElse(""),
+                    result.explain()
+            ));
+
+            Map<String, Object> answerJson = new HashMap<>();
+            answerJson.put("answer", Optional.ofNullable(answer.userText()).orElse(""));
+            answerJson.put("score", score);
+            answerJson.put("passed", passed);
+            answerJson.put("tips", result.tips());
+
+            StudySessionItem item = sessionManager.upsertItem(
+                    session,
+                    question.getId(),
+                    baseOrder + idx + 1,
+                    toJson(answerJson),
+                    passed,
+                    score,
+                    toJson(Map.of("explain", result.explain(), "tips", result.tips()))
+            );
+
+            persistUserAnswer(req.userId(), question, answer.userText(), passed, score, session, item, "MICRO_PRACTICAL");
+            pushProgressHook(req.userId(), question.getType(), passed, score, question.getId());
+            updateProgress(req.userId(), question.getTopicId(), score);
+        }
+
+        int total = items.size();
+        double scorePct = total == 0 ? 0.0 : totalScore * 1.0 / total;
+        boolean allPassed = total > 0 && wrongIds.isEmpty();
+
+        Map<String, Object> practicalMeta = new HashMap<>();
+        practicalMeta.put("total", total);
+        practicalMeta.put("avgScore", total == 0 ? 0 : scorePct);
+        practicalMeta.put("completed", allPassed);
+        practicalMeta.put("wrongQuestionIds", wrongIds);
+        practicalMeta.put("lastSubmittedAt", Instant.now().toString());
+        sessionManager.saveStepMeta(session, "practical", practicalMeta);
+
+        if (allPassed) {
+            sessionManager.closeSession(session, scorePct, Map.of("avgScore", scorePct));
+        } else {
+            sessionManager.updateStatus(session, "OPEN");
+        }
+
+        return new FlowDtos.StepEnvelope<>(
+                session.getId(),
+                "PRACTICAL",
+                "PRACTICAL_SET",
+                allPassed ? "COMPLETE" : "IN_PROGRESS",
+                allPassed ? "PRACTICAL_SUMMARY" : "PRACTICAL_SET",
+                sessionManager.loadMeta(session),
+                new PracticalDtos.PracticalSubmitResp(
+                        total,
+                        total == 0 ? 0 : (int) Math.round(scorePct),
+                        items,
+                        wrongIds
+                )
+        );
+    }
+
+    /* ========================= 실기 리뷰 ========================= */
+
+    @Transactional
+    public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalReviewSet(String userId, Long rootTopicId) {
+        Set<Long> topicIds = topicTreeService.descendantIds(rootTopicId);
+        if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
+
+        List<Question> questions = Stream.of(
+                        questionRepository.pickRandomByTopicIn(topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, REVIEW_SIZE)),
+                        questionRepository.pickRandomByTopicIn(topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, REVIEW_SIZE))
+                ).flatMap(List::stream)
+                .distinct()
+                .limit(REVIEW_SIZE)
+                .toList();
+
+        List<PracticalDtos.PracticalQuestion> items = questions.stream()
+                .map(q -> new PracticalDtos.PracticalQuestion(
+                        q.getId(),
+                        q.getType().name(),
+                        Optional.ofNullable(q.getStem()).orElse(""),
+                        q.getImageUrl()))
+                .toList();
+
+        StudySession session = sessionManager.ensureReviewSession(
+                userId, rootTopicId, ExamMode.PRACTICAL, REVIEW_SIZE);
+        Map<String, Object> reviewMeta = sessionManager.loadStepMeta(session, "review");
+        boolean completed = Boolean.TRUE.equals(reviewMeta.get("completed"));
+        String status = completed ? "COMPLETE" : "IN_PROGRESS";
+        String next = completed ? "PRACTICAL_REVIEW_SUMMARY" : null;
+
+        return new FlowDtos.StepEnvelope<>(
+                session.getId(),
+                "REVIEW",
+                "PRACTICAL_REVIEW_SET",
+                status,
+                next,
+                sessionManager.loadMeta(session),
+                new PracticalDtos.PracticalSet(items)
+        );
+    }
+
+    @Transactional
+    public FlowDtos.StepEnvelope<PracticalDtos.PracticalReviewSubmitResp> practicalReviewSubmit(
+            PracticalDtos.PracticalReviewSubmitReq req) {
+
+        Set<Long> rawIds = topicTreeService.descendantIds(req.rootTopicId());
+        Set<Long> topicIds = new HashSet<>(rawIds);
+        if (topicIds.isEmpty()) {
+            topicIds.add(req.rootTopicId());
+        }
+
+        Map<Long, Question> questionMap = questionRepository.findByIdIn(
+                        req.answers().stream().map(PracticalDtos.PracticalAnswer::questionId).toList())
+                .stream()
+                .filter(q -> q.getMode() == ExamMode.PRACTICAL && topicIds.contains(q.getTopicId()))
+                .collect(Collectors.toMap(Question::getId, q -> q));
+
+        StudySession session = sessionManager.ensureReviewSession(
+                req.userId(), req.rootTopicId(), ExamMode.PRACTICAL, REVIEW_SIZE);
+        int baseOrder = sessionManager.items(session.getId()).size();
+
+        List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
+        List<Long> wrongIds = new ArrayList<>();
+        int totalScore = 0;
+
+        for (int idx = 0; idx < req.answers().size(); idx++) {
+            PracticalDtos.PracticalAnswer answer = req.answers().get(idx);
+            Question question = questionMap.get(answer.questionId());
+            if (question == null) {
+                continue;
+            }
+
+            AIExplanationService.PracticalResult result = aiExplanationService.explainAndScorePractical(
+                    question, answer.userText());
+            int score = Optional.ofNullable(result.score()).orElse(0);
+            boolean passed = score >= 60;
+            totalScore += score;
+            if (!passed) {
+                wrongIds.add(question.getId());
+            }
+
+            items.add(new PracticalDtos.PracticalSubmitItem(
+                    question.getId(),
+                    score,
+                    Optional.ofNullable(question.getSolutionText()).orElse(""),
+                    result.explain()
+            ));
+
+            Map<String, Object> answerJson = new HashMap<>();
+            answerJson.put("answer", Optional.ofNullable(answer.userText()).orElse(""));
+            answerJson.put("score", score);
+            answerJson.put("passed", passed);
+            answerJson.put("tips", result.tips());
+
+            StudySessionItem item = sessionManager.upsertItem(
+                    session,
+                    question.getId(),
+                    baseOrder + idx + 1,
+                    toJson(answerJson),
+                    passed,
+                    score,
+                    toJson(Map.of("explain", result.explain(), "tips", result.tips()))
+            );
+
+            persistUserAnswer(req.userId(), question, answer.userText(), passed, score, session, item, "PRACTICAL_REVIEW");
+            pushProgressHook(req.userId(), question.getType(), passed, score, question.getId());
+        }
+
+        int total = items.size();
+        double avgScore = total == 0 ? 0.0 : totalScore * 1.0 / total;
+        boolean allPassed = total > 0 && wrongIds.isEmpty();
+
+        Map<String, Object> reviewMeta = new HashMap<>();
+        reviewMeta.put("total", total);
+        reviewMeta.put("avgScore", avgScore);
+        reviewMeta.put("completed", allPassed);
+        reviewMeta.put("wrongQuestionIds", wrongIds);
+        reviewMeta.put("lastSubmittedAt", Instant.now().toString());
+        sessionManager.saveStepMeta(session, "review", reviewMeta);
+
+        if (allPassed) {
+            sessionManager.closeSession(session, avgScore, Map.of("avgScore", avgScore));
+        } else {
+            sessionManager.updateStatus(session, "OPEN");
+        }
+
+        return new FlowDtos.StepEnvelope<>(
+                session.getId(),
+                "REVIEW",
+                "PRACTICAL_REVIEW_SET",
+                allPassed ? "COMPLETE" : "IN_PROGRESS",
+                allPassed ? "PRACTICAL_REVIEW_SUMMARY" : "PRACTICAL_REVIEW_SET",
+                sessionManager.loadMeta(session),
+                new PracticalDtos.PracticalReviewSubmitResp(
+                        total,
+                        total == 0 ? 0 : (int) Math.round(avgScore),
+                        items,
+                        wrongIds
+                )
+        );
+    }
+
+    /* ========================= 요약 ========================= */
+
+    @Transactional(readOnly = true)
+    public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(String userId, Long topicId) {
+        StudySession session = sessionManager.latestMicroSession(userId, topicId).orElse(null);
+
+        int miniTotal = 0;
+        int miniCorrect = 0;
+        boolean miniPassed = false;
+
+        int practicalTotal = 0;
+        int practicalPassed = 0;
+        double avgScore = 0.0;
+        boolean practicalCompleted = false;
+
+        List<String> mistakes = List.of();
+        Map<String, Object> meta = Map.of();
+        Long sessionId = null;
+
+        if (session != null) {
+            sessionId = session.getId();
+            Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+            Map<String, Object> practicalMeta = sessionManager.loadStepMeta(session, "practical");
+
+            miniTotal = readInt(miniMeta, "total");
+            int miniWrong = readList(miniMeta, "wrongQuestionIds").size();
+            miniCorrect = Math.max(0, miniTotal - miniWrong);
+            miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+
+            practicalTotal = readInt(practicalMeta, "total");
+            int practicalWrong = readList(practicalMeta, "wrongQuestionIds").size();
+            practicalPassed = Math.max(0, practicalTotal - practicalWrong);
+            avgScore = readDouble(practicalMeta, "avgScore");
+            practicalCompleted = Boolean.TRUE.equals(practicalMeta.get("completed"));
+
+            meta = sessionManager.loadMeta(session);
+
+            List<UserAnswer> sessionAnswers = userAnswerRepository.findByUserIdAndSessionId(userId, sessionId).stream()
+                    .filter(ans -> ans.getExamMode() == ExamMode.PRACTICAL)
+                    .toList();
+            Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
+            Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
+                    .filter(q -> Objects.equals(q.getTopicId(), topicId))
+                    .collect(Collectors.toMap(Question::getId, q -> q));
+            List<UserAnswer> topicAnswers = sessionAnswers.stream()
+                    .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
+                    .toList();
+            mistakes = collectMistakes(topicAnswers, questionCache);
+        }
+
+        boolean completed = miniPassed && practicalCompleted;
+        int totalSolved = miniTotal + practicalTotal;
+        int totalPassed = miniCorrect + practicalPassed;
+
+        String summary = aiExplanationService.summarizePractical(
+                topicCacheTitle(topicId),
+                totalSolved,
+                (int) Math.round(avgScore),
+                mistakes
+        );
+
+        WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
+                miniTotal,
+                miniCorrect,
+                miniPassed,
+                practicalTotal,
+                practicalPassed,
+                summary,
+                completed
+        );
+
+        String status;
+        if (session == null) {
+            status = "NOT_STARTED";
+        } else {
+            status = completed ? "COMPLETE" : "IN_PROGRESS";
+        }
+
+        return new FlowDtos.StepEnvelope<>(
+                sessionId,
+                "PRACTICAL",
+                "PRACTICAL_SUMMARY",
+                status,
+                null,
+                meta,
+                payload
+        );
+    }
+
+    public PracticalDtos.PracticalGradeOneResp gradeOnePractical(PracticalDtos.PracticalGradeOneReq req) {
+        FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> envelope = submitPractical(new PracticalDtos.PracticalSubmitReq(
+                req.userId(),
+                req.topicId(),
+                List.of(new PracticalDtos.PracticalAnswer(req.questionId(), req.userText()))
+        ));
+
+        PracticalDtos.PracticalSubmitResp resp = envelope.payload();
+        PracticalDtos.PracticalSubmitItem item = resp.items().isEmpty()
+                ? new PracticalDtos.PracticalSubmitItem(req.questionId(), 0, "", "")
+                : resp.items().get(0);
+
+        return new PracticalDtos.PracticalGradeOneResp(item.score(), item.baseExplanation(), item.aiExplanation());
+    }
+
+    /* ========================= Wrong Recap ========================= */
+
+    @Transactional(readOnly = true)
+    public WrongRecapDtos.WrongRecapSet wrongRecapBySession(String userId, Long sessionId, String stepCode) {
+        StudySession session = sessionManager.getSession(sessionId);
+        if (!session.getUserId().equals(userId)) {
+            throw new IllegalStateException("세션 소유자가 아닙니다.");
+        }
+
+        String stepKey = mapStepKey(stepCode);
+        List<Long> questionIds = sessionManager.wrongQuestionIds(sessionId, stepKey);
+        if (questionIds.isEmpty()) {
+            return new WrongRecapDtos.WrongRecapSet(List.of());
+        }
+
+        Map<Long, Question> questionMap = questionRepository.findAllById(questionIds).stream()
+                .filter(q -> q.getMode() == ExamMode.PRACTICAL)
+                .collect(Collectors.toMap(Question::getId, q -> q));
+        Map<Long, UserAnswer> answers = latestAnswerMap(userId);
+
+        List<WrongRecapDtos.WrongRecapSet.Item> items = questionIds.stream()
+                .map(questionMap::get)
+                .filter(Objects::nonNull)
+                .map(question -> toWrongRecapItem(question, answers.get(question.getId())))
+                .toList();
+        return new WrongRecapDtos.WrongRecapSet(items);
+    }
+
+    /* ========================= Helper Methods ========================= */
+
+    private boolean isPractical(Question question) {
+        return question.getType() == QuestionType.SHORT || question.getType() == QuestionType.LONG;
+    }
+
+    private void persistUserAnswer(String userId,
+                                   Question question,
+                                   String answerText,
+                                   boolean correct,
+                                   int score,
+                                   StudySession session,
+                                   StudySessionItem item,
+                                   String source) {
+        UserAnswer userAnswer = UserAnswer.builder()
+                .userId(userId)
+                .questionId(question.getId())
+                .examMode(ExamMode.PRACTICAL)
+                .questionType(question.getType())
+                .answeredAt(Instant.now())
+                .userAnswerJson(toJson(Map.of(
+                        "answer", Optional.ofNullable(answerText).orElse(""),
+                        "score", score,
+                        "passed", correct
+                )))
+                .correct(correct)
+                .score(score)
+                .source(source)
+                .sessionId(session.getId())
+                .sessionItemId(item.getId())
+                .build();
+        userAnswerRepository.save(userAnswer);
+    }
+
+    private void updateProgress(String userId, Long topicId, int score) {
+        UserProgress progress = userProgressRepository.findByUserIdAndTopicId(userId, topicId)
+                .orElseGet(() -> UserProgress.builder()
+                        .userId(userId)
+                        .topicId(topicId)
+                        .writtenDoneCnt(0)
+                        .practicalDoneCnt(0)
+                        .writtenAccuracy(0.0)
+                        .practicalAvgScore(0.0)
+                        .updatedAt(Instant.now())
+                        .build());
+
+        int total = Optional.ofNullable(progress.getPracticalDoneCnt()).orElse(0);
+        double avg = Optional.ofNullable(progress.getPracticalAvgScore()).orElse(0.0);
+        progress.setPracticalDoneCnt(total + 1);
+        double newAvg = ((avg * total) + score) / (total + 1);
+        progress.setPracticalAvgScore(Math.round(newAvg * 10.0) / 10.0);
+        progress.setLastStudiedAt(Instant.now());
+        progress.setUpdatedAt(Instant.now());
+        userProgressRepository.save(progress);
+    }
+
+    private void pushProgressHook(String userId, QuestionType type, boolean correct, int score, Long questionId) {
+        List<String> tags = questionTagRepository.findTagsByQuestionId(questionId);
+        ProgressHookClient.SubmitPayload payload = new ProgressHookClient.SubmitPayload(
+                userId,
+                ExamMode.PRACTICAL.name(),
+                type.name(),
+                correct,
+                score,
+                tags,
+                "STUDY_SERVICE"
+        );
+        try {
+            progressHookClient.submit(payload);
+        } catch (Exception ignored) {
+            // hook failure는 비차단
+        }
+    }
+
+    private List<String> collectMistakes(List<UserAnswer> answers, Map<Long, Question> questionCache) {
+        return answers.stream()
+                .filter(ans -> Optional.ofNullable(ans.getScore()).orElse(0) < 60)
+                .map(ans -> questionCache.get(ans.getQuestionId()))
+                .filter(Objects::nonNull)
+                .flatMap(q -> questionTagRepository.findTagsByQuestionId(q.getId()).stream())
+                .distinct()
+                .toList();
+    }
+
+    private String topicCacheTitle(Long topicId) {
+        return topicRepository.findById(topicId)
+                .map(Topic::getTitle)
+                .orElse("");
+    }
+
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            return "{}";
+        }
+    }
+
+    private Map<Long, UserAnswer> latestAnswerMap(String userId) {
+        return userAnswerRepository.findByUserId(userId).stream()
+                .collect(Collectors.groupingBy(
+                        UserAnswer::getQuestionId,
+                        Collectors.collectingAndThen(
+                                Collectors.maxBy(Comparator.comparing(UserAnswer::getAnsweredAt)),
+                                opt -> opt.orElse(null)
+                        )
+                ));
+    }
+
+    private WrongRecapDtos.WrongRecapSet.Item toWrongRecapItem(Question question, UserAnswer answer) {
+        String stem = Optional.ofNullable(question.getStem()).orElse("");
+        String baseExplain = Optional.ofNullable(question.getSolutionText()).orElse("");
+        String userAnswerJson = answer == null ? "{}" : Optional.ofNullable(answer.getUserAnswerJson()).orElse("{}");
+        return new WrongRecapDtos.WrongRecapSet.Item(
+                question.getId(),
+                question.getType().name(),
+                stem,
+                userAnswerJson,
+                "",
+                baseExplain,
+                question.getImageUrl()
+        );
+    }
+
+    private int readInt(Map<String, Object> meta, String key) {
+        Object value = meta.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String str && !str.isBlank()) {
+            try {
+                return Integer.parseInt(str);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return 0;
+    }
+
+    private double readDouble(Map<String, Object> meta, String key) {
+        Object value = meta.get(key);
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value instanceof String str && !str.isBlank()) {
+            try {
+                return Double.parseDouble(str);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return 0.0;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Long> readList(Map<String, Object> meta, String key) {
+        Object value = meta.get(key);
+        if (value instanceof List<?> list) {
+            List<Long> result = new ArrayList<>();
+            for (Object element : list) {
+                if (element instanceof Number number) {
+                    result.add(number.longValue());
+                } else if (element instanceof String str && !str.isBlank()) {
+                    try {
+                        result.add(Long.parseLong(str));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+            return result;
+        }
+        return List.of();
+    }
+
+    private String mapStepKey(String stepCode) {
+        if (stepCode == null || stepCode.isBlank()) {
+            return "practical";
+        }
+        return switch (stepCode) {
+            case "PRACTICAL_MINI" -> "mini";
+            case "PRACTICAL_SET", "MICRO_PRACTICAL" -> "practical";
+            case "PRACTICAL_REVIEW_SET", "PRACTICAL_REVIEW" -> "review";
+            default -> "practical";
+        };
+    }
 }
-

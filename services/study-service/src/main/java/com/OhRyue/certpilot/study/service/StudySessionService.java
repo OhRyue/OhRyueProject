@@ -16,7 +16,6 @@ import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class StudySessionService {
 
     private final LearnSessionRepository sessionRepo;
@@ -52,6 +51,7 @@ public class StudySessionService {
     }
 
     /** 세션 시작 (resume=true면 최신 세션 재개) */
+    @Transactional
     public StartResp start(StartReq req) {
         if (Boolean.TRUE.equals(req.resume())) {
             var found = sessionRepo.findFirstByUserIdAndTopicIdAndModeOrderByIdDesc(
@@ -104,6 +104,7 @@ public class StudySessionService {
      * 현재 step을 COMPLETE 처리(프런트가 '해당 단계 문제를 전부 완료'한 뒤 호출).
      * 다음 READY 단계로 이동. 남은 READY 단계가 없으면 DONE.
      */
+    @Transactional
     public AdvanceResp advance(AdvanceReq req) {
         var s = sessionRepo.findById(req.sessionId())
                 .orElseThrow(() -> new NoSuchElementException("session not found"));
@@ -123,8 +124,14 @@ public class StudySessionService {
         // 세션의 mode(String) 기준으로 다음 단계 탐색
         String next = null;
         for (String st : orderOf(s.getMode())) {
-            var found = steps.stream().filter(x -> x.getStep().equals(st)).findFirst().orElseThrow();
-            if ("READY".equals(found.getState())) { next = st; break; }
+            var found = steps.stream()
+                    .filter(x -> x.getStep().equals(st))
+                    .findFirst()
+                    .orElseThrow();
+            if ("READY".equals(found.getState())) {
+                next = st;
+                break;
+            }
         }
 
         if (next == null) {

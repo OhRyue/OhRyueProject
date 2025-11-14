@@ -21,8 +21,8 @@ public class Concept {
   @Column(name = "topic_id", nullable = false)
   private Long topicId;
 
-  @Column(name = "sections_json", columnDefinition = "JSON", nullable = false)
-  private String sectionsJson;
+  @Column(name = "blocks_json", columnDefinition = "JSON", nullable = false)
+  private String blocksJson;
 
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;

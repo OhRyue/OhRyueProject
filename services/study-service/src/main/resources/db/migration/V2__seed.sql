@@ -31,7 +31,7 @@ SET @topic_practical := (SELECT id FROM topic WHERE cert_id=@cert_id AND code='I
 /* =========================================================
  * 개념(리치 블록) 샘플
  * ========================================================= */
-INSERT INTO concept (topic_id, sections_json)
+INSERT INTO concept (topic_id, blocks_json)
 SELECT @topic_analysis,
        JSON_OBJECT(
          'sections', JSON_ARRAY(
@@ -83,7 +83,7 @@ SELECT @topic_analysis,
        )
 WHERE NOT EXISTS (SELECT 1 FROM concept WHERE topic_id=@topic_analysis);
 
-INSERT INTO concept (topic_id, sections_json)
+INSERT INTO concept (topic_id, blocks_json)
 SELECT @topic_oop,
        JSON_OBJECT(
          'sections', JSON_ARRAY(
@@ -192,7 +192,7 @@ SELECT @topic_oop,
        )
 WHERE NOT EXISTS (SELECT 1 FROM concept WHERE topic_id=@topic_oop);
 
-INSERT INTO concept (topic_id, sections_json)
+INSERT INTO concept (topic_id, blocks_json)
 SELECT @topic_interface,
        JSON_OBJECT(
          'sections', JSON_ARRAY(
@@ -268,7 +268,7 @@ SELECT @topic_interface,
        )
 WHERE NOT EXISTS (SELECT 1 FROM concept WHERE topic_id=@topic_interface);
 
-INSERT INTO concept (topic_id, sections_json)
+INSERT INTO concept (topic_id, blocks_json)
 SELECT @topic_practical,
        JSON_OBJECT(
          'sections', JSON_ARRAY(
