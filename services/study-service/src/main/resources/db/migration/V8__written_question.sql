@@ -5,857 +5,1085 @@ USE certpilot_study;
 
 SET @cert_id := 1;
 
-SET @tp_11101 := 11101; -- 1.1.1 현행 시스템 분석
-SET @tp_11102 := 11102; -- 1.1.2 요구사항 확인 기법/UML/애자일
-SET @tp_11103 := 11103; -- 1.1.3 분석 모델/요구 관리
+SET @tp_11201 := 11201; -- 1.2.1 UI 요구사항 확인 및 화면흐름
+SET @tp_11301 := 11301; -- 1.3.1 공통 모듈 설계
+SET @tp_11302 := 11302; -- 1.3.2 객체지향 설계 원칙
 
-/* ================================================
- * 11101 – 현행 시스템 분석
- *  - OX: 기존 5개 + 1개 추가 = 6개
- *  - MCQ: 기존 0개 + 10개 추가 = 10개
- * ================================================ */
+/* =======================================================
+ * 11201 – UI 요구사항 확인 및 화면흐름
+ *  - OX 6개, MCQ 10개 추가
+ * ======================================================= */
 
--- [11101] OX 추가 (1개 → 총 6개)
+-- [11201] OX 6개
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'OX', 'NORMAL',
-       '현행 시스템 분석에서 로그와 모니터링 지표는 “문제 발생 시 원인 추적”뿐 아니라, 신규 시스템의 용량 산정과 임계치 정의에도 활용된다. (O/X)',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'OX', 'EASY',
+       'UI 설계에서 사용자의 작업 순서를 고려한 화면 흐름은 불필요한 이동을 줄이고 효율을 높이는 데 도움이 된다. (O/X)',
        NULL,
        'O',
-       '로그·모니터링 지표는 단순 장애 분석을 넘어, 신시스템에서의 성능/용량 기준과 알림 임계치 정의에 중요한 근거가 됩니다.',
-       'seed:v5:11101:ox:monitoring-capacity'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:ox:monitoring-capacity'
-);
-
--- [11101] MCQ 10개 추가
-/* Q1: 현행 분석 범위 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'EASY',
-       '현행 시스템 분석 단계에서 “가장 먼저” 확인해야 할 내용으로 가장 적절한 것은?',
-       NULL,
-       'B',
-       '현행 분석의 출발점은 “무슨 일을 하는 시스템인지(주요 기능/업무 프로세스)”를 파악하는 것입니다.',
-       'seed:v5:11101:mcq:scope-first'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:scope-first'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '서버 OS와 DBMS 버전부터 상세히 파악한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:scope-first'
-UNION ALL
-SELECT q.id, 'B', '시스템이 지원하는 주요 업무 프로세스와 기능을 파악한다.', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:scope-first'
-UNION ALL
-SELECT q.id, 'C', '추후 도입할 신기술 목록을 정리한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:scope-first'
-UNION ALL
-SELECT q.id, 'D', '테스트 케이스를 먼저 설계한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:scope-first';
-
-UPDATE question
-SET answer_key = 'B'
-WHERE source = 'seed:v5:11101:mcq:scope-first';
-
-/* Q2: 인터페이스 현황 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'NORMAL',
-       '다음 중 현행 시스템 분석에서 “인터페이스 현황”을 정리할 때 필수적으로 포함해야 할 항목이 아닌 것은?',
-       NULL,
-       'D',
-       '인터페이스 분석에는 연계 대상, 데이터, 프로토콜, 주기, 오류 처리 방식 등이 포함되며, 소스코드 양 자체는 필수 항목은 아닙니다.',
-       'seed:v5:11101:mcq:interface-items'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:interface-items'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '연계 대상 시스템 정보와 인터페이스 ID', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:interface-items'
-UNION ALL
-SELECT q.id, 'B', '전송 데이터 항목과 포맷(JSON/CSV 등)', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:interface-items'
-UNION ALL
-SELECT q.id, 'C', '전송 주기/트리거와 재전송 정책', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:interface-items'
-UNION ALL
-SELECT q.id, 'D', '인터페이스 관련 소스코드 라인 수(LOC)', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:interface-items';
-
-UPDATE question
-SET answer_key = 'D'
-WHERE source = 'seed:v5:11101:mcq:interface-items';
-
-/* Q3: 성능 지표 선택 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'NORMAL',
-       '현행 시스템의 “사용자 체감 성능”을 파악하기 위해 가장 먼저 확인해야 할 지표 조합으로 가장 적절한 것은?',
-       NULL,
-       'C',
-       '사용자 체감 성능은 보통 응답시간, 처리량, 동시 접속자 수와 밀접한 관련이 있습니다.',
-       'seed:v5:11101:mcq:perf-metrics'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:perf-metrics'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', 'CPU 온도, 전원 사용량', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:perf-metrics'
-UNION ALL
-SELECT q.id, 'B', '디스크 용량 사용률, OS 버전', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:perf-metrics'
-UNION ALL
-SELECT q.id, 'C', '응답시간, 처리량, 동시 접속자 수', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:perf-metrics'
-UNION ALL
-SELECT q.id, 'D', '개발 인원 수, 코드 라인 수', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:perf-metrics';
-
-UPDATE question
-SET answer_key = 'C'
-WHERE source = 'seed:v5:11101:mcq:perf-metrics';
-
-/* Q4: 장애 이력 활용 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'NORMAL',
-       '현행 시스템 분석 시 장애 이력을 수집하는 “가장 큰 목적”으로 알맞은 것은?',
-       NULL,
-       'B',
-       '장애 이력은 신시스템에서 반드시 개선해야 할 품질 요구(가용성, 신뢰성, 회복 시간 등)를 도출하는 근거가 됩니다.',
-       'seed:v5:11101:mcq:incident-purpose'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:incident-purpose'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '장애 담당자를 평가하기 위한 근거를 확보하기 위해서', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:incident-purpose'
-UNION ALL
-SELECT q.id, 'B', '신규 시스템의 신뢰성/가용성 요구사항을 도출하기 위해서', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:incident-purpose'
-UNION ALL
-SELECT q.id, 'C', '백업 정책을 완전히 제거할 근거를 찾기 위해서', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:incident-purpose'
-UNION ALL
-SELECT q.id, 'D', '테스트 케이스 수를 줄이기 위한 명분을 만들기 위해서', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:incident-purpose';
-
-UPDATE question
-SET answer_key = 'B'
-WHERE source = 'seed:v5:11101:mcq:incident-purpose';
-
-/* Q5: AS-IS/TO-BE 비교 관점 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'NORMAL',
-       'AS-IS/TO-BE 분석에서 AS-IS 모델을 만드는 주된 이유로 가장 알맞은 것은?',
-       NULL,
-       'C',
-       'AS-IS를 통해 현재 문제점과 제약을 구조화해서 보여주어, TO-BE 방향성을 이해관계자와 공유하기 위함입니다.',
-       'seed:v5:11101:mcq:as-is-reason'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:as-is-reason'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '개발 언어를 선택하기 위해서', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:as-is-reason'
-UNION ALL
-SELECT q.id, 'B', '테스트 자동화 도구를 고르기 위해서', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:as-is-reason'
-UNION ALL
-SELECT q.id, 'C', '현재 구조와 문제점을 시각화해 개선 방향을 합의하기 위해서', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:as-is-reason'
-UNION ALL
-SELECT q.id, 'D', '조직도 작성을 대신하기 위해서', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:as-is-reason';
-
-UPDATE question
-SET answer_key = 'C'
-WHERE source = 'seed:v5:11101:mcq:as-is-reason';
-
-/* Q6: 분석 산출물 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'EASY',
-       '현행 시스템 분석 산출물로 보기 어려운 것은?',
-       NULL,
-       'D',
-       '현행 분석 산출물에는 보통 현행 구조도, 업무 흐름도, 인터페이스 목록, 장애/성능 현황 등이 포함됩니다.',
-       'seed:v5:11101:mcq:deliverables'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:deliverables'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '현행 업무 프로세스 다이어그램', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:deliverables'
-UNION ALL
-SELECT q.id, 'B', '현행 시스템 구성도(아키텍처 다이어그램)', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:deliverables'
-UNION ALL
-SELECT q.id, 'C', '현행 인터페이스 목록과 데이터 흐름', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:deliverables'
-UNION ALL
-SELECT q.id, 'D', '미래 조직 개편 시나리오 상세 설계서', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:deliverables';
-
-UPDATE question
-SET answer_key = 'D'
-WHERE source = 'seed:v5:11101:mcq:deliverables';
-
-/* Q7: 보안 관점 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'NORMAL',
-       '다음 중 현행 시스템 분석에서 “보안 요구 도출”과 가장 직접적으로 연관된 활동은?',
-       NULL,
-       'B',
-       '보안 요구는 민감정보 처리 위치, 접근 권한, 암복호화/로그 정책 등을 파악하면서 도출됩니다.',
-       'seed:v5:11101:mcq:security'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:security'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '향후 사용할 암호화 알고리즘을 미리 선정', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:security'
-UNION ALL
-SELECT q.id, 'B', '민감정보 저장 위치, 접근 권한, 로그 정책을 조사', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:security'
-UNION ALL
-SELECT q.id, 'C', '테스트 데이터 생성을 위한 목업 도구 선정', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:security'
-UNION ALL
-SELECT q.id, 'D', 'UI 색상 팔레트 정의', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:security';
-
-UPDATE question
-SET answer_key = 'B'
-WHERE source = 'seed:v5:11101:mcq:security';
-
-/* Q8: 용량 산정 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'NORMAL',
-       '현행 시스템의 데이터 용량을 조사하는 주된 이유로 가장 알맞은 것은?',
-       NULL,
-       'C',
-       '데이터 증가 추이를 기반으로 신시스템의 저장소/아카이빙/파티션 정책을 설계할 수 있습니다.',
-       'seed:v5:11101:mcq:capacity'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:capacity'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '개발자의 노트북 최소 사양을 결정하기 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:capacity'
-UNION ALL
-SELECT q.id, 'B', '회사 건물 전력 설비 증설을 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:capacity'
-UNION ALL
-SELECT q.id, 'C', '신규 시스템의 저장소/파티션/아카이빙 전략 수립을 위해', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:capacity'
-UNION ALL
-SELECT q.id, 'D', '모니터 해상도를 결정하기 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:capacity';
-
-UPDATE question
-SET answer_key = 'C'
-WHERE source = 'seed:v5:11101:mcq:capacity';
-
-/* Q9: 사용자 불만 분석 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'EASY',
-       '현행 시스템 분석 시 콜센터/헬프데스크의 VOC(불만/문의)를 조사하는 이유로 가장 적절한 것은?',
-       NULL,
-       'B',
-       'VOC는 사용자가 실제로 겪는 불편과 결함을 보여주므로, 개선 요구를 정리하는 데 매우 중요합니다.',
-       'seed:v5:11101:mcq:voc'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:voc'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '콜센터 인력을 줄이기 위한 근거를 확보하기 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:voc'
-UNION ALL
-SELECT q.id, 'B', '사용자 관점에서의 불편 사항과 개선 요구를 파악하기 위해', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:voc'
-UNION ALL
-SELECT q.id, 'C', '콜센터 운영비 회계처리를 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:voc'
-UNION ALL
-SELECT q.id, 'D', '데이터베이스 인덱스 구조를 설계하기 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:voc';
-
-UPDATE question
-SET answer_key = 'B'
-WHERE source = 'seed:v5:11101:mcq:voc';
-
-/* Q10: 이해관계자 인터뷰 우선순위 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11101, 'WRITTEN', 'MCQ', 'NORMAL',
-       '현행 시스템 분석을 위해 이해관계자 인터뷰 대상을 선정할 때, 우선순위를 판단하는 기준으로 가장 적절한 것은?',
-       NULL,
-       'C',
-       '업무 중요도와 시스템 영향도가 높은 역할(예: 핵심 사용자, 운영 담당자, 장애 대응 담당자)을 우선 인터뷰하는 것이 일반적입니다.',
-       'seed:v5:11101:mcq:stakeholder-priority'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11101:mcq:stakeholder-priority'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '개발팀과 친한 사람부터 인터뷰한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:stakeholder-priority'
-UNION ALL
-SELECT q.id, 'B', '근무년수가 가장 짧은 사람부터 인터뷰한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:stakeholder-priority'
-UNION ALL
-SELECT q.id, 'C', '업무·시스템 영향도가 높은 핵심 사용자/운영 담당자를 우선 인터뷰한다.', 1
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:stakeholder-priority'
-UNION ALL
-SELECT q.id, 'D', '시간이 되는 사람부터 무작위로 인터뷰한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11101:mcq:stakeholder-priority';
-
-UPDATE question
-SET answer_key = 'C'
-WHERE source = 'seed:v5:11101:mcq:stakeholder-priority';
-
-
-/* ================================================
- * 11102 – 요구사항 확인 / UML / 애자일
- *  - OX: 기존 4개 + 2개 추가 = 6개
- *  - MCQ: 기존 3개(10,11,12) + 7개 추가 = 10개
- * ================================================ */
-
--- [11102] OX 2개 추가
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'OX', 'NORMAL',
-       '요구사항 우선순위는 단순히 “요청한 사람의 직급”만을 기준으로 정하면 안 되며, 사업 가치와 구현 난이도 등을 함께 고려해야 한다. (O/X)',
-       NULL,
-       'O',
-       '요구 우선순위는 비즈니스 가치, 위험, 난이도, 일정 등을 종합적으로 고려해 결정해야 합니다.',
-       'seed:v5:11102:ox:priority'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:ox:priority'
-);
+       '사용자의 실제 작업 순서를 반영하면 불필요한 이동과 클릭이 줄어 전체 사용성이 좋아집니다.',
+       'seed:v5:11201:ox:flow-sequence'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:ox:flow-sequence');
 
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'OX', 'NORMAL',
-       '요구사항 검토 회의에서는 이해관계자 간의 요구 충돌을 발견하더라도, 문서에 그대로 두고 설계 단계에서 자동으로 조정되도록 두는 것이 일반적이다. (O/X)',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'OX', 'NORMAL',
+       '와이어프레임은 실제 디자인 색상과 폰트까지 완전히 반영해야 하므로, 화면 구조만 단순히 표현해서는 안 된다. (O/X)',
        NULL,
        'X',
-       '요구 충돌은 가능한 빨리 식별하고, 책임자/이해관계자 합의를 통해 해소한 뒤 명세서에 반영해야 합니다.',
-       'seed:v5:11102:ox:conflict'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:ox:conflict'
-);
-
--- [11102] MCQ 7개 추가
-/* Q1: 이해관계자 식별 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'MCQ', 'EASY',
-       '다음 중 요구사항 도출을 위한 이해관계자로 보기 가장 어려운 대상은?',
-       NULL,
-       'D',
-       '이해관계자는 시스템에 영향을 주거나 영향을 받는 사람/조직으로, 실제로 관련이 없는 타 회사 고객은 포함되지 않습니다.',
-       'seed:v5:11102:mcq:stakeholder'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:mcq:stakeholder'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '시스템을 사용하는 최종 사용자', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:stakeholder'
-UNION ALL
-SELECT q.id, 'B', '시스템을 운영·모니터링하는 운영 담당자', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:stakeholder'
-UNION ALL
-SELECT q.id, 'C', '관련 법규를 관리·감독하는 규제 기관', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:stakeholder'
-UNION ALL
-SELECT q.id, 'D', '시스템과 전혀 관련이 없는 타 회사 고객', 1
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:stakeholder';
-
-UPDATE question
-SET answer_key = 'D'
-WHERE source = 'seed:v5:11102:mcq:stakeholder';
-
-/* Q2: 요구 수집 기법 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'MCQ', 'EASY',
-       '다수의 사용자의 의견을 정량적으로 수집하기에 가장 적절한 요구사항 수집 기법은?',
-       NULL,
-       'B',
-       '설문조사는 많은 사람의 의견을 짧은 시간에 정량적으로 수집할 수 있는 전형적인 요구 수집 기법입니다.',
-       'seed:v5:11102:mcq:elicitation'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:mcq:elicitation'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '심층 인터뷰', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:elicitation'
-UNION ALL
-SELECT q.id, 'B', '설문조사', 1
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:elicitation'
-UNION ALL
-SELECT q.id, 'C', '프로토타입 테스트', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:elicitation'
-UNION ALL
-SELECT q.id, 'D', '워크숍에서 브레인스토밍', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:elicitation';
-
-UPDATE question
-SET answer_key = 'B'
-WHERE source = 'seed:v5:11102:mcq:elicitation';
-
-/* Q3: 요구 명세 품질 기준 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'MCQ', 'NORMAL',
-       '다음 중 좋은 요구사항 명세가 가져야 할 품질 특성으로 가장 적절하지 않은 것은?',
-       NULL,
-       'D',
-       '좋은 요구는 명확성, 일관성, 검증 가능성 등을 가져야 하며, “개발자에게만 이해 가능한 표현”은 좋은 특성이 아닙니다.',
-       'seed:v5:11102:mcq:quality'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:mcq:quality'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '모호하지 않고 명확해야 한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:quality'
-UNION ALL
-SELECT q.id, 'B', '상호 모순되거나 충돌되는 요구가 없어야 한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:quality'
-UNION ALL
-SELECT q.id, 'C', '테스트를 통해 검증 가능해야 한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:quality'
-UNION ALL
-SELECT q.id, 'D', '특정 개발자만 이해할 수 있도록 기술적으로 복잡해야 한다.', 1
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:quality';
-
-UPDATE question
-SET answer_key = 'D'
-WHERE source = 'seed:v5:11102:mcq:quality';
-
-/* Q4: UML 다이어그램 선택 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'MCQ', 'EASY',
-       '사용자와 시스템 간 상호작용(시나리오)을 표현하는 데 가장 적절한 UML 다이어그램은?',
-       NULL,
-       'C',
-       '유스케이스 다이어그램은 액터와 시스템 간의 상호작용을 기능 관점에서 표현합니다.',
-       'seed:v5:11102:mcq:uml-usecase'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:mcq:uml-usecase'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '클래스 다이어그램', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:uml-usecase'
-UNION ALL
-SELECT q.id, 'B', '컴포넌트 다이어그램', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:uml-usecase'
-UNION ALL
-SELECT q.id, 'C', '유스케이스 다이어그램', 1
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:uml-usecase'
-UNION ALL
-SELECT q.id, 'D', '상태 다이어그램', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:uml-usecase';
-
-UPDATE question
-SET answer_key = 'C'
-WHERE source = 'seed:v5:11102:mcq:uml-usecase';
-
-/* Q5: 애자일 특징 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'MCQ', 'NORMAL',
-       '다음 중 애자일(Agile) 개발 방법의 특징으로 가장 적절한 것은?',
-       NULL,
-       'B',
-       '애자일은 짧은 반복 주기와 지속적인 피드백을 통해 요구 변경에 유연하게 대응합니다.',
-       'seed:v5:11102:mcq:agile'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:mcq:agile'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '초기에 상세 문서를 모두 완성한 후 개발에 들어간다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:agile'
-UNION ALL
-SELECT q.id, 'B', '짧은 반복과 피드백으로 요구 변경에 유연하게 대응한다.', 1
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:agile'
-UNION ALL
-SELECT q.id, 'C', '요구 변경은 무조건 금지하는 것이 목표이다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:agile'
-UNION ALL
-SELECT q.id, 'D', '개발팀만 참여하고 고객은 개발 완료 후에만 참여한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:agile';
-
-UPDATE question
-SET answer_key = 'B'
-WHERE source = 'seed:v5:11102:mcq:agile';
-
-/* Q6: 요구 변경 관리 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'MCQ', 'NORMAL',
-       '요구사항 변경 요청이 접수되었을 때 가장 “먼저” 수행해야 할 활동은?',
-       NULL,
-       'C',
-       '변경 요청의 내용을 정확히 이해하고 영향 범위를 분석한 뒤, 승인/반려를 결정해야 합니다.',
-       'seed:v5:11102:mcq:change'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:mcq:change'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '일단 개발부터 시작하고 나중에 문서를 수정한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:change'
-UNION ALL
-SELECT q.id, 'B', '요청자의 직급을 기준으로 자동 승인한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:change'
-UNION ALL
-SELECT q.id, 'C', '변경 내용과 영향 범위를 분석한다.', 1
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:change'
-UNION ALL
-SELECT q.id, 'D', '테스트 케이스 수를 줄이는 방안을 먼저 찾는다.', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:change';
-
-UPDATE question
-SET answer_key = 'C'
-WHERE source = 'seed:v5:11102:mcq:change';
-
-/* Q7: 요구 추적성 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11102, 'WRITTEN', 'MCQ', 'NORMAL',
-       '요구 추적성 관리의 주된 목적에 대한 설명으로 가장 알맞은 것은?',
-       NULL,
-       'B',
-       '요구~설계~테스트 간 링크를 관리해 변경 시 영향을 받는 아티팩트를 추적할 수 있게 하는 것이 목표입니다.',
-       'seed:v5:11102:mcq:traceability'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11102:mcq:traceability'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '개발자 인사 평가를 자동화하기 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:traceability'
-UNION ALL
-SELECT q.id, 'B', '요구 변경 시 영향받는 설계/코드/테스트를 추적하기 위해', 1
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:traceability'
-UNION ALL
-SELECT q.id, 'C', '소스코드 라인 수를 줄이기 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:traceability'
-UNION ALL
-SELECT q.id, 'D', '테스트 자동화 도구를 선택하기 위해', 0
-FROM question q WHERE q.source = 'seed:v5:11102:mcq:traceability';
-
-UPDATE question
-SET answer_key = 'B'
-WHERE source = 'seed:v5:11102:mcq:traceability';
-
-
-/* ================================================
- * 11103 – 분석 모델/요구 관리
- *  - OX: 기존 3개 + 3개 추가 = 6개
- *  - MCQ: 기존 2개(24,28) + 8개 추가 = 10개
- * ================================================ */
-
--- [11103] OX 3개 추가
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'OX', 'EASY',
-       'ERD에서 관계 차수(1:1, 1:N, N:M)를 올바르게 표현하는 것은 데이터 중복과 이상 현상을 줄이는 데 도움을 준다. (O/X)',
-       NULL,
-       'O',
-       '올바른 관계 차수 표현은 정규화와 무결성 확보에 직접적으로 기여합니다.',
-       'seed:v5:11103:ox:cardinality'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:ox:cardinality'
-);
+       '와이어프레임은 레이아웃과 정보 구조를 중심으로 표현하며, 색상·폰트는 보통 간략하게 표현하거나 생략합니다.',
+       'seed:v5:11201:ox:wireframe-purpose'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:ox:wireframe-purpose');
 
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'OX', 'NORMAL',
-       '데이터 흐름도(DFD)는 프로세스, 데이터 저장소, 외부 엔티티, 데이터 흐름을 이용해 “어디에 무엇이 저장되는지”를 표현하는 정적 모델이다. (O/X)',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'OX', 'NORMAL',
+       'UI 요구사항에는 단순히 버튼 위치와 색상만 정의하면 되며, 오류 메시지나 피드백 방식은 구현 단계에서 자연스럽게 결정된다. (O/X)',
        NULL,
        'X',
-       'DFD는 데이터가 어떻게 처리·흘러가는지(동적 흐름)를 표현하며, 정적 구조는 ERD/클래스 다이어그램이 담당합니다.',
-       'seed:v5:11103:ox:dfd-static'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:ox:dfd-static'
-);
+       '오류 메시지·피드백 방식 등은 사용성에 큰 영향을 주므로 UI 요구사항 단계에서 함께 정의하는 것이 좋습니다.',
+       'seed:v5:11201:ox:feedback'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:ox:feedback');
 
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'OX', 'NORMAL',
-       '분석 모델은 설계와 구현 단계에서 참조 기준이 되므로, 요구사항과 일관성이 유지되도록 지속적으로 갱신해야 한다. (O/X)',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'OX', 'EASY',
+       '일관된 컴포넌트 스타일과 인터랙션 패턴은 학습 비용을 줄여 사용자 경험을 향상시킨다. (O/X)',
        NULL,
        'O',
-       '요구 변경 시 분석 모델도 함께 갱신해야 이후 설계/구현/테스트 불일치를 줄일 수 있습니다.',
-       'seed:v5:11103:ox:model-sync'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:ox:model-sync'
-);
+       '일관된 패턴은 사용자가 매 화면마다 새로 학습하지 않아도 되도록 도와줍니다.',
+       'seed:v5:11201:ox:consistency'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:ox:consistency');
 
--- [11103] MCQ 8개 추가
-/* Q1: 모델링 관점 */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'MCQ', 'EASY',
-       '다음 중 “동적인 동작/흐름”을 표현하는 다이어그램으로 가장 적절한 것은?',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'OX', 'NORMAL',
+       '사용성 테스트는 실제 사용자를 대상으로 UI 시안의 문제를 발견하는 효과적인 방법이지만, 반드시 정식 출시 이후에만 수행할 수 있다. (O/X)',
        NULL,
-       'C',
-       '시퀀스 다이어그램은 객체 간 메시지 흐름과 시간 순서를 표현하는 대표적인 동적 다이어그램입니다.',
-       'seed:v5:11103:mcq:dynamic-diagram'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:mcq:dynamic-diagram'
-);
+       'X',
+       '프로토타입 단계에서도 사용성 테스트를 수행해 문제를 조기에 발견할 수 있습니다.',
+       'seed:v5:11201:ox:usability-test'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:ox:usability-test');
 
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', 'ERD', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:dynamic-diagram'
-UNION ALL
-SELECT q.id, 'B', '클래스 다이어그램', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:dynamic-diagram'
-UNION ALL
-SELECT q.id, 'C', '시퀀스 다이어그램', 1
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:dynamic-diagram'
-UNION ALL
-SELECT q.id, 'D', '패키지 다이어그램', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:dynamic-diagram';
-
-UPDATE question
-SET answer_key = 'C'
-WHERE source = 'seed:v5:11103:mcq:dynamic-diagram';
-
-/* Q2: ERD 구성 요소 */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'MCQ', 'EASY',
-       '다음 중 ERD(Entity-Relationship Diagram)의 기본 구성 요소가 아닌 것은?',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'OX', 'NORMAL',
+       '접근성 고려는 장애인 사용자에게만 필요한 요구사항이므로, 일반 업무 시스템에서는 무시해도 무방하다. (O/X)',
        NULL,
-       'D',
-       'ERD의 기본 요소는 엔터티, 속성, 관계이며, 알고리즘 흐름은 ERD 대상이 아닙니다.',
-       'seed:v5:11103:mcq:erd-elements'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:mcq:erd-elements'
-);
+       'X',
+       '접근성은 다양한 사용자 환경(연령, 기기, 네트워크 등)에 공통적으로 영향을 주는 중요한 요구사항입니다.',
+       'seed:v5:11201:ox:accessibility'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:ox:accessibility');
 
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '엔터티(Entity)', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:erd-elements'
-UNION ALL
-SELECT q.id, 'B', '속성(Attribute)', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:erd-elements'
-UNION ALL
-SELECT q.id, 'C', '관계(Relationship)', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:erd-elements'
-UNION ALL
-SELECT q.id, 'D', '알고리즘 흐름(Algorithm Flow)', 1
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:erd-elements';
-
-UPDATE question
-SET answer_key = 'D'
-WHERE source = 'seed:v5:11103:mcq:erd-elements';
-
-/* Q3: 상태 다이어그램 활용 */
+-- [11201] MCQ 10개
+/* Q1: 화면 흐름 설계 목적 */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'MCQ', 'NORMAL',
-       '상태 다이어그램(State Diagram)을 사용하기에 가장 적절한 대상은?',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'EASY',
+       '화면 흐름도를 작성하는 주된 목적에 대한 설명으로 가장 적절한 것은?',
        NULL,
        'B',
-       '상태 다이어그램은 주문, 티켓 등 “상태가 바뀌며 수명주기를 가지는 객체”를 표현하는 데 적합합니다.',
-       'seed:v5:11103:mcq:state-diagram'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:mcq:state-diagram'
-);
+       '화면 흐름도는 사용자의 작업 절차와 화면 전환 관계를 시각적으로 표현해 요구·설계 간 오해를 줄입니다.',
+       'seed:v5:11201:mcq:screen-flow-purpose'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:screen-flow-purpose');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '단순 산술 계산 로직', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:state-diagram'
+SELECT q.id, 'A', '데이터베이스 인덱스를 설계하기 위해서', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:screen-flow-purpose'
 UNION ALL
-SELECT q.id, 'B', '주문 상태(접수→결제→배송→완료)', 1
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:state-diagram'
+SELECT q.id, 'B', '사용자의 작업 절차와 화면 전환 관계를 명확히 공유하기 위해서', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:screen-flow-purpose'
 UNION ALL
-SELECT q.id, 'C', '데이터베이스 테이블 구조', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:state-diagram'
+SELECT q.id, 'C', '서버 물리 배치 구성을 나타내기 위해서', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:screen-flow-purpose'
 UNION ALL
-SELECT q.id, 'D', '서버 물리 배치도', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:state-diagram';
+SELECT q.id, 'D', '암호화 알고리즘을 선정하기 위해서', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:screen-flow-purpose';
 
 UPDATE question
 SET answer_key = 'B'
-WHERE source = 'seed:v5:11103:mcq:state-diagram';
+WHERE source = 'seed:v5:11201:mcq:screen-flow-purpose';
 
-/* Q4: 활동 다이어그램 */
+/* Q2: 프로토타입 활용 */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'MCQ', 'NORMAL',
-       '업무 절차의 분기/병행 흐름을 시각화하기에 가장 적합한 UML 다이어그램은?',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'NORMAL',
+       'UI 설계에서 프로토타입을 활용하는 주된 이유로 가장 거리가 먼 것은?',
        NULL,
-       'C',
-       '활동 다이어그램(Activity Diagram)은 분기, 병행, 합류 등 절차 흐름을 표현하는 데 적합합니다.',
-       'seed:v5:11103:mcq:activity-diagram'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:mcq:activity-diagram'
-);
+       'D',
+       '프로토타입은 요구 검증, 사용성 평가, 이해관계자 간 의사소통에 유용합니다.',
+       'seed:v5:11201:mcq:prototype'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:prototype');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', 'ERD', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:activity-diagram'
+SELECT q.id, 'A', '요구사항이 실제 화면에서 어떻게 보이는지 검증하기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:prototype'
 UNION ALL
-SELECT q.id, 'B', '클래스 다이어그램', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:activity-diagram'
+SELECT q.id, 'B', '사용성 테스트를 통해 문제를 조기에 발견하기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:prototype'
 UNION ALL
-SELECT q.id, 'C', '활동 다이어그램', 1
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:activity-diagram'
+SELECT q.id, 'C', '이해관계자 간 UI에 대한 공통 이미지를 형성하기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:prototype'
 UNION ALL
-SELECT q.id, 'D', '컴포넌트 다이어그램', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:activity-diagram';
+SELECT q.id, 'D', '데이터베이스 스키마를 자동 생성하기 위해', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:prototype';
+
+UPDATE question
+SET answer_key = 'D'
+WHERE source = 'seed:v5:11201:mcq:prototype';
+
+/* Q3: UI 원칙 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'EASY',
+       '다음 중 좋은 UI 설계 원칙에 해당하지 않는 것은?',
+       NULL,
+       'D',
+       '좋은 UI는 일관성, 가시성, 피드백이 중요하며, 불필요한 전문 용어 남발은 피해야 합니다.',
+       'seed:v5:11201:mcq:ui-principles-2'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:ui-principles-2');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '일관된 컴포넌트와 레이아웃 사용', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ui-principles-2'
+UNION ALL
+SELECT q.id, 'B', '상태 변화에 대한 명확한 피드백 제공', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ui-principles-2'
+UNION ALL
+SELECT q.id, 'C', '자주 사용하는 기능은 접근 경로를 짧게 제공', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ui-principles-2'
+UNION ALL
+SELECT q.id, 'D', '가능한 한 많은 전문 용어와 약어 사용', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ui-principles-2';
+
+UPDATE question
+SET answer_key = 'D'
+WHERE source = 'seed:v5:11201:mcq:ui-principles-2';
+
+/* Q4: 입력 검증 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'NORMAL',
+       '사용자 입력 검증과 관련된 UI 요구사항으로 가장 적절한 것은?',
+       NULL,
+       'C',
+       '실시간 검증과 명확한 오류 메시지는 사용자가 빠르게 문제를 인지하고 수정하게 도와줍니다.',
+       'seed:v5:11201:mcq:validation'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:validation');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '모든 검증은 서버 응답 후에만 수행한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:validation'
+UNION ALL
+SELECT q.id, 'B', '오류 메시지는 가능하면 숨기고, 로그에만 남긴다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:validation'
+UNION ALL
+SELECT q.id, 'C', '실시간으로 형식 오류를 표시하고, 수정 방법을 명확히 안내한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:validation'
+UNION ALL
+SELECT q.id, 'D', '필수 입력 항목 표시를 생략해 화면을 단순하게 유지한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:validation';
 
 UPDATE question
 SET answer_key = 'C'
-WHERE source = 'seed:v5:11103:mcq:activity-diagram';
+WHERE source = 'seed:v5:11201:mcq:validation';
 
-/* Q5: 모델 일관성 */
+/* Q5: 접근성 */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'MCQ', 'NORMAL',
-       '분석 모델 간 일관성이 깨졌을 때 가장 먼저 수행해야 할 활동은?',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'NORMAL',
+       '접근성을 고려한 UI 설계 방안으로 가장 적절한 것은?',
        NULL,
        'B',
-       '요구와 가장 가까운 모델(예: 유스케이스, 요구 명세)을 기준으로 다른 모델들을 재검토·정렬하는 것이 일반적입니다.',
-       'seed:v5:11103:mcq:model-consistency'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:mcq:model-consistency'
-);
+       '충분한 대비, 글자 크기, 대체 텍스트, 키보드 접근성 등은 접근성 향상에 중요한 요소입니다.',
+       'seed:v5:11201:mcq:accessibility'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:accessibility');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '바로 코드 구현부터 시작해 모델을 무시한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:model-consistency'
+SELECT q.id, 'A', '모든 텍스트를 이미지로 만들어 디자인 자유도를 높인다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:accessibility'
 UNION ALL
-SELECT q.id, 'B', '요구와 가장 가까운 모델을 기준으로 다른 모델을 재검토한다.', 1
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:model-consistency'
+SELECT q.id, 'B', '충분한 색 대비와 폰트 크기, 대체 텍스트를 제공한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:accessibility'
 UNION ALL
-SELECT q.id, 'C', '테스트 케이스를 모두 삭제한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:model-consistency'
+SELECT q.id, 'C', '키보드 사용자는 고려하지 않고 마우스 사용만 전제로 설계한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:accessibility'
 UNION ALL
-SELECT q.id, 'D', '이슈를 무시하고 일정에 맞춰 배포한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:model-consistency';
+SELECT q.id, 'D', '에러 메시지를 색상만으로 구분한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:accessibility';
 
 UPDATE question
 SET answer_key = 'B'
-WHERE source = 'seed:v5:11103:mcq:model-consistency';
+WHERE source = 'seed:v5:11201:mcq:accessibility';
 
-/* Q6: 요구 관리 도구 */
+/* Q6: 정보 구조(IA) */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'MCQ', 'NORMAL',
-       '요구 관리 도구가 제공해야 할 기능으로 가장 거리가 먼 것은?',
-       NULL,
-       'D',
-       '요구 관리 도구는 요구 버전 관리, 추적성, 우선순위, 상태 관리 등을 지원합니다.',
-       'seed:v5:11103:mcq:req-tool'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:mcq:req-tool'
-);
-
-INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '요구 변경 이력과 버전 관리', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:req-tool'
-UNION ALL
-SELECT q.id, 'B', '요구 상태(제안/승인/폐기) 관리', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:req-tool'
-UNION ALL
-SELECT q.id, 'C', '요구~테스트 케이스 간 추적성 관리', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:req-tool'
-UNION ALL
-SELECT q.id, 'D', '운영 체제 커널 디버깅 기능 제공', 1
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:req-tool';
-
-UPDATE question
-SET answer_key = 'D'
-WHERE source = 'seed:v5:11103:mcq:req-tool';
-
-/* Q7: DFD/ERD 비교 */
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
-                      stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'MCQ', 'NORMAL',
-       'DFD와 ERD의 차이에 대한 설명으로 가장 적절한 것은?',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'NORMAL',
+       '정보 구조(Information Architecture)를 잘 설계했을 때 기대할 수 있는 효과로 가장 적절한 것은?',
        NULL,
        'C',
-       'DFD는 데이터 흐름과 처리(동적), ERD는 엔터티와 관계(정적)를 표현합니다.',
-       'seed:v5:11103:mcq:dfd-vs-erd'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:mcq:dfd-vs-erd'
-);
+       '명확한 정보 구조는 사용자가 원하는 정보를 빠르게 찾게 도와 탐색 시간을 줄입니다.',
+       'seed:v5:11201:mcq:ia'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:ia');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '두 다이어그램 모두 정적 구조만 표현한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:dfd-vs-erd'
+SELECT q.id, 'A', '쿼리 실행 시간이 짧아진다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ia'
 UNION ALL
-SELECT q.id, 'B', '두 다이어그램 모두 동작 흐름만 표현한다.', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:dfd-vs-erd'
+SELECT q.id, 'B', '네트워크 트래픽이 자동으로 감소한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ia'
 UNION ALL
-SELECT q.id, 'C', 'DFD는 데이터 흐름/처리, ERD는 엔터티/관계를 표현한다.', 1
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:dfd-vs-erd'
+SELECT q.id, 'C', '사용자가 원하는 정보를 빠르게 찾을 수 있다.', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ia'
 UNION ALL
-SELECT q.id, 'D', 'DFD와 ERD는 완전히 동일한 다이어그램이다.', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:dfd-vs-erd';
+SELECT q.id, 'D', '데이터베이스 백업 시간이 줄어든다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ia';
 
 UPDATE question
 SET answer_key = 'C'
-WHERE source = 'seed:v5:11103:mcq:dfd-vs-erd';
+WHERE source = 'seed:v5:11201:mcq:ia';
 
-/* Q8: 모델 검증 */
+/* Q7: UI 패턴 재사용 */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
-SELECT @cert_id, @tp_11103, 'WRITTEN', 'MCQ', 'NORMAL',
-       '분석 모델을 검증하는 활동으로 가장 거리가 먼 것은?',
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'NORMAL',
+       '로그인, 검색, 목록/상세와 같이 반복적으로 등장하는 UI 패턴을 재사용하는 주된 이유로 가장 알맞은 것은?',
        NULL,
-       'D',
-       '모델 검증은 시나리오 검토, 워크스루/리뷰, 프로토타입, 일관성 체크 등으로 수행합니다.',
-       'seed:v5:11103:mcq:model-review'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question WHERE source = 'seed:v5:11103:mcq:model-review'
-);
+       'B',
+       '반복되는 패턴을 재사용하면 일관성과 개발 효율을 동시에 확보할 수 있습니다.',
+       'seed:v5:11201:mcq:pattern-reuse'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:pattern-reuse');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT q.id, 'A', '유스케이스 시나리오를 따라가며 모델과의 일치 여부를 확인', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:model-review'
+SELECT q.id, 'A', '디자인 팀의 역할을 최소화하기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:pattern-reuse'
 UNION ALL
-SELECT q.id, 'B', '업무 담당자와 함께 다이어그램 워크스루 수행', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:model-review'
+SELECT q.id, 'B', '일관된 경험을 제공하고, 구현·유지보수를 효율화하기 위해', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:pattern-reuse'
 UNION ALL
-SELECT q.id, 'C', '모델 간 용어/관계의 불일치 여부를 점검', 0
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:model-review'
+SELECT q.id, 'C', '코드를 복잡하게 보이게 하기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:pattern-reuse'
 UNION ALL
-SELECT q.id, 'D', '운영 체제 커널 구현 코드를 리팩터링', 1
-FROM question q WHERE q.source = 'seed:v5:11103:mcq:model-review';
+SELECT q.id, 'D', '각 화면을 완전히 다른 구조로 만들기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:pattern-reuse';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11201:mcq:pattern-reuse';
+
+/* Q8: 에러 메시지 작성 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'NORMAL',
+       '좋은 에러 메시지 작성 원칙으로 가장 적절한 것은?',
+       NULL,
+       'C',
+       '사용자 관점에서 무엇이 문제이고 어떻게 해결할 수 있는지를 안내하는 것이 중요합니다.',
+       'seed:v5:11201:mcq:error-message'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:error-message');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '내부 예외 메시지와 스택 트레이스를 그대로 노출한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:error-message'
+UNION ALL
+SELECT q.id, 'B', '사용자에게 책임을 전가하는 표현을 사용한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:error-message'
+UNION ALL
+SELECT q.id, 'C', '무엇이 문제인지와 해결 방법을 간단한 언어로 안내한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:error-message'
+UNION ALL
+SELECT q.id, 'D', '에러 코드 숫자만 보여주고 별도의 안내는 제공하지 않는다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:error-message';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11201:mcq:error-message';
+
+/* Q9: 반응형 UI */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'NORMAL',
+       '반응형 UI 요구사항으로 가장 적절한 것은?',
+       NULL,
+       'B',
+       '주요 화면에서 모바일/태블릿/PC 해상도별 레이아웃 동작을 정의하는 것이 일반적입니다.',
+       'seed:v5:11201:mcq:responsive'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:responsive');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', 'PC 해상도만 지원하고 모바일은 고려하지 않는다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:responsive'
+UNION ALL
+SELECT q.id, 'B', '핵심 화면에 대해 모바일/태블릿/PC별 레이아웃 동작을 정의한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:responsive'
+UNION ALL
+SELECT q.id, 'C', '모바일에서는 모든 기능을 비활성화한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:responsive'
+UNION ALL
+SELECT q.id, 'D', '기기별로 전혀 다른 기능을 제공해 사용자를 혼란스럽게 한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:responsive';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11201:mcq:responsive';
+
+/* Q10: UI 요구사항 명세 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11201, 'WRITTEN', 'MCQ', 'NORMAL',
+       'UI 요구사항 명세서에 포함되기 어려운 항목은?',
+       NULL,
+       'D',
+       'UI 요구사항에는 화면 레이아웃, 흐름, 상호작용, 접근성, 에러 처리 등이 포함됩니다.',
+       'seed:v5:11201:mcq:ui-spec'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11201:mcq:ui-spec');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '화면별 주요 컴포넌트와 레이아웃', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ui-spec'
+UNION ALL
+SELECT q.id, 'B', '화면 전환 흐름과 조건', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ui-spec'
+UNION ALL
+SELECT q.id, 'C', '에러 상황에서의 안내 메시지 방식', 0
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ui-spec'
+UNION ALL
+SELECT q.id, 'D', '데이터베이스 백업 주기와 전략', 1
+FROM question q WHERE q.source = 'seed:v5:11201:mcq:ui-spec';
 
 UPDATE question
 SET answer_key = 'D'
-WHERE source = 'seed:v5:11103:mcq:model-review';
+WHERE source = 'seed:v5:11201:mcq:ui-spec';
 
+
+/* =======================================================
+ * 11301 – 공통 모듈 설계
+ *  - OX 6개, MCQ 10개 추가
+ * ======================================================= */
+
+-- [11301] OX 6개
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'OX', 'EASY',
+       '공통 모듈은 여러 시스템이나 서브시스템에서 반복적으로 사용하는 기능을 캡슐화해 재사용성을 높이기 위한 것이다. (O/X)',
+       NULL,
+       'O',
+       '공통 모듈의 핵심 목적은 중복 구현을 줄이고 재사용 가능한 기능 단위를 제공하는 것입니다.',
+       'seed:v5:11301:ox:common-purpose'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:ox:common-purpose');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'OX', 'NORMAL',
+       '공통 모듈은 특정 화면이나 특정 업무에 강하게 종속되도록 설계하는 것이 재사용성을 높이는 데 유리하다. (O/X)',
+       NULL,
+       'X',
+       '공통 모듈은 특정 UI나 업무에 종속되지 않도록 설계해야 재사용성이 높아집니다.',
+       'seed:v5:11301:ox:tight-coupling'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:ox:tight-coupling');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'OX', 'NORMAL',
+       '공통 모듈의 인터페이스는 가능한 한 명확하고 단순하게 설계하는 것이 유지보수에 유리하다. (O/X)',
+       NULL,
+       'O',
+       '단순하고 명확한 인터페이스는 사용성을 높이고 변경 시 영향을 줄여줍니다.',
+       'seed:v5:11301:ox:interface-simple'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:ox:interface-simple');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'OX', 'NORMAL',
+       '공통 모듈은 예외 상황을 내부에서 모두 숨기고, 호출자에게는 정상 처리 결과만 반환하는 것이 바람직하다. (O/X)',
+       NULL,
+       'X',
+       '공통 모듈은 예외 발생 시 적절한 예외 타입이나 오류 코드를 호출자에게 전달해야 합니다.',
+       'seed:v5:11301:ox:error-handling'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:ox:error-handling');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'OX', 'NORMAL',
+       '공통 모듈의 변경 이력과 버전을 체계적으로 관리하지 않으면, 여러 시스템에서 사용하는 경우 문제를 추적하기 어려워질 수 있다. (O/X)',
+       NULL,
+       'O',
+       '여러 소비자가 있는 공통 모듈은 버전·변경 이력을 관리하지 않으면 호환성 문제가 자주 발생합니다.',
+       'seed:v5:11301:ox:versioning'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:ox:versioning');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'OX', 'NORMAL',
+       '공통 모듈은 성능 이슈와는 무관하므로, 부하 테스트 대상에서 제외해도 무방하다. (O/X)',
+       NULL,
+       'X',
+       '여러 시스템에서 동시에 호출되는 공통 모듈은 성능·스케일링 측면에서도 중요한 대상입니다.',
+       'seed:v5:11301:ox:perf'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:ox:perf');
+
+-- [11301] MCQ 10개
+/* Q1: 공통 모듈 후보 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'EASY',
+       '다음 중 공통 모듈로 분리하기에 가장 적절한 기능은?',
+       NULL,
+       'C',
+       '여러 시스템에서 공통으로 사용하는 인증/로그/메시지 포맷 변환 등은 전형적인 공통 모듈 후보입니다.',
+       'seed:v5:11301:mcq:candidate'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:candidate');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '특정 화면의 배경 이미지 설정 기능', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:candidate'
+UNION ALL
+SELECT q.id, 'B', '개별 페이지에서만 사용하는 임시 계산 로직', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:candidate'
+UNION ALL
+SELECT q.id, 'C', '여러 서비스에서 공통으로 사용하는 인증 토큰 검증 기능', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:candidate'
+UNION ALL
+SELECT q.id, 'D', '단 한 번만 사용되는 데이터 정제 스크립트', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:candidate';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11301:mcq:candidate';
+
+/* Q2: 공통 모듈 인터페이스 설계 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'NORMAL',
+       '공통 모듈 인터페이스 설계 시 가장 바람직한 방향은?',
+       NULL,
+       'B',
+       '불필요한 의존성을 줄이고, 의미 있는 입력·출력 모델을 사용해 인터페이스를 단순하게 유지하는 것이 좋습니다.',
+       'seed:v5:11301:mcq:interface-design'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:interface-design');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '모든 내부 구현 클래스를 외부에 공개한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:interface-design'
+UNION ALL
+SELECT q.id, 'B', '입출력 모델을 명확히 정의하고, 최소한의 파라미터로 기능을 캡슐화한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:interface-design'
+UNION ALL
+SELECT q.id, 'C', '호출자가 내부 필드를 직접 조작할 수 있도록 한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:interface-design'
+UNION ALL
+SELECT q.id, 'D', '에러 발생 시 항상 null을 반환해서 단순화한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:interface-design';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11301:mcq:interface-design';
+
+/* Q3: 공통 모듈 이점 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'EASY',
+       '공통 모듈 도입으로 기대할 수 있는 효과로 가장 거리가 먼 것은?',
+       NULL,
+       'D',
+       '공통 모듈은 중복 코드 제거, 일관성 향상, 변경 비용 감소에 도움이 됩니다.',
+       'seed:v5:11301:mcq:benefit'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:benefit');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '중복 코드 감소', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:benefit'
+UNION ALL
+SELECT q.id, 'B', '비즈니스 규칙의 일관성 향상', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:benefit'
+UNION ALL
+SELECT q.id, 'C', '변경 시 수정 범위 축소', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:benefit'
+UNION ALL
+SELECT q.id, 'D', '각 시스템마다 규칙을 제각각 구현하도록 유도', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:benefit';
+
+UPDATE question
+SET answer_key = 'D'
+WHERE source = 'seed:v5:11301:mcq:benefit';
+
+/* Q4: 공통 모듈 버전 관리 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'NORMAL',
+       '여러 시스템이 사용하는 공통 모듈 버전을 업그레이드할 때 가장 먼저 고려해야 할 사항은?',
+       NULL,
+       'C',
+       '하위 호환성과 영향 범위를 분석하고, 점진적으로 배포하는 전략이 필요합니다.',
+       'seed:v5:11301:mcq:version-upgrade'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:version-upgrade');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '호출하는 모든 시스템을 동시에 중단하고 일괄 교체한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:version-upgrade'
+UNION ALL
+SELECT q.id, 'B', '기존 인터페이스를 모두 제거하고 새로운 것만 지원한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:version-upgrade'
+UNION ALL
+SELECT q.id, 'C', '하위 호환성 여부와 영향받는 시스템을 파악하고, 단계적으로 배포 계획을 수립한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:version-upgrade'
+UNION ALL
+SELECT q.id, 'D', '테스트 없이 바로 운영에 적용한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:version-upgrade';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11301:mcq:version-upgrade';
+
+/* Q5: 공통 모듈 성능 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'NORMAL',
+       '공통 모듈의 성능을 검증할 때 가장 적절한 접근 방법은?',
+       NULL,
+       'B',
+       '공통 모듈은 여러 시스템에서 동시에 사용되므로, 예상 호출량과 부하를 고려한 성능 테스트가 필요합니다.',
+       'seed:v5:11301:mcq:perf-test'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:perf-test');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '단일 사용자만을 대상으로 간단한 수동 테스트만 수행한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:perf-test'
+UNION ALL
+SELECT q.id, 'B', '예상 동시 호출 수를 고려한 부하 테스트를 수행한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:perf-test'
+UNION ALL
+SELECT q.id, 'C', '성능 검증은 운영 환경에서 장애가 발생한 후에 수행한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:perf-test'
+UNION ALL
+SELECT q.id, 'D', '성능 검증 대신 서버 사양만 높게 잡는다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:perf-test';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11301:mcq:perf-test';
+
+/* Q6: 공통 모듈 예외 처리 정책 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'NORMAL',
+       '공통 모듈 예외 처리 정책에 대한 설명으로 가장 적절한 것은?',
+       NULL,
+       'C',
+       '공통 모듈은 호출자가 적절히 처리할 수 있도록 의미 있는 예외 타입/오류 정보를 제공해야 합니다.',
+       'seed:v5:11301:mcq:error-policy'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:error-policy');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '모든 예외를 무시하고 정상 값만 반환한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:error-policy'
+UNION ALL
+SELECT q.id, 'B', '예외가 발생하면 시스템을 즉시 강제 종료한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:error-policy'
+UNION ALL
+SELECT q.id, 'C', '예외 유형에 따라 의미 있는 메시지와 코드를 제공하고, 호출자에서 처리할 수 있게 한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:error-policy'
+UNION ALL
+SELECT q.id, 'D', '예외 메시지에는 내부 시스템 정보를 최대한 상세히 포함한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:error-policy';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11301:mcq:error-policy';
+
+/* Q7: 공통 모듈 의존성 관리 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'NORMAL',
+       '공통 모듈이 너무 많은 외부 라이브러리에 의존할 때 발생하기 쉬운 문제로 가장 적절한 것은?',
+       NULL,
+       'B',
+       '의존성이 많으면 버전 충돌과 배포 복잡도가 증가합니다.',
+       'seed:v5:11301:mcq:dependency'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:dependency');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '성능이 무조건 향상된다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:dependency'
+UNION ALL
+SELECT q.id, 'B', '라이브러리 버전 충돌과 배포 복잡도가 증가한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:dependency'
+UNION ALL
+SELECT q.id, 'C', '테스트 케이스가 자동으로 줄어든다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:dependency'
+UNION ALL
+SELECT q.id, 'D', '보안 취약점이 자동으로 제거된다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:dependency';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11301:mcq:dependency';
+
+/* Q8: 공통 모듈 로깅 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'NORMAL',
+       '공통 모듈에서 로깅을 설계할 때 가장 적절한 방향은?',
+       NULL,
+       'C',
+       '로깅 수준과 포맷을 통일하고, 개인정보는 마스킹하는 것이 중요합니다.',
+       'seed:v5:11301:mcq:logging'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:logging');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '모든 로그를 DEBUG 수준으로만 출력한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:logging'
+UNION ALL
+SELECT q.id, 'B', '로그 포맷은 호출 시스템마다 제각각 사용한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:logging'
+UNION ALL
+SELECT q.id, 'C', '공통 포맷과 수준을 정의하고, 민감 정보는 마스킹 처리한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:logging'
+UNION ALL
+SELECT q.id, 'D', '성능을 위해 로그를 전혀 남기지 않는다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:logging';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11301:mcq:logging';
+
+/* Q9: 공통 모듈 테스트 전략 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'NORMAL',
+       '공통 모듈 테스트 전략으로 가장 적절한 것은?',
+       NULL,
+       'B',
+       '재사용되는 공통 모듈은 단위/통합 테스트를 충분히 작성해 회귀를 방지해야 합니다.',
+       'seed:v5:11301:mcq:test-strategy'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:test-strategy');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '공통 모듈은 다른 시스템에서 테스트하므로 별도 테스트가 필요 없다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:test-strategy'
+UNION ALL
+SELECT q.id, 'B', '단위·통합 테스트를 작성해 재배포 시에도 회귀를 방지한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:test-strategy'
+UNION ALL
+SELECT q.id, 'C', '운영 환경에서 장애가 발생하면 그때 고친다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:test-strategy'
+UNION ALL
+SELECT q.id, 'D', '테스트 대신 운영자 매뉴얼만 상세히 작성한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:test-strategy';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11301:mcq:test-strategy';
+
+/* Q10: 공통 모듈 도입 시기 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11301, 'WRITTEN', 'MCQ', 'NORMAL',
+       '공통 모듈을 도입·정리하기에 가장 적절한 시점에 대한 설명으로 알맞은 것은?',
+       NULL,
+       'C',
+       '초기부터 모든 것을 공통으로 만들기보다, 일정 수준 기능이 쌓인 뒤 패턴을 분석해 공통화하는 전략이 현실적입니다.',
+       'seed:v5:11301:mcq:timing'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11301:mcq:timing');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '첫 기능 한 개를 만들기 전 모든 공통 모듈을 완성한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:timing'
+UNION ALL
+SELECT q.id, 'B', '공통 모듈은 프로젝트 종료 후에만 도입할 수 있다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:timing'
+UNION ALL
+SELECT q.id, 'C', '여러 기능을 구현하면서 반복 패턴을 관찰하고, 적절한 시점에 공통화한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:timing'
+UNION ALL
+SELECT q.id, 'D', '공통 모듈은 필요성을 느끼더라도 절대 도입하지 않는다.', 0
+FROM question q WHERE q.source = 'seed:v5:11301:mcq:timing';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11301:mcq:timing';
+
+
+/* =======================================================
+ * 11302 – 객체지향 설계 원칙
+ *  - OX 6개, MCQ 10개 추가
+ * ======================================================= */
+
+-- [11302] OX 6개
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'OX', 'EASY',
+       '단일 책임 원칙(SRP)은 클래스가 하나의 책임만 가지도록 설계하라는 객체지향 설계 원칙이다. (O/X)',
+       NULL,
+       'O',
+       'SRP는 변경 이유가 한 가지인 클래스를 만들자는 원칙입니다.',
+       'seed:v5:11302:ox:srp'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:ox:srp');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'OX', 'NORMAL',
+       '개방-폐쇄 원칙(OCP)은 기능 확장에 닫혀 있고, 코드 수정에는 열려 있어야 한다는 원칙이다. (O/X)',
+       NULL,
+       'X',
+       'OCP는 확장에는 열려 있고, 수정에는 닫혀 있도록 설계하라는 원칙입니다.',
+       'seed:v5:11302:ox:ocp'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:ox:ocp');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'OX', 'NORMAL',
+       '리스코프 치환 원칙(LSP)에 따르면, 하위 클래스는 상위 타입이 사용되는 곳에서 문제없이 대체 가능해야 한다. (O/X)',
+       NULL,
+       'O',
+       'LSP는 하위 타입이 상위 타입의 계약을 깨지 않고 대체될 수 있어야 한다는 원칙입니다.',
+       'seed:v5:11302:ox:lsp'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:ox:lsp');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'OX', 'NORMAL',
+       '의존성 역전 원칙(DIP)은 고수준 모듈이 저수준 모듈에 직접 의존하도록 설계하라는 원칙이다. (O/X)',
+       NULL,
+       'X',
+       'DIP는 고수준/저수준 모듈 모두 추상화에 의존하도록 설계하자는 원칙입니다.',
+       'seed:v5:11302:ox:dip'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:ox:dip');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'OX', 'EASY',
+       '인터페이스 분리 원칙(ISP)은 클라이언트가 사용하지 않는 기능까지 담긴 비대한 인터페이스에 의존하지 않도록 하라는 원칙이다. (O/X)',
+       NULL,
+       'O',
+       'ISP는 클라이언트별로 필요한 인터페이스만 제공하자는 원칙입니다.',
+       'seed:v5:11302:ox:isp'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:ox:isp');
+
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'OX', 'NORMAL',
+       '높은 응집도와 낮은 결합도는 객체지향 설계에서 지향해야 할 중요한 품질 특성이다. (O/X)',
+       NULL,
+       'O',
+       '모듈 내부는 관련있는 기능끼리 모으고, 모듈 간 의존성은 최소화하는 것이 좋습니다.',
+       'seed:v5:11302:ox:cohesion-coupling'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:ox:cohesion-coupling');
+
+-- [11302] MCQ 10개
+/* Q1: SRP 예시 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'EASY',
+       '단일 책임 원칙(SRP)을 가장 잘 지킨 클래스 예시는?',
+       NULL,
+       'C',
+       'SRP는 하나의 클래스가 하나의 책임만 가지도록 하는 원칙입니다.',
+       'seed:v5:11302:mcq:srp-example'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:srp-example');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '화면 렌더링, DB 저장, 이메일 전송을 모두 담당하는 클래스', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:srp-example'
+UNION ALL
+SELECT q.id, 'B', '로그 출력과 결제 승인 로직을 동시에 처리하는 클래스', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:srp-example'
+UNION ALL
+SELECT q.id, 'C', '사용자 비밀번호 검증만 담당하는 클래', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:srp-example'
+UNION ALL
+SELECT q.id, 'D', '보고서 생성, 인쇄, 이메일 전송까지 모두 처리하는 클래스', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:srp-example';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11302:mcq:srp-example';
+
+/* Q2: OCP 적용 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'NORMAL',
+       '개방-폐쇄 원칙(OCP)을 잘 적용한 설계에 대한 설명으로 가장 적절한 것은?',
+       NULL,
+       'B',
+       '새로운 요구는 상속·구현 클래스 추가 등 확장으로 처리하고, 기존 코드는 최소 수정하는 것이 이상적입니다.',
+       'seed:v5:11302:mcq:ocp'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:ocp');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '새 요구가 생길 때마다 if-else 분기를 기존 코드에 계속 추가한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:ocp'
+UNION ALL
+SELECT q.id, 'B', '새 정렬 방식이 필요하면 전략(Strategy) 구현 클래스를 추가해 확장한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:ocp'
+UNION ALL
+SELECT q.id, 'C', '모든 로직을 한 메서드에 작성해 한 번에 수정한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:ocp'
+UNION ALL
+SELECT q.id, 'D', '기존 코드를 매번 복사해 새로운 기능을 추가한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:ocp';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11302:mcq:ocp';
+
+/* Q3: DIP 적용 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'NORMAL',
+       '의존성 역전 원칙(DIP)을 잘 따른 예시는?',
+       NULL,
+       'C',
+       '상위 모듈이 구체 클래스가 아닌 인터페이스에 의존하도록 설계하는 것이 DIP의 핵심입니다.',
+       'seed:v5:11302:mcq:dip'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:dip');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '서비스가 특정 구현 클래스(EmailSenderImpl)에 직접 new로 의존한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:dip'
+UNION ALL
+SELECT q.id, 'B', 'UI 레이어가 DB 드라이버 구현 클래스에 직접 의존한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:dip'
+UNION ALL
+SELECT q.id, 'C', '서비스가 메일 전송 인터페이스(MailSender)에 의존하고, 구현은 외부에서 주입받는다.', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:dip'
+UNION ALL
+SELECT q.id, 'D', '저수준 모듈이 상위 정책을 변경하도록 직접 호출한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:dip';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11302:mcq:dip';
+
+/* Q4: LSP 위반 사례 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'NORMAL',
+       '리스코프 치환 원칙(LSP)을 위반한 사례로 가장 적절한 것은?',
+       NULL,
+       'D',
+       '상위 타입의 계약을 지키지 못해 하위 타입을 대체했을 때 예외나 잘못된 동작이 발생하면 LSP 위반입니다.',
+       'seed:v5:11302:mcq:lsp-violation'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:lsp-violation');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '상위 타입 메서드를 그대로 상속받아 동작을 확장했다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:lsp-violation'
+UNION ALL
+SELECT q.id, 'B', '하위 타입에서 상위 타입의 전제조건과 결과를 모두 만족한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:lsp-violation'
+UNION ALL
+SELECT q.id, 'C', '상위 타입의 메서드를 override하되, 계약 범위 내에서 동작을 강화했다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:lsp-violation'
+UNION ALL
+SELECT q.id, 'D', '상위 타입이 허용한 입력에 대해 하위 타입이 예외를 던지거나, 결과 제약을 만족하지 못한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:lsp-violation';
+
+UPDATE question
+SET answer_key = 'D'
+WHERE source = 'seed:v5:11302:mcq:lsp-violation';
+
+/* Q5: 응집도/결합도 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'EASY',
+       '좋은 객체지향 설계에서 지향해야 할 상태로 가장 적절한 것은?',
+       NULL,
+       'B',
+       '모듈 내부는 관련 기능끼리 모으고(높은 응집도), 모듈 간 의존성은 최소화(낮은 결합도)하는 것이 좋습니다.',
+       'seed:v5:11302:mcq:cohesion-coupling'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:cohesion-coupling');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '낮은 응집도, 높은 결합도', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:cohesion-coupling'
+UNION ALL
+SELECT q.id, 'B', '높은 응집도, 낮은 결합도', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:cohesion-coupling'
+UNION ALL
+SELECT q.id, 'C', '낮은 응집도, 낮은 결합도', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:cohesion-coupling'
+UNION ALL
+SELECT q.id, 'D', '높은 응집도, 높은 결합도', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:cohesion-coupling';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11302:mcq:cohesion-coupling';
+
+/* Q6: 인터페이스 분리 원칙(ISP) */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'NORMAL',
+       '인터페이스 분리 원칙(ISP)에 대한 설명으로 가장 적절한 것은?',
+       NULL,
+       'C',
+       'ISP는 클라이언트가 필요로 하는 기능만 가지는 인터페이스를 제공하자는 원칙입니다.',
+       'seed:v5:11302:mcq:isp'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:isp');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '모든 기능을 하나의 거대한 인터페이스에 모은다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:isp'
+UNION ALL
+SELECT q.id, 'B', '클라이언트는 사용하지 않는 기능에도 의존해야 한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:isp'
+UNION ALL
+SELECT q.id, 'C', '각 클라이언트가 사용하는 기능만 가진 작은 인터페이스로 분리한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:isp'
+UNION ALL
+SELECT q.id, 'D', '인터페이스 대신 모든 구현 클래스에 직접 의존한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:isp';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11302:mcq:isp';
+
+/* Q7: 캡슐화 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'EASY',
+       '캡슐화(encapsulation)의 설명으로 가장 적절한 것은?',
+       NULL,
+       'B',
+       '캡슐화는 내부 구현을 숨기고, 공용 인터페이스를 통해서만 접근하게 하는 개념입니다.',
+       'seed:v5:11302:mcq:encapsulation'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:encapsulation');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '클래스의 모든 필드를 public으로 공개한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:encapsulation'
+UNION ALL
+SELECT q.id, 'B', '내부 구현을 숨기고, 인터페이스를 통해 필요한 기능만 노출한다.', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:encapsulation'
+UNION ALL
+SELECT q.id, 'C', '하위 클래스에서만 접근 가능한 필드를 모두 제거한다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:encapsulation'
+UNION ALL
+SELECT q.id, 'D', '상속 구조를 없애고 모든 클래스를 하나로 합친다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:encapsulation';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11302:mcq:encapsulation';
+
+/* Q8: 설계 패턴 활용 목적 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'NORMAL',
+       'GoF 디자인 패턴과 같은 설계 패턴을 사용하는 주된 이유로 가장 적절한 것은?',
+       NULL,
+       'C',
+       '설계 패턴은 검증된 해결 방식과 공통 용어를 제공해 설계 품질과 의사소통을 돕습니다.',
+       'seed:v5:11302:mcq:pattern-purpose'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:pattern-purpose');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '코드 줄 수를 늘려 개발 난이도를 높이기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:pattern-purpose'
+UNION ALL
+SELECT q.id, 'B', '특정 언어에서만 동작하는 기능을 만들기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:pattern-purpose'
+UNION ALL
+SELECT q.id, 'C', '반복적으로 등장하는 설계 문제에 대한 검증된 해결 방식과 공통 용어를 제공하기 위해', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:pattern-purpose'
+UNION ALL
+SELECT q.id, 'D', '컴파일러 최적화 옵션을 설정하기 위해', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:pattern-purpose';
+
+UPDATE question
+SET answer_key = 'C'
+WHERE source = 'seed:v5:11302:mcq:pattern-purpose';
+
+/* Q9: 리팩터링 필요 징후 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'NORMAL',
+       '리팩터링이 필요한 코드 냄새(Code Smell)로 보기 가장 적절한 것은?',
+       NULL,
+       'D',
+       '거대한 클래스, 중복 코드, 긴 메서드 등은 대표적인 코드 냄새입니다.',
+       'seed:v5:11302:mcq:code-smell'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:code-smell');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '짧고 의미 있는 메서드 이름', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:code-smell'
+UNION ALL
+SELECT q.id, 'B', '중복이 없는 모듈화된 코드', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:code-smell'
+UNION ALL
+SELECT q.id, 'C', '테스트 코드가 풍부한 구조', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:code-smell'
+UNION ALL
+SELECT q.id, 'D', '여러 기능이 뒤섞인 거대한 클래스와 중복된 코드', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:code-smell';
+
+UPDATE question
+SET answer_key = 'D'
+WHERE source = 'seed:v5:11302:mcq:code-smell';
+
+/* Q10: SOLID 종합 */
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
+                      stem, payload_json, answer_key, solution_text, source)
+SELECT @cert_id, @tp_11302, 'WRITTEN', 'MCQ', 'NORMAL',
+       '다음 중 SOLID 원칙을 적용할 때 기대할 수 있는 효과로 가장 적절한 것은?',
+       NULL,
+       'B',
+       'SOLID 원칙은 유지보수성과 확장성이 높은 설계를 만드는 데 도움을 줍니다.',
+       'seed:v5:11302:mcq:solid-benefit'
+WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:mcq:solid-benefit');
+
+INSERT INTO question_choice (question_id, label, content, is_correct)
+SELECT q.id, 'A', '코드가 복잡해져 변경이 어려워진다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:solid-benefit'
+UNION ALL
+SELECT q.id, 'B', '유지보수성과 확장성이 높은 설계를 만들 수 있다.', 1
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:solid-benefit'
+UNION ALL
+SELECT q.id, 'C', '테스트 코드 작성이 불가능해진다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:solid-benefit'
+UNION ALL
+SELECT q.id, 'D', '객체지향보다는 절차지향 구조가 강화된다.', 0
+FROM question q WHERE q.source = 'seed:v5:11302:mcq:solid-benefit';
+
+UPDATE question
+SET answer_key = 'B'
+WHERE source = 'seed:v5:11302:mcq:solid-benefit';
+
+/* ===========================================
+ * TAG 매핑 – topic별 1개 태그
+ * 11201 → 'UI'
+ * 11301 → '공통모듈'
+ * 11302 → 'OOP'
+ * =========================================== */
+
+-- 11201 – UI 요구사항 / 화면흐름
+INSERT INTO question_tag (question_id, tag)
+SELECT q.id, 'UI'
+FROM question q
+LEFT JOIN question_tag qt ON qt.question_id = q.id
+WHERE q.cert_id = @cert_id
+  AND q.topic_id = @tp_11201
+  AND qt.id IS NULL;
+
+-- 11301 – 공통 모듈 설계
+INSERT INTO question_tag (question_id, tag)
+SELECT q.id, '공통모듈'
+FROM question q
+LEFT JOIN question_tag qt ON qt.question_id = q.id
+WHERE q.cert_id = @cert_id
+  AND q.topic_id = @tp_11301
+  AND qt.id IS NULL;
+
+-- 11302 – 객체지향 설계 원칙
+INSERT INTO question_tag (question_id, tag)
+SELECT q.id, 'OOP'
+FROM question q
+LEFT JOIN question_tag qt ON qt.question_id = q.id
+WHERE q.cert_id = @cert_id
+  AND q.topic_id = @tp_11302
+  AND qt.id IS NULL;
 
 SET FOREIGN_KEY_CHECKS = 1;

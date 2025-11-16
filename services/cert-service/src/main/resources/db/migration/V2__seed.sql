@@ -35,26 +35,34 @@ ON DUPLICATE KEY UPDATE
 
 -- =========================================
 -- 2) CERT_SUBJECT (과목)
---  - 정보처리기사: 필기 5과목 + 실기(종합)
+--  - 정보처리기사: 필기 5과목 + 실기 5영역
 --  - subject_seq로 정렬 보장
 -- =========================================
 INSERT INTO cert_subject
   (id, cert_id, exam_mode, name, total_questions, duration_minutes, subject_seq)
 VALUES
-  (1001, 1, 'WRITTEN', '소프트웨어 설계',              20, 120, 1),
-  (1002, 1, 'WRITTEN', '소프트웨어 개발',              20, 120, 2),
-  (1003, 1, 'WRITTEN', '데이터베이스 구축',            20, 120, 3),
-  (1004, 1, 'WRITTEN', '프로그래밍 언어 활용',         20, 120, 4),
-  (1005, 1, 'WRITTEN', '정보시스템 운영',              20, 120, 5),
-  (1101, 1, 'PRACTICAL', '실기(종합)',                 NULL, 150, 1),
+  -- 정보처리기사 필기 (기존 유지)
+  (1001, 1, 'WRITTEN',  '소프트웨어 설계',                 20, 120, 1),
+  (1002, 1, 'WRITTEN',  '소프트웨어 개발',                 20, 120, 2),
+  (1003, 1, 'WRITTEN',  '데이터베이스 구축',               20, 120, 3),
+  (1004, 1, 'WRITTEN',  '프로그래밍 언어 활용',            20, 120, 4),
+  (1005, 1, 'WRITTEN',  '정보시스템 운영',                 20, 120, 5),
 
-  -- 예비 자격증(간단 시드)
-  (2001, 2, 'WRITTEN',  '컴활2급 필기(예시)',          40, 60,  1),
-  (2101, 2, 'PRACTICAL','컴활2급 실기(예시)',          NULL, 90, 1)
+  -- 정보처리기사 실기: 5개 영역으로 분리
+  -- P.1 ~ P.5 토픽 트리(31001~31005)와 컨셉을 맞춘 이름
+  (1101, 1, 'PRACTICAL', '요구사항 분석/모델링(실기)',       NULL, NULL, 1),
+  (1102, 1, 'PRACTICAL', 'DB 설계/정규화(실기)',            NULL, NULL, 2),
+  (1103, 1, 'PRACTICAL', 'SQL 작성/튜닝(실기)',             NULL, NULL, 3),
+  (1104, 1, 'PRACTICAL', '트랜잭션/동시성/무결성(실기)',     NULL, NULL, 4),
+  (1105, 1, 'PRACTICAL', '운영/백업/장애대응(실기)',        NULL, NULL, 5),
+
+  -- 예비 자격증(컴활2급) - 기존 유지
+  (2001, 2, 'WRITTEN',   '컴활2급 필기(예시)',              40, 60,  1),
+  (2101, 2, 'PRACTICAL', '컴활2급 실기(예시)',              NULL, 90, 1)
 ON DUPLICATE KEY UPDATE
-  total_questions=VALUES(total_questions),
-  duration_minutes=VALUES(duration_minutes),
-  subject_seq=VALUES(subject_seq);
+  total_questions   = VALUES(total_questions),
+  duration_minutes  = VALUES(duration_minutes),
+  subject_seq       = VALUES(subject_seq);
 
 -- =========================================
 -- 3) EXAM_ROUND (연/회차) - 2025년 1·2·3회 + 2026년 1회 예시
