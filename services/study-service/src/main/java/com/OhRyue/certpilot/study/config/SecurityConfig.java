@@ -49,8 +49,6 @@ public class SecurityConfig {
   @Bean
   public JwtDecoder jwtDecoder() {
     if (hmacSecret == null || hmacSecret.isBlank()) {
-      // 개발 중에는 반드시 환경변수/프로퍼티로 주입해 주세요.
-      // 예) STUDY_JWT_SECRET=... 또는 application-*.yml의 security.jwt.hmac-secret
       throw new IllegalStateException("STUDY_JWT_SECRET(=security.jwt.hmac-secret) is not configured.");
     }
     SecretKey key = new SecretKeySpec(hmacSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");

@@ -1,4 +1,3 @@
--- V2__seed.sql (study-service)
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -7,72 +6,164 @@ USE certpilot_study;
 SET @cert_id := 1;
 
 -- =========================================================
--- 토픽 ID 상수 정의 (cert-service.topic.id 와 논리적으로 맞춘다고 가정)
+-- 토픽 ID 상수 정의 (cert-service.topic.id 와 논리 동일하게 사용)
 -- =========================================================
--- 예시: 11101 = 현행 시스템 분석, 11102 = 요구사항 확인, 11403 = 인터페이스 상세 설계, 20001 = 실기 설계 토픽
-SET @topic_analysis   := 11101;
-SET @topic_oop        := 11102;
-SET @topic_interface  := 11403;
-SET @topic_practical  := 20001;
+SET @topic_analysis   := 11101;  -- 1.1.1 현행 시스템 분석
+SET @topic_req        := 11102;  -- 1.1.2 요구사항 확인 (요구공학/OOP 개념 섞어서 활용)
+SET @topic_model      := 11103;  -- 1.1.3 분석 모델 확인
+SET @topic_ui         := 11201;  -- 1.2.1 UI 요구사항 확인
+SET @topic_common     := 11301;  -- 1.3.1 공통 모듈 설계
+SET @topic_ood        := 11302;  -- 1.3.2 객체 지향 설계
+SET @topic_if_req     := 11401;  -- 1.4.1 인터페이스 요구사항 확인
+SET @topic_if_target  := 11402;  -- 1.4.2 인터페이스 대상 식별
+SET @topic_if_detail  := 11403;  -- 1.4.3 인터페이스 상세 설계
 
 -- =========================================================
--- 1) 필기 OX 문제 (현행 시스템 분석)
+-- 1) WRITTEN OX – 1.1.1 현행 시스템 분석
+--    OX 기반 미니체크용 문제 다수
 -- =========================================================
+
+-- 성능 지표 수집
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_analysis, 'WRITTEN', 'OX', 'NORMAL',
        '현행 시스템 분석 단계에서는 응답 시간과 처리량과 같은 성능 지표를 수집해야 한다. (O/X)',
        'O',
-       '성능 지표는 향후 요구사항 정의와 설계 제약을 결정하므로 필수로 수집합니다.',
-       'seed:analysis:perf'
+       '성능 지표는 향후 요구사항 정의와 설계 제약을 결정하므로 현행 분석 단계에서 반드시 수집해야 합니다.',
+       'seed:v2:analysis:perf'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
    WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
      AND stem LIKE '현행 시스템 분석 단계에서는 응답 시간과 처리량과 같은 성능 지표를 수집해야 한다.%'
 );
 
-SET @q_ox_analysis := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '현행 시스템 분석 단계에서는 응답 시간과 처리량과 같은 성능 지표를 수집해야 한다.%'
-   LIMIT 1
-);
-
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_analysis, '현행시스템'
-WHERE @q_ox_analysis IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_analysis AND tag='현행시스템');
-
--- 추가 OX (비기능 요구)
+-- 비기능 요구 함께 수집
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_analysis, 'WRITTEN', 'OX', 'EASY',
-       '현행 시스템 분석에서는 기능 요구사항뿐 아니라 보안·성능·가용성과 같은 비기능 요구도 함께 수집해야 한다. (O/X)',
-       'O',
-       '비기능 요구는 아키텍처 제약과 용량 산정에 직접 영향을 주므로, 현행 분석 단계에서부터 함께 수집해야 합니다.',
-       'seed:analysis:nfr'
+       '현행 시스템 분석에서는 기능 요구사항만 수집하고 보안·성능·가용성과 같은 비기능 요구는 이후 단계에서 별도로 분석한다. (O/X)',
+       'X',
+       '비기능 요구도 아키텍처/용량 산정에 직접 영향을 주므로 현행 분석 단계에서 함께 수집해야 합니다.',
+       'seed:v2:analysis:nfr'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
    WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '현행 시스템 분석에서는 기능 요구사항뿐 아니라 보안·성능·가용성과 같은 비기능 요구도 함께 수집해야 한다.%'
+     AND stem LIKE '현행 시스템 분석에서는 기능 요구사항만 수집하고 보안·성능·가용성과 같은 비기능 요구는 이후 단계에서 별도로 분석한다.%'
+);
+
+-- 업무 프로세스/조직 구조 파악
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
+SELECT @cert_id, @topic_analysis, 'WRITTEN', 'OX', 'EASY',
+       '현행 시스템 분석 시에는 업무 프로세스 흐름과 관련 조직/사용자 역할을 함께 파악하는 것이 좋다. (O/X)',
+       'O',
+       '업무 프로세스와 조직 구조를 함께 파악해야 요구 흐름과 시스템 경계를 올바르게 정의할 수 있습니다.',
+       'seed:v2:analysis:process-org'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question
+   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
+     AND stem LIKE '현행 시스템 분석 시에는 업무 프로세스 흐름과 관련 조직/사용자 역할을 함께 파악하는 것이 좋다.%'
+);
+
+-- 인터페이스 정의 없이도 충분? (오답)
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
+SELECT @cert_id, @topic_analysis, 'WRITTEN', 'OX', 'NORMAL',
+       '현행 시스템 분석에서는 내부 기능만 상세히 분석하고 외부 시스템과의 인터페이스는 설계 단계에서 처음 분석한다. (O/X)',
+       'X',
+       '외부 시스템과의 인터페이스 현황(프로토콜, 데이터 포맷, 장애 이력 등)은 현행 분석 단계에서 파악해 두어야 합니다.',
+       'seed:v2:analysis:interface'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question
+   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
+     AND stem LIKE '현행 시스템 분석에서는 내부 기능만 상세히 분석하고 외부 시스템과의 인터페이스는 설계 단계에서 처음 분석한다.%'
+);
+
+-- 장애/운영 지표 반영
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
+SELECT @cert_id, @topic_analysis, 'WRITTEN', 'OX', 'NORMAL',
+       '현행 시스템의 장애 이력과 모니터링 지표는 신규 시스템 요구사항과는 무관하므로 수집하지 않아도 된다. (O/X)',
+       'X',
+       '장애 이력과 모니터링 지표는 신시스템에서 반드시 개선해야 할 요구사항(신뢰성, 가용성)을 도출하는 핵심 근거입니다.',
+       'seed:v2:analysis:incidents'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question
+   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
+     AND stem LIKE '현행 시스템의 장애 이력과 모니터링 지표는 신규 시스템 요구사항과는 무관하므로 수집하지 않아도 된다.%'
 );
 
 -- =========================================================
--- 2) 필기 MCQ 문제 (OOP)
+-- 2) WRITTEN OX – 1.1.2 요구사항 확인 (요구공학/Agile 성격)
 -- =========================================================
+
+-- 이해관계자 식별 중요성
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
-SELECT @cert_id, @topic_oop, 'WRITTEN', 'MCQ', 'NORMAL',
+SELECT @cert_id, @topic_req, 'WRITTEN', 'OX', 'EASY',
+       '요구사항 확인 단계에서 이해관계자를 식별하지 못하면 요구 누락 위험이 높아질 수 있다. (O/X)',
+       'O',
+       '요구 출처가 되는 이해관계자를 식별하지 못하면 중요한 요구가 빠지거나 왜곡될 가능성이 커집니다.',
+       'seed:v2:req:stakeholder'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
+     AND stem LIKE '요구사항 확인 단계에서 이해관계자를 식별하지 못하면 요구 누락 위험이 높아질 수 있다.%'
+);
+
+-- 자연어 명세의 모호성
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
+SELECT @cert_id, @topic_req, 'WRITTEN', 'OX', 'NORMAL',
+       '자연어 기반 요구사항 명세는 이해가 쉽고 모호성이 거의 없기 때문에 추가 검토 과정이 필요 없다. (O/X)',
+       'X',
+       '자연어 명세는 친숙하지만 표현이 모호하기 쉬워, 리뷰/프로토타입/모델링 등으로 보완해야 합니다.',
+       'seed:v2:req:natural'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
+     AND stem LIKE '자연어 기반 요구사항 명세는 이해가 쉽고 모호성이 거의 없기 때문에 추가 검토 과정이 필요 없다.%'
+);
+
+-- 애자일 변화 수용
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
+SELECT @cert_id, @topic_req, 'WRITTEN', 'OX', 'EASY',
+       '애자일(Agile) 방법론에서는 변경되는 요구사항을 계획 대비 예외로 보고 최대한 줄이는 것이 목표이다. (O/X)',
+       'X',
+       '애자일은 요구 변경을 자연스러운 것으로 보고, 짧은 피드백 주기로 유연하게 수용하는 것을 강조합니다.',
+       'seed:v2:req:agile-change'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
+     AND stem LIKE '애자일(Agile) 방법론에서는 변경되는 요구사항을 계획 대비 예외로 보고 최대한 줄이는 것이 목표이다.%'
+);
+
+-- 유스케이스/시나리오
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
+SELECT @cert_id, @topic_req, 'WRITTEN', 'OX', 'NORMAL',
+       '유스케이스는 액터와 시스템 간 상호작용을 시나리오 형태로 표현하는 요구 분석 기법이다. (O/X)',
+       'O',
+       '유스케이스는 사용자의 관점에서 시스템의 기능을 시나리오 형태로 표현하여 요구를 도출/검증하는 데 사용됩니다.',
+       'seed:v2:req:usecase'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
+     AND stem LIKE '유스케이스는 액터와 시스템 간 상호작용을 시나리오 형태로 표현하는 요구 분석 기법이다.%'
+);
+
+-- =========================================================
+-- 3) WRITTEN MCQ – 1.1.2 요구사항 확인 (OOP/요구공학)
+-- =========================================================
+
+-- OCP
+INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
+SELECT @cert_id, @topic_req, 'WRITTEN', 'MCQ', 'NORMAL',
        '다음 중 개방-폐쇄 원칙(OCP)에 대한 설명으로 옳은 것은 무엇인가?',
        'B',
        'OCP는 기능을 확장할 수 있도록 열어두되 기존 코드를 수정하지 않도록 닫아두라는 원칙입니다.',
-       'seed:oop:ocp'
+       'seed:v2:req:ocp'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE topic_id=@topic_oop AND mode='WRITTEN' AND type='MCQ'
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='MCQ'
      AND stem LIKE '다음 중 개방-폐쇄 원칙(OCP)에 대한 설명으로 옳은 것은 무엇인가?%'
 );
 
 SET @q_mcq_ocp := (
   SELECT id FROM question
-   WHERE topic_id=@topic_oop AND mode='WRITTEN' AND type='MCQ'
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='MCQ'
      AND stem LIKE '다음 중 개방-폐쇄 원칙(OCP)에 대한 설명으로 옳은 것은 무엇인가?%'
    LIMIT 1
 );
@@ -102,22 +193,22 @@ SELECT @q_mcq_ocp, 'OOP'
 WHERE @q_mcq_ocp IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_mcq_ocp AND tag='OOP');
 
--- 추가 MCQ: DIP
+-- DIP
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
-SELECT @cert_id, @topic_oop, 'WRITTEN', 'MCQ', 'NORMAL',
+SELECT @cert_id, @topic_req, 'WRITTEN', 'MCQ', 'NORMAL',
        '의존성 역전 원칙(DIP)에 대한 설명으로 가장 적절한 것은?',
        'C',
        'DIP는 고수준/저수준 모듈 모두 추상화에 의존하도록 설계해 구현 변경에 덜 민감하게 만드는 원칙입니다.',
-       'seed:oop:dip'
+       'seed:v2:req:dip'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE topic_id=@topic_oop AND mode='WRITTEN' AND type='MCQ'
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='MCQ'
      AND stem LIKE '의존성 역전 원칙(DIP)에 대한 설명으로 가장 적절한 것은?%'
 );
 
 SET @q_mcq_dip := (
   SELECT id FROM question
-   WHERE topic_id=@topic_oop AND mode='WRITTEN' AND type='MCQ'
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='MCQ'
      AND stem LIKE '의존성 역전 원칙(DIP)에 대한 설명으로 가장 적절한 것은?%'
    LIMIT 1
 );
@@ -147,102 +238,49 @@ SELECT @q_mcq_dip, 'DIP'
 WHERE @q_mcq_dip IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_mcq_dip AND tag='DIP');
 
--- =========================================================
--- 3) 필기 MCQ 문제 (인터페이스 설계)
--- =========================================================
+-- UML 다이어그램
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
-SELECT @cert_id, @topic_interface, 'WRITTEN', 'MCQ', 'NORMAL',
-       '외부 시스템과의 인터페이스 상세 설계 시 가장 우선 고려할 요소는 무엇인가?',
+SELECT @cert_id, @topic_req, 'WRITTEN', 'MCQ', 'EASY',
+       '다음 중 시스템의 정적 구조(클래스와 관계)를 표현하는 UML 다이어그램은?',
        'A',
-       '트래픽 규모 대비 스루풋/지연시간 목표와 타임아웃·재시도·서킷브레이커 등 안정성 패턴을 우선 정의해야 합니다.',
-       'seed:interface:design'
+       '클래스 다이어그램은 정적 구조를, 시퀀스/활동 다이어그램은 동적인 동작/흐름을 표현합니다.',
+       'seed:v2:req:uml-class'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE topic_id=@topic_interface AND mode='WRITTEN' AND type='MCQ'
-     AND stem LIKE '외부 시스템과의 인터페이스 상세 설계 시 가장 우선 고려할 요소는 무엇인가?%'
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='MCQ'
+     AND stem LIKE '다음 중 시스템의 정적 구조(클래스와 관계)를 표현하는 UML 다이어그램은?%'
 );
 
-SET @q_mcq_interface := (
+SET @q_mcq_uml_class := (
   SELECT id FROM question
-   WHERE topic_id=@topic_interface AND mode='WRITTEN' AND type='MCQ'
-     AND stem LIKE '외부 시스템과의 인터페이스 상세 설계 시 가장 우선 고려할 요소는 무엇인가?%'
+   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='MCQ'
+     AND stem LIKE '다음 중 시스템의 정적 구조(클래스와 관계)를 표현하는 UML 다이어그램은?%'
    LIMIT 1
 );
 
 INSERT INTO question_choice (question_id,label,content,is_correct)
-SELECT @q_mcq_interface,'A','요청/응답 포맷과 타임아웃·재시도 정책을 정의한다',1
-WHERE @q_mcq_interface IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q_mcq_interface AND label='A');
+SELECT @q_mcq_uml_class,'A','클래스 다이어그램',1
+WHERE @q_mcq_uml_class IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q_mcq_uml_class AND label='A');
 
 INSERT INTO question_choice (question_id,label,content,is_correct)
-SELECT @q_mcq_interface,'B','UI 테마 색상을 맞춘다',0
-WHERE @q_mcq_interface IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q_mcq_interface AND label='B');
+SELECT @q_mcq_uml_class,'B','시퀀스 다이어그램',0
+WHERE @q_mcq_uml_class IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q_mcq_uml_class AND label='B');
 
 INSERT INTO question_choice (question_id,label,content,is_correct)
-SELECT @q_mcq_interface,'C','사무실 조명을 조정한다',0
-WHERE @q_mcq_interface IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q_mcq_interface AND label='C');
+SELECT @q_mcq_uml_class,'C','활동 다이어그램',0
+WHERE @q_mcq_uml_class IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q_mcq_uml_class AND label='C');
 
 INSERT INTO question_choice (question_id,label,content,is_correct)
-SELECT @q_mcq_interface,'D','개발자 별명을 정한다',0
-WHERE @q_mcq_interface IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q_mcq_interface AND label='D');
+SELECT @q_mcq_uml_class,'D','상태 다이어그램',0
+WHERE @q_mcq_uml_class IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q_mcq_uml_class AND label='D');
 
 INSERT INTO question_tag (question_id, tag)
-SELECT @q_mcq_interface, '인터페이스설계'
-WHERE @q_mcq_interface IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_mcq_interface AND tag='인터페이스설계');
-
--- =========================================================
--- 4) 실기 SHORT/LONG 문제 (PRACTICAL)
--- =========================================================
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
-SELECT @cert_id, @topic_practical, 'PRACTICAL', 'SHORT', 'NORMAL',
-       '서킷 브레이커 패턴의 목적을 한 문장으로 설명하세요.',
-       '연쇄 실패 방지, 임계치 도달 시 호출 단락 후 복구 확인',
-       '서킷 브레이커는 실패율이 임계치를 넘으면 호출을 차단하고 회복 신호가 올 때까지 대체 경로를 사용해 연쇄 실패를 방지합니다.',
-       'seed:practical:cb'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question
-   WHERE topic_id=@topic_practical AND mode='PRACTICAL' AND type='SHORT'
-     AND stem LIKE '서킷 브레이커 패턴의 목적을 한 문장으로 설명하세요.%'
-);
-
-SET @q_short_cb := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_practical AND mode='PRACTICAL' AND type='SHORT'
-     AND stem LIKE '서킷 브레이커 패턴의 목적을 한 문장으로 설명하세요.%'
-   LIMIT 1
-);
-
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_short_cb, '서킷브레이커'
-WHERE @q_short_cb IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_short_cb AND tag='서킷브레이커');
-
-INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
-SELECT @cert_id, @topic_practical, 'PRACTICAL', 'LONG', 'HARD',
-       '초당 2,000 RPS를 처리해야 하는 외부 API 연동 모듈을 설계하세요. 요구사항: 평균 지연 150ms 이하, 실패 시 재시도 정책, 백프레셔, 모니터링/알림 포함.',
-       '비동기 IO, 타임아웃, 재시도, 서킷브레이커, 큐 기반 백프레셔, 메트릭/알림',
-       '비동기 I/O와 연결 풀을 사용하고, 타임아웃·재시도(지수 백오프)·서킷브레이커·큐 기반 백프레셔·메트릭/알림 구성을 포함하도록 설계합니다.',
-       'seed:practical:api2000rps'
-WHERE NOT EXISTS (
-  SELECT 1 FROM question
-   WHERE topic_id=@topic_practical AND mode='PRACTICAL' AND type='LONG'
-     AND stem LIKE '초당 2,000 RPS를 처리해야 하는 외부 API 연동 모듈을 설계하세요.%'
-);
-
-SET @q_long_api := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_practical AND mode='PRACTICAL' AND type='LONG'
-     AND stem LIKE '초당 2,000 RPS를 처리해야 하는 외부 API 연동 모듈을 설계하세요.%'
-   LIMIT 1
-);
-
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_long_api, '고가용성'
-WHERE @q_long_api IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_long_api AND tag='고가용성');
+SELECT @q_mcq_uml_class, 'UML'
+WHERE @q_mcq_uml_class IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_mcq_uml_class AND tag='UML');
 
 SET FOREIGN_KEY_CHECKS = 1;

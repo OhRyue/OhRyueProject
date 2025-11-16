@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Tag(name = "Recommendation(추천/약점)")
 @RestController
@@ -16,11 +18,16 @@ public class RecommendationController {
 
   private final RecommendationService reco;
 
+  private String currentUserId() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    return authentication.getName();
+  }
+
   @Operation(summary = "약점 태그 Top-N 조회")
   @GetMapping("/weak-tags")
-  public WeakTagsResp weakTags(@RequestParam String userId,
-                               @RequestParam(defaultValue = "6") int topN,
+  public WeakTagsResp weakTags(@RequestParam(defaultValue = "6") int topN,
                                @RequestParam(defaultValue = "3") int minTried) {
+    String userId = currentUserId();
     return reco.weakTags(userId, topN, minTried);
   }
 

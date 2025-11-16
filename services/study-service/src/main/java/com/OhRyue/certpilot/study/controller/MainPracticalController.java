@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Tag(name = "Main - Practical(실기)")
 @RestController
@@ -18,14 +20,16 @@ public class MainPracticalController {
 
   private final PracticalService practical;
 
-  /* -------- 개념 -------- */
-  // 컨셉은 공통 written 엔드포인트(/api/study/written/concept/{topicId})를 재사용합니다.
+  private String currentUserId() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    return authentication.getName();
+  }
 
   /* -------- 미니체크(OX) -------- */
   @Operation(summary = "실기 미니체크 세트(OX 4문)")
   @GetMapping("/mini/{topicId}")
-  public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> mini(@PathVariable Long topicId,
-                                                         @RequestParam String userId) {
+  public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> mini(@PathVariable Long topicId) {
+    String userId = currentUserId();
     return practical.miniSet(userId, topicId);
   }
 
@@ -44,8 +48,8 @@ public class MainPracticalController {
   /* -------- 메인 문제 세트 -------- */
   @Operation(summary = "실기 문제 세트(혼합 SHORT/LONG)", description = "필수: 미니체크 통과 이후 진행")
   @GetMapping("/set/{topicId}")
-  public FlowDtos.StepEnvelope<PracticalSet> set(@PathVariable Long topicId,
-                                                 @RequestParam String userId) {
+  public FlowDtos.StepEnvelope<PracticalSet> set(@PathVariable Long topicId) {
+    String userId = currentUserId();
     return practical.practicalSet(userId, topicId);
   }
 
@@ -58,8 +62,8 @@ public class MainPracticalController {
   /* -------- 리뷰 -------- */
   @Operation(summary = "실기 리뷰 세트(20문)", description = "루트 토픽의 모든 하위 토픽에서 선발")
   @GetMapping("/review/{rootTopicId}")
-  public FlowDtos.StepEnvelope<PracticalSet> review(@PathVariable Long rootTopicId,
-                                                    @RequestParam String userId) {
+  public FlowDtos.StepEnvelope<PracticalSet> review(@PathVariable Long rootTopicId) {
+    String userId = currentUserId();
     return practical.practicalReviewSet(userId, rootTopicId);
   }
 
@@ -72,8 +76,8 @@ public class MainPracticalController {
   /* -------- 요약/즉시 채점 -------- */
   @Operation(summary = "실기 진행 요약", description = "평균 점수/풀이 수/AI 요약 제공")
   @GetMapping("/summary")
-  public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(@RequestParam String userId,
-                                                                @RequestParam Long topicId) {
+  public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(@RequestParam Long topicId) {
+    String userId = currentUserId();
     return practical.summary(userId, topicId);
   }
 
