@@ -152,7 +152,7 @@ public class WrittenService {
     miniMeta.put("lastSubmittedAt", Instant.now().toString());
     sessionManager.saveStepMeta(session, "mini", miniMeta);
 
-    // ✅ 틀려도 다음 단계는 항상 MICRO_MCQ 로 진행 가능
+    // 틀려도 다음 단계는 항상 MICRO_MCQ 로 진행 가능
     String status = "COMPLETE";
     String nextStep = "MICRO_MCQ";
 
@@ -175,7 +175,7 @@ public class WrittenService {
     StudySession session = sessionManager.ensureMicroSession(
         userId, topicId, ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
 
-    // ✅ 더 이상 미니 통과 여부로 진입을 막지 않음
+    // 더 이상 미니 통과 여부로 진입을 막지 않음
 
     // 3) MCQ 메타(이미 완료한 상태인지 여부)
     Map<String, Object> mcqMeta = sessionManager.loadStepMeta(session, "mcq");
@@ -216,7 +216,7 @@ public class WrittenService {
     StudySession session = sessionManager.ensureMicroSession(
         req.userId(), req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
 
-    // ✅ 더 이상 MINI_STEP_NOT_PASSED 예외를 던지지 않음
+    // 더 이상 MINI_STEP_NOT_PASSED 예외를 던지지 않음
 
     int baseOrder = sessionManager.items(session.getId()).size();
 
@@ -300,7 +300,8 @@ public class WrittenService {
 
   @Transactional
   public FlowDtos.StepEnvelope<ReviewDtos.ReviewSet> reviewSet(String userId, Long rootTopicId) {
-    Set<Long> topicIds = topicTreeService.descendantIds(rootTopicId);
+    // rootTopicId 포함 + 모든 하위 토픽 id
+    Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
     if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
 
     List<Question> questions = questionRepository.pickRandomByTopicIn(
@@ -337,7 +338,8 @@ public class WrittenService {
   public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> reviewSubmitWritten(
       WrittenDtos.McqSubmitReq req, Long rootTopicId) {
 
-    Set<Long> rawIds = topicTreeService.descendantIds(rootTopicId);
+    // rootTopicId + 하위 토픽 전체를 타겟으로 필터링
+    Set<Long> rawIds = topicTreeService.descendantsOf(rootTopicId);
     Set<Long> topicIds = new HashSet<>(rawIds);
     if (topicIds.isEmpty()) {
       topicIds.add(rootTopicId);
@@ -397,7 +399,7 @@ public class WrittenService {
       );
 
       persistUserAnswer(req.userId(), question, answer.label(), isCorrect, 100, session, item, "REVIEW_MCQ");
-      // ✅ 리뷰도 XP / Progress 에 반영
+      // 리뷰도 XP / Progress 에 반영
       pushProgressHook(req.userId(), ExamMode.WRITTEN, QuestionType.MCQ, isCorrect, 100, question.getId());
       updateProgress(req.userId(), question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
     }
@@ -480,7 +482,7 @@ public class WrittenService {
     int totalCorrect = miniCorrect + mcqCorrect;
     boolean completed = miniPassed && mcqCompleted;
 
-    // 🔽 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
+    // 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
     String topicTitle = "";
     try {
       CurriculumGateway.CurriculumConcept curriculum = curriculumGateway.getConceptWithTopic(topicId);

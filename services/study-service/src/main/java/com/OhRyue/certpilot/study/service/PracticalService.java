@@ -69,7 +69,7 @@ public class PracticalService {
         .toList();
 
     String status = passed ? "COMPLETE" : "IN_PROGRESS";
-    // ✅ 미니 정답 여부와 관계없이 다음 단계는 항상 PRACTICAL_SET 로 이동 가능
+    // 미니 정답 여부와 관계없이 다음 단계는 항상 PRACTICAL_SET 로 이동 가능
     String next = "PRACTICAL_SET";
 
     return new FlowDtos.StepEnvelope<>(
@@ -156,7 +156,7 @@ public class PracticalService {
         "PRACTICAL",
         "PRACTICAL_MINI",
         passed ? "COMPLETE" : "IN_PROGRESS",
-        // ✅ 항상 PRACTICAL_SET 으로 이동 가능하도록 고정
+        // 항상 PRACTICAL_SET 으로 이동 가능하도록 고정
         "PRACTICAL_SET",
         sessionManager.loadMeta(session),
         new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, passed, items, wrongIds)
@@ -179,7 +179,7 @@ public class PracticalService {
 
   @Transactional
   public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalSet(String userId, Long topicId) {
-    // ✅ SHORT 3 + LONG 2 = 총 5문제
+    // SHORT 3 + LONG 2 = 총 5문제
     List<Question> shortQuestions = questionRepository.pickRandomByTopic(
         topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 3));
     List<Question> longQuestions = questionRepository.pickRandomByTopic(
@@ -200,7 +200,7 @@ public class PracticalService {
     StudySession session = sessionManager.ensureMicroSession(
         userId, topicId, ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
 
-    // ✅ 미니 통과 여부와 상관없이 세트 진입 허용
+    // 미니 통과 여부와 상관없이 세트 진입 허용
     Map<String, Object> practicalMeta = sessionManager.loadStepMeta(session, "practical");
     boolean completed = Boolean.TRUE.equals(practicalMeta.get("completed"));
     String status = completed ? "COMPLETE" : "IN_PROGRESS";
@@ -228,7 +228,7 @@ public class PracticalService {
     StudySession session = sessionManager.ensureMicroSession(
         req.userId(), req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
 
-    // ✅ 미니 통과 여부와 관계없이 제출/채점이 항상 가능
+    // 미니 통과 여부와 관계없이 제출/채점이 항상 가능
     int baseOrder = sessionManager.items(session.getId()).size();
 
     List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
@@ -315,7 +315,8 @@ public class PracticalService {
 
   @Transactional
   public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalReviewSet(String userId, Long rootTopicId) {
-    Set<Long> topicIds = topicTreeService.descendantIds(rootTopicId);
+    // rootTopicId 포함 + 모든 하위 토픽 id
+    Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
     if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
 
     // ✅ SHORT 6 + LONG 4 = 총 10문제
@@ -358,16 +359,18 @@ public class PracticalService {
   public FlowDtos.StepEnvelope<PracticalDtos.PracticalReviewSubmitResp> practicalReviewSubmit(
       PracticalDtos.PracticalReviewSubmitReq req) {
 
-    Set<Long> rawIds = topicTreeService.descendantIds(req.rootTopicId());
+    // rootTopicId + 하위 토픽 전체를 타겟으로 필터링
+    Set<Long> rawIds = topicTreeService.descendantsOf(req.rootTopicId());
     Set<Long> topicIds = new HashSet<>(rawIds);
     if (topicIds.isEmpty()) {
       topicIds.add(req.rootTopicId());
     }
+    final Set<Long> targetTopicIds = Set.copyOf(topicIds);
 
     Map<Long, Question> questionMap = questionRepository.findByIdIn(
             req.answers().stream().map(PracticalDtos.PracticalAnswer::questionId).toList())
         .stream()
-        .filter(q -> q.getMode() == ExamMode.PRACTICAL && topicIds.contains(q.getTopicId()))
+        .filter(q -> q.getMode() == ExamMode.PRACTICAL && targetTopicIds.contains(q.getTopicId()))
         .collect(Collectors.toMap(Question::getId, q -> q));
 
     StudySession session = sessionManager.ensureReviewSession(
@@ -419,7 +422,7 @@ public class PracticalService {
 
       persistUserAnswer(req.userId(), question, answer.userText(), passed, score, session, item, "PRACTICAL_REVIEW");
       pushProgressHook(req.userId(), question.getType(), passed, score, question.getId());
-      // ✅ 실기 리뷰도 Progress 에 반영
+      // 실기 리뷰도 Progress 에 반영
       updateProgress(req.userId(), question.getTopicId(), score);
     }
 
@@ -511,7 +514,7 @@ public class PracticalService {
     int totalSolved = miniTotal + practicalTotal;
     int totalPassed = miniCorrect + practicalPassed;
 
-    // 🔽 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
+    // 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
     String topicTitle = "";
     try {
       var curriculum = curriculumGateway.getConceptWithTopic(topicId);
