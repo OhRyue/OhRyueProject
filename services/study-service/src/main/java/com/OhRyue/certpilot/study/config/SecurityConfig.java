@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 @EnableMethodSecurity // @PreAuthorize 사용 가능
 public class SecurityConfig {
 
-  @Value("${security.jwt.hmac-secret:}")
+  @Value("${jwt.secret-key:}")
   private String hmacSecret;
 
   @Bean
@@ -49,7 +49,7 @@ public class SecurityConfig {
   @Bean
   public JwtDecoder jwtDecoder() {
     if (hmacSecret == null || hmacSecret.isBlank()) {
-      throw new IllegalStateException("STUDY_JWT_SECRET(=security.jwt.hmac-secret) is not configured.");
+      throw new IllegalStateException("JWT 시크릿이 설정되지 않았습니다. jwt.secret-key (환경변수 JWT_SECRET_KEY)를 설정하세요.");
     }
     SecretKey key = new SecretKeySpec(hmacSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
     return NimbusJwtDecoder.withSecretKey(key).build();
