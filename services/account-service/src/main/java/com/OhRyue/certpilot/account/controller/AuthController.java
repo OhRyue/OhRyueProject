@@ -32,6 +32,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -46,6 +48,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private final UserService userService;
     private final EmailService emailService;
     private final RefreshTokenService refreshTokenService;
@@ -170,15 +173,21 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<Map<String, String>> refresh(@Valid @RequestBody TokenRefreshRequest request) {
         String refreshToken = request.getRefreshToken();
+        log.info("🔄 Access Token 재발급 요청 - Refresh Token 앞 20자: {}", 
+            refreshToken != null && refreshToken.length() > 20 ? refreshToken.substring(0, 20) + "..." : refreshToken);
+        
         if (!jwtTokenProvider.validateToken(refreshToken)) {
+            log.error("❌ Refresh Token 검증 실패");
             throw new IllegalArgumentException("리프레시 토큰이 유효하지 않습니다");
         }
         String userId = jwtTokenProvider.getUsernameFromToken(refreshToken);
         String savedToken = refreshTokenService.get(userId);
         if (!refreshToken.equals(savedToken)) {
+            log.error("❌ Refresh Token 불일치 - userId: {}", userId);
             throw new IllegalArgumentException("리프레시 토큰이 일치하지 않습니다 (재로그인 필요)");
         }
         String newAccessToken = jwtTokenProvider.generateToken(userId);
+        log.info("✅ Access Token 재발급 완료 - userId: {}", userId);
         return ResponseEntity.ok(Map.of("accessToken", newAccessToken));
     }
 
