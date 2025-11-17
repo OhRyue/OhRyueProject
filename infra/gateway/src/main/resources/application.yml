@@ -1,3 +1,7 @@
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.web: DEBUG
 server:
   port: 8080
 
@@ -14,14 +18,14 @@ spring:
 
   cloud:
     gateway:
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-        - name: RequestRateLimiter
-          args:
-            redis-rate-limiter.replenishRate: 1
-            redis-rate-limiter.burstCapacity: 600
-            redis-rate-limiter.requestedTokens: 6
-            key-resolver: "#{@userKeyResolver}"
+#      default-filters:
+#        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+#        - name: RequestRateLimiter
+#          args:
+#            redis-rate-limiter.replenishRate: 1
+#            redis-rate-limiter.burstCapacity: 600
+#            redis-rate-limiter.requestedTokens: 6
+#            key-resolver: "#{@userKeyResolver}"
 
       globalcors:
         add-to-simple-url-handler-mapping: true
@@ -34,6 +38,12 @@ spring:
             allowed-methods: "*"
             allowed-headers: "*"
             allow-credentials: true
+
+      httpclient:
+        wiretap: true
+
+      default-filters:
+        - name: RemoveHopByHopHeaders
 
       routes:
         # --- study ---
@@ -67,6 +77,8 @@ spring:
           predicates:
             - Path=/api/account/**
           filters:
+            - AddRequestHeader=X-Forwarded-Prefix, /api/account
+            - RewritePath=/api/account/(?<segment>.*), /${segment}
 
         - id: account-swagger-ui
           uri: lb://account-service

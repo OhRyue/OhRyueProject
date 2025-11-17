@@ -30,6 +30,7 @@ import com.OhRyue.certpilot.account.service.UserService;
 import com.OhRyue.certpilot.account.service.VerificationCodeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -69,8 +70,9 @@ public class AuthController {
     @Operation(summary = "회원가입 - 이메일 인증코드 발송 (DB 저장 없음)")
     @PostMapping("/send-verification")
     public ResponseEntity<Map<String, String>> sendVerification(
-            @Valid @RequestBody UserRegisterDto req
+            @Valid @RequestBody UserRegisterDto req, HttpServletRequest request
     ) {
+        System.out.println("REQ URI = " + request.getRequestURI());     // 디버깅용
         String userId = req.getUserId().trim();
         String email = normalizeEmail(req.getEmail());
 
