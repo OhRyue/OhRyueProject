@@ -6,54 +6,59 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @FeignClient(
-    name = "cert-service",
-    path = "/api/certs"
+        name = "cert-service",
+        path = "/api/cert"
 )
 public interface CertCurriculumClient {
 
-  /* ========================= Topic ========================= */
+    /* ========================= Topic ========================= */
 
-  @GetMapping("/topics/{topicId}")
-  TopicResponse getTopic(@PathVariable("topicId") Long topicId);
+    @GetMapping("/topics/{topicId}")
+    TopicResponse getTopic(@PathVariable("topicId") Long topicId);
 
-  @GetMapping("/topics")
-  TopicListResponse listTopics(@RequestParam(value = "certId", required = false) Long certId,
-                               @RequestParam(value = "mode", required = false) String examMode,
-                               @RequestParam(value = "parentId", required = false) Long parentId);
+    @GetMapping("/topics")
+    TopicListResponse listTopics(@RequestParam(value = "certId", required = false) Long certId,
+                                 @RequestParam(value = "mode", required = false) String examMode,
+                                 @RequestParam(value = "parentId", required = false) Long parentId);
 
-  @GetMapping("/topics/search")
-  TopicListResponse searchTopics(@RequestParam(value = "code", required = false) String code,
-                                 @RequestParam(value = "title", required = false) String title);
+    @GetMapping("/topics/search")
+    TopicListResponse searchTopics(@RequestParam(value = "code", required = false) String code,
+                                   @RequestParam(value = "title", required = false) String title);
 
-  /* ========================= Concept ========================= */
+    /* ========================= Concept ========================= */
 
-  @GetMapping("/concepts/{topicId}")
-  ConceptResponse getConcept(@PathVariable("topicId") Long topicId);
+    @GetMapping("/concepts/{topicId}")
+    ConceptResponse getConcept(@PathVariable("topicId") Long topicId);
 
-  /* ========================= INTERNAL ========================= */
+    /* ========================= INTERNAL ========================= */
 
-  @GetMapping("/internal/curriculum/topics/{rootTopicId}/descendants")
-  List<Long> getDescendantTopicIds(@PathVariable("rootTopicId") Long rootTopicId);
+    @GetMapping("/internal/curriculum/topics/{rootTopicId}/descendants")
+    DescendantsResponse getDescendantTopicIds(@PathVariable("rootTopicId") Long rootTopicId);
 
-  /* ========================= DTOs ========================= */
+    /* ========================= DTOs ========================= */
 
-  public record TopicResponse(
-      Long id,
-      Long certId,
-      Long parentId,
-      String code,
-      String title,
-      String emoji,
-      String examMode,
-      Integer orderNo
-  ) {}
+    record TopicResponse(
+            Long id,
+            Long certId,
+            Long parentId,
+            String code,
+            String title,
+            String emoji,
+            String examMode,
+            Integer orderNo
+    ) {}
 
-  public record TopicListResponse(
-      List<TopicResponse> topics
-  ) {}
+    record TopicListResponse(
+            List<TopicResponse> topics
+    ) {}
 
-  public record ConceptResponse(
-      Long topicId,
-      String sectionsJson
-  ) {}
+    record ConceptResponse(
+            Long topicId,
+            String sectionsJson
+    ) {}
+
+    // INTERNAL 응답 DTO
+    record DescendantsResponse(
+            List<Long> ids
+    ) {}
 }

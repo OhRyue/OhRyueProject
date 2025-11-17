@@ -7,9 +7,12 @@ import com.OhRyue.certpilot.cert.dto.CurriculumDtos.*;
 import com.OhRyue.certpilot.cert.repository.ConceptRepository;
 import com.OhRyue.certpilot.cert.repository.TopicRepository;
 import com.OhRyue.certpilot.cert.service.TopicTreeService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,13 +20,25 @@ import java.util.NoSuchElementException;
 
 @Tag(name = "Curriculum(토픽/개념)")
 @RestController
-@RequestMapping("/api/cert")
+@RequestMapping(
+        value = "/api/cert",
+        produces = MediaType.APPLICATION_JSON_VALUE
+)
 @RequiredArgsConstructor
 public class CurriculumController {
 
     private final TopicRepository topicRepository;
     private final ConceptRepository conceptRepository;
     private final TopicTreeService topicTreeService;
+    private final ObjectMapper objectMapper;
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("JSON 직렬화 실패", e);
+        }
+    }
 
     /* ========================= Topic ========================= */
 
@@ -32,10 +47,11 @@ public class CurriculumController {
             description = "단일 토픽 상세 정보(id 기준)를 반환합니다."
     )
     @GetMapping("/topics/{topicId}")
-    public TopicResponse getTopic(@PathVariable Long topicId) {
+    public String getTopic(@PathVariable Long topicId) {
         Topic topic = topicRepository.findById(topicId)
                 .orElseThrow(() -> new NoSuchElementException("Topic not found: " + topicId));
-        return toTopicResponse(topic);
+        TopicResponse dto = toTopicResponse(topic);  // 값 생성
+        return toJson(dto);                          // JSON 문자열
     }
 
     @Operation(
@@ -47,37 +63,33 @@ public class CurriculumController {
                 """
     )
     @GetMapping("/topics")
-    public TopicListResponse listTopics(@RequestParam(required = false) Long certId,
-                                        @RequestParam(required = false) String mode,
-                                        @RequestParam(required = false) Long parentId) {
-
-        ExamMode examMode = null;
-        if (mode != null && !mode.isBlank()) {
-            examMode = ExamMode.valueOf(mode);
-        }
+    public String listTopics(@RequestParam(required = false) Long certId,
+                             @RequestParam(value = "mode", required = false) ExamMode mode,
+                             @RequestParam(required = false) Long parentId) {
 
         List<Topic> topics;
 
-        if (certId != null && examMode != null && parentId != null) {
-            topics = topicRepository.findByCertIdAndExamMode(certId, examMode)
+        if (certId != null && mode != null && parentId != null) {
+            topics = topicRepository.findByCertIdAndExamMode(certId, mode)
                     .stream()
                     .filter(t -> parentId.equals(t.getParentId()))
                     .toList();
-        } else if (certId != null && examMode != null) {
-            topics = topicRepository.findByCertIdAndExamMode(certId, examMode);
+        } else if (certId != null && mode != null) {
+            topics = topicRepository.findByCertIdAndExamMode(certId, mode);
         } else if (certId != null) {
             topics = topicRepository.findByCertId(certId);
-        } else if (examMode != null) {
-            topics = topicRepository.findByExamMode(examMode);
+        } else if (mode != null) {
+            topics = topicRepository.findByExamMode(mode);
         } else if (parentId != null) {
             topics = topicRepository.findByParentId(parentId);
         } else {
             topics = topicRepository.findAll();
         }
 
-        return new TopicListResponse(
+        TopicListResponse dto = new TopicListResponse(
                 topics.stream().map(this::toTopicResponse).toList()
-        );
+        );                      // 값 생성
+        return toJson(dto);     // JSON 문자열
     }
 
     @Operation(
@@ -85,8 +97,8 @@ public class CurriculumController {
             description = "code LIKE / title LIKE 검색을 수행합니다."
     )
     @GetMapping("/topics/search")
-    public TopicListResponse searchTopics(@RequestParam(required = false) String code,
-                                          @RequestParam(required = false) String title) {
+    public String searchTopics(@RequestParam(required = false) String code,
+                               @RequestParam(required = false) String title) {
 
         List<Topic> topics;
 
@@ -102,9 +114,10 @@ public class CurriculumController {
             topics = topicRepository.findAll();
         }
 
-        return new TopicListResponse(
+        TopicListResponse dto = new TopicListResponse(
                 topics.stream().map(this::toTopicResponse).toList()
         );
+        return toJson(dto);
     }
 
     /* ========================= Concept ========================= */
@@ -114,10 +127,11 @@ public class CurriculumController {
             description = "topicId 기준 개념 섹션 JSON을 반환합니다."
     )
     @GetMapping("/concepts/{topicId}")
-    public ConceptResponse getConcept(@PathVariable Long topicId) {
+    public String getConcept(@PathVariable Long topicId) {
         Concept concept = conceptRepository.findByTopicId(topicId)
                 .orElseThrow(() -> new NoSuchElementException("Concept not found for topicId: " + topicId));
-        return new ConceptResponse(concept.getTopicId(), concept.getSectionsJson());
+        ConceptResponse dto = new ConceptResponse(concept.getTopicId(), concept.getSectionsJson());
+        return toJson(dto);
     }
 
     /* ========================= INTERNAL API ========================= */
@@ -129,9 +143,14 @@ public class CurriculumController {
                 - study-service 등 내부 마이크로서비스에서만 사용합니다.
                 """
     )
-    @GetMapping("/internal/curriculum/topics/{rootTopicId}/descendants")
-    public List<Long> descendantTopicIds(@PathVariable Long rootTopicId) {
-        return topicTreeService.descendantsOf(rootTopicId);
+    @GetMapping(
+            value = "/internal/curriculum/topics/{rootTopicId}/descendants",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public String descendantTopicIds(@PathVariable Long rootTopicId) {
+        List<Long> ids = topicTreeService.descendantsOf(rootTopicId);
+        // 예: {"ids":[10001,11001,...]}  – 값은 서비스에서, 껍데기만 하드코딩
+        return "{\"ids\":" + ids.toString() + "}";
     }
 
     /* ========================= Mapper ========================= */

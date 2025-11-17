@@ -10,7 +10,7 @@ USE certpilot_cert;
 
 -- Major (P, 실기 종합)
 INSERT INTO topic (id, cert_id, parent_id, code,  title,                 emoji, exam_mode, order_no) VALUES
-  (30001, 1, NULL, 'P',   '정보처리기사 실기(종합)',   '🧪', 'PRACTICAL', 1)
+  (30001, 1, NULL, 'P',   '정보처리 실무',   '🧪', 'PRACTICAL', 1)
 ON DUPLICATE KEY UPDATE
   title=VALUES(title),
   emoji=VALUES(emoji),
@@ -19,11 +19,11 @@ ON DUPLICATE KEY UPDATE
 
 -- Sub (P.1 ~ P.5)
 INSERT INTO topic (id, cert_id, parent_id, code,    title,                          emoji, exam_mode, order_no) VALUES
-  (31001, 1, 30001, 'P.1', '요구사항 분석/모델링(실기)',    '📝', 'PRACTICAL', 1),
-  (31002, 1, 30001, 'P.2', 'DB 설계/정규화(실기)',          '🗄️', 'PRACTICAL', 2),
-  (31003, 1, 30001, 'P.3', 'SQL 작성/튜닝(실기)',           '💾', 'PRACTICAL', 3),
-  (31004, 1, 30001, 'P.4', '트랜잭션/동시성/무결성(실기)',  '🔐', 'PRACTICAL', 4),
-  (31005, 1, 30001, 'P.5', '운영/백업/장애대응(실기)',      '🛟', 'PRACTICAL', 5)
+  (31001, 1, 30001, 'P.1', '요구사항 분석/모델링',    '📝', 'PRACTICAL', 1),
+  (31002, 1, 30001, 'P.2', 'DB 설계/정규화',          '🗄️', 'PRACTICAL', 2),
+  (31003, 1, 30001, 'P.3', 'SQL 작성/튜닝',           '💾', 'PRACTICAL', 3),
+  (31004, 1, 30001, 'P.4', '트랜잭션/동시성/무결성',  '🔐', 'PRACTICAL', 4),
+  (31005, 1, 30001, 'P.5', '운영/백업/장애대응',      '🛟', 'PRACTICAL', 5)
 ON DUPLICATE KEY UPDATE
   title=VALUES(title),
   emoji=VALUES(emoji),

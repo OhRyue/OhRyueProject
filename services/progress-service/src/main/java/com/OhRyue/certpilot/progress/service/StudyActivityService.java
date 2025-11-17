@@ -1,8 +1,8 @@
 package com.OhRyue.certpilot.progress.service;
 
 import com.OhRyue.certpilot.progress.domain.ReportDaily;
-import com.OhRyue.certpilot.progress.domain.ReportWeekly;
 import com.OhRyue.certpilot.progress.domain.ReportTagSkill;
+import com.OhRyue.certpilot.progress.domain.ReportWeekly;
 import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
 import com.OhRyue.certpilot.progress.domain.enums.QuestionType;
 import com.OhRyue.certpilot.progress.domain.enums.XpReason;
@@ -25,159 +25,201 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class StudyActivityService {
 
-  private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-  private static final int DEFAULT_TIME_PER_PROBLEM_SEC = 60;
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final int DEFAULT_TIME_PER_PROBLEM_SEC = 60;
 
-  private final ReportDailyRepository dailyRepository;
-  private final ReportWeeklyRepository weeklyRepository;
-  private final ReportTagSkillRepository tagSkillRepository;
-  private final XpService xpService;
-  private final StreakService streakService;
-  private final RankService rankService;
+    private final ReportDailyRepository dailyRepository;
+    private final ReportWeeklyRepository weeklyRepository;
+    private final ReportTagSkillRepository tagSkillRepository;
+    private final XpService xpService;
+    private final StreakService streakService;
+    private final RankService rankService;
 
-  @Transactional
-  public void ingest(StudySubmitReq payload) {
-    ExamMode examMode = parseExamMode(payload.examMode());
-    QuestionType questionType = parseQuestionType(payload.questionType());
-    boolean isCorrect = resolveCorrectness(payload.correct(), payload.score(), examMode);
-    int xpDelta = computeXpDelta(examMode, questionType, isCorrect);
-    int timeSpent = DEFAULT_TIME_PER_PROBLEM_SEC;
+    @Transactional
+    public void ingest(StudySubmitReq payload) {
+        ExamMode examMode = parseExamMode(payload.examMode());
+        QuestionType questionType = parseQuestionType(payload.questionType());
+        boolean isCorrect = resolveCorrectness(payload.correct(), payload.score(), examMode);
+        int xpDelta = 0;
+        int timeSpent = DEFAULT_TIME_PER_PROBLEM_SEC;
 
-    // XP & Rank
-    XpReason reason = mapReason(payload.source());
-    xpService.addXp(payload.userId(), xpDelta, reason, buildRefId(questionType, examMode));
-    rankService.recomputeForUser(payload.userId());
+        // XP Reason & refId (idempotent)
+        XpReason reason = mapReason(payload.source());
+        String refId = buildRefId(payload, examMode, questionType);
 
-    // Streak
-    streakService.tickToday(payload.userId());
+        // XP & Rank (XP는 (userId, reason, refId) 기준으로 한 번만 지급)
+        rankService.recomputeForUser(payload.userId());
 
-    // Daily report
-    LocalDate today = LocalDate.now(KST);
-    ReportDaily daily = dailyRepository.findByUserIdAndDate(payload.userId(), today)
-        .orElse(ReportDaily.builder()
-            .userId(payload.userId())
-            .date(today)
-            .solvedCount(0)
-            .correctCount(0)
-            .timeSpentSec(0)
-            .accuracy(BigDecimal.ZERO)
-            .xpGained(0)
-            .build());
-    daily.setSolvedCount(daily.getSolvedCount() + 1);
-    if (isCorrect) {
-      daily.setCorrectCount(daily.getCorrectCount() + 1);
-    }
-    daily.setTimeSpentSec(daily.getTimeSpentSec() + timeSpent);
-    daily.setXpGained(daily.getXpGained() + xpDelta);
-    daily.setAccuracy(calculateAccuracy(daily.getCorrectCount(), daily.getSolvedCount()));
-    dailyRepository.save(daily);
+        // Streak
+        streakService.tickToday(payload.userId());
 
-    // Weekly report
-    String weekIso = isoWeek(today);
-    ReportWeekly weekly = weeklyRepository.findByUserIdAndWeekIso(payload.userId(), weekIso)
-        .orElse(ReportWeekly.builder()
-            .userId(payload.userId())
-            .weekIso(weekIso)
-            .solvedCount(0)
-            .correctCount(0)
-            .timeSpentSec(0)
-            .accuracy(BigDecimal.ZERO)
-            .xpGained(0)
-            .build());
-    weekly.setSolvedCount(weekly.getSolvedCount() + 1);
-    if (isCorrect) {
-      weekly.setCorrectCount(weekly.getCorrectCount() + 1);
-    }
-    weekly.setTimeSpentSec(weekly.getTimeSpentSec() + timeSpent);
-    weekly.setXpGained(weekly.getXpGained() + xpDelta);
-    weekly.setAccuracy(calculateAccuracy(weekly.getCorrectCount(), weekly.getSolvedCount()));
-    weeklyRepository.save(weekly);
-
-    // Tag skill
-    List<String> tags = payload.tags() == null ? List.of() : payload.tags().stream()
-        .filter(tag -> tag != null && !tag.isBlank())
-        .distinct()
-        .toList();
-    if (!tags.isEmpty()) {
-      for (String tag : tags) {
-        ReportTagSkill skill = tagSkillRepository.findByUserIdAndTagAndExamMode(payload.userId(), tag, examMode)
-            .orElse(ReportTagSkill.builder()
-                .userId(payload.userId())
-                .tag(tag)
-                .examMode(examMode)
-                .correct(0)
-                .total(0)
-                .accuracy(BigDecimal.ZERO)
-                .build());
-        skill.setTotal(skill.getTotal() + 1);
+        // Daily report (문항 단위로 계속 누적)
+        LocalDate today = LocalDate.now(KST);
+        ReportDaily daily = dailyRepository.findByUserIdAndDate(payload.userId(), today)
+                .orElse(ReportDaily.builder()
+                        .userId(payload.userId())
+                        .date(today)
+                        .solvedCount(0)
+                        .correctCount(0)
+                        .timeSpentSec(0)
+                        .accuracy(BigDecimal.ZERO)
+                        .xpGained(0)
+                        .build());
+        daily.setSolvedCount(daily.getSolvedCount() + 1);
         if (isCorrect) {
-          skill.setCorrect(skill.getCorrect() + 1);
+            daily.setCorrectCount(daily.getCorrectCount() + 1);
         }
-        skill.setAccuracy(calculateAccuracy(skill.getCorrect(), skill.getTotal()));
-        tagSkillRepository.save(skill);
-      }
+        daily.setTimeSpentSec(daily.getTimeSpentSec() + timeSpent);
+        daily.setXpGained(daily.getXpGained() + xpDelta);
+        daily.setAccuracy(calculateAccuracy(daily.getCorrectCount(), daily.getSolvedCount()));
+        dailyRepository.save(daily);
+
+        // Weekly report (마찬가지로 문항 단위)
+        String weekIso = isoWeek(today);
+        ReportWeekly weekly = weeklyRepository.findByUserIdAndWeekIso(payload.userId(), weekIso)
+                .orElse(ReportWeekly.builder()
+                        .userId(payload.userId())
+                        .weekIso(weekIso)
+                        .solvedCount(0)
+                        .correctCount(0)
+                        .timeSpentSec(0)
+                        .accuracy(BigDecimal.ZERO)
+                        .xpGained(0)
+                        .build());
+        weekly.setSolvedCount(weekly.getSolvedCount() + 1);
+        if (isCorrect) {
+            weekly.setCorrectCount(weekly.getCorrectCount() + 1);
+        }
+        weekly.setTimeSpentSec(weekly.getTimeSpentSec() + timeSpent);
+        weekly.setXpGained(weekly.getXpGained() + xpDelta);
+        weekly.setAccuracy(calculateAccuracy(weekly.getCorrectCount(), weekly.getSolvedCount()));
+        weeklyRepository.save(weekly);
+
+        // Tag skill (문항 단위, 태그별 능력치 누적)
+        List<String> tags = payload.tags() == null ? List.of() : payload.tags().stream()
+                .filter(tag -> tag != null && !tag.isBlank())
+                .distinct()
+                .toList();
+        if (!tags.isEmpty()) {
+            for (String tag : tags) {
+                ReportTagSkill skill = tagSkillRepository
+                        .findByUserIdAndTagAndExamMode(payload.userId(), tag, examMode)
+                        .orElse(ReportTagSkill.builder()
+                                .userId(payload.userId())
+                                .tag(tag)
+                                .examMode(examMode)
+                                .correct(0)
+                                .total(0)
+                                .accuracy(BigDecimal.ZERO)
+                                .build());
+                skill.setTotal(skill.getTotal() + 1);
+                if (isCorrect) {
+                    skill.setCorrect(skill.getCorrect() + 1);
+                }
+                skill.setAccuracy(calculateAccuracy(skill.getCorrect(), skill.getTotal()));
+                tagSkillRepository.save(skill);
+            }
+        }
     }
-  }
 
-  private ExamMode parseExamMode(String mode) {
-    try {
-      return ExamMode.valueOf(mode.toUpperCase(Locale.ROOT));
-    } catch (Exception ex) {
-      return ExamMode.WRITTEN;
+    /* ====================== 내부 유틸 ====================== */
+
+    private ExamMode parseExamMode(String mode) {
+        try {
+            return ExamMode.valueOf(mode.toUpperCase(Locale.ROOT));
+        } catch (Exception ex) {
+            return ExamMode.WRITTEN;
+        }
     }
-  }
 
-  private QuestionType parseQuestionType(String type) {
-    try {
-      return QuestionType.valueOf(type.toUpperCase(Locale.ROOT));
-    } catch (Exception ex) {
-      return QuestionType.MCQ;
+    private QuestionType parseQuestionType(String type) {
+        try {
+            return QuestionType.valueOf(type.toUpperCase(Locale.ROOT));
+        } catch (Exception ex) {
+            return QuestionType.MCQ;
+        }
     }
-  }
 
-  private boolean resolveCorrectness(Boolean correctFlag, Integer score, ExamMode examMode) {
-    if (correctFlag != null) {
-      return Boolean.TRUE.equals(correctFlag);
+    private boolean resolveCorrectness(Boolean correctFlag, Integer score, ExamMode examMode) {
+        if (correctFlag != null) {
+            return Boolean.TRUE.equals(correctFlag);
+        }
+        if (examMode == ExamMode.PRACTICAL && score != null) {
+            return score >= 60;
+        }
+        return false;
     }
-    if (examMode == ExamMode.PRACTICAL && score != null) {
-      return score >= 60;
+
+    private int computeXpDelta(ExamMode mode, QuestionType type, boolean correct) {
+        // 실기 서술형/단답 오답에도 어느 정도 보상을 주고 싶다면 유지
+        if (mode == ExamMode.PRACTICAL && type != QuestionType.OX && !correct) {
+            return 3; // 실기 오답 기본 보상
+        }
+        return correct ? 10 : 2;
     }
-    return false;
-  }
 
-  private int computeXpDelta(ExamMode mode, QuestionType type, boolean correct) {
-    if (mode == ExamMode.PRACTICAL && type != QuestionType.OX && !correct) {
-      return 3; // 실기 오답 기본 보상
+    /**
+     * source 문자열을 XpReason 으로 매핑
+     * - MICRO / REVIEW / ASSIST / BATTLE / ETC
+     */
+    private XpReason mapReason(String source) {
+        if (source == null || source.isBlank()) return XpReason.ETC;
+        String upper = source.toUpperCase(Locale.ROOT);
+        if (upper.contains("MICRO")) return XpReason.MICRO;
+        if (upper.contains("REVIEW")) return XpReason.REVIEW;
+        if (upper.contains("ASSIST")) return XpReason.ASSIST;
+        if (upper.contains("BATTLE") || upper.contains("VERSUS")) return XpReason.BATTLE;
+        return XpReason.ETC;
     }
-    return correct ? 10 : 2;
-  }
 
-  private XpReason mapReason(String source) {
-    if (source == null || source.isBlank()) return XpReason.ETC;
-    String upper = source.toUpperCase(Locale.ROOT);
-    if (upper.contains("MICRO")) return XpReason.MICRO;
-    if (upper.contains("REVIEW")) return XpReason.REVIEW;
-    if (upper.contains("ASSIST")) return XpReason.ASSIST;
-    if (upper.contains("BATTLE") || upper.contains("VERSUS")) return XpReason.BATTLE;
-    return XpReason.ETC;
-  }
+    /**
+     * refId 생성 규칙 (XP idempotency용)
+     *
+     * 예시:
+     *  study:ohryue:WRITTEN:MICRO:MCQ:2025-11-17
+     *
+     *  - userId
+     *  - ExamMode (WRITTEN / PRACTICAL)
+     *  - flow (MICRO / REVIEW / ASSIST / BATTLE / ETC)  ← source 기준
+     *  - QuestionType (MCQ / OX / SHORT / LONG ...)
+     *  - 날짜(yyyy-MM-dd)
+     *
+     *  이렇게 만들면, 같은 날에 같은 흐름/모드/문제타입으로 몇 문제를 풀든
+     *  XP는 한 번만 지급됩니다.
+     */
+    private String buildRefId(StudySubmitReq payload, ExamMode mode, QuestionType type) {
+        String flow = normalizeFlowFromSource(payload.source());
+        LocalDate today = LocalDate.now(KST);
+        return "study:"
+                + payload.userId() + ":"
+                + mode.name().toUpperCase(Locale.ROOT) + ":"
+                + flow + ":"
+                + type.name().toUpperCase(Locale.ROOT) + ":"
+                + today;
+    }
 
-  private String buildRefId(QuestionType type, ExamMode mode) {
-    return "study:" + mode.name().toLowerCase(Locale.ROOT) + ":" + type.name().toLowerCase(Locale.ROOT);
-  }
+    private String normalizeFlowFromSource(String source) {
+        if (source == null || source.isBlank()) {
+            return "ETC";
+        }
+        String upper = source.toUpperCase(Locale.ROOT);
+        if (upper.contains("MICRO")) return "MICRO";
+        if (upper.contains("REVIEW")) return "REVIEW";
+        if (upper.contains("ASSIST")) return "ASSIST";
+        if (upper.contains("BATTLE") || upper.contains("VERSUS")) return "BATTLE";
+        return "ETC";
+    }
 
-  private BigDecimal calculateAccuracy(int correct, int total) {
-    if (total == 0) return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-    double ratio = (double) correct / total * 100.0;
-    return BigDecimal.valueOf(ratio).setScale(2, RoundingMode.HALF_UP);
-  }
+    private BigDecimal calculateAccuracy(int correct, int total) {
+        if (total == 0) return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        double ratio = (double) correct / total * 100.0;
+        return BigDecimal.valueOf(ratio).setScale(2, RoundingMode.HALF_UP);
+    }
 
-  private String isoWeek(LocalDate date) {
-    WeekFields wf = WeekFields.ISO;
-    int week = date.get(wf.weekOfWeekBasedYear());
-    int year = date.get(wf.weekBasedYear());
-    return String.format("%d-W%02d", year, week);
-  }
+    private String isoWeek(LocalDate date) {
+        WeekFields wf = WeekFields.ISO;
+        int week = date.get(wf.weekOfWeekBasedYear());
+        int year = date.get(wf.weekBasedYear());
+        return String.format("%d-W%02d", year, week);
+    }
 }
-
-

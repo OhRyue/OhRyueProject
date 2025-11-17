@@ -11,26 +11,28 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SwaggerConfig {
 
-  @Bean
-  public OpenAPI customOpenAPI() {
-    String jwtSchemeName = "JWT";
+    @Bean
+    public OpenAPI customOpenAPI() {
+        String jwtSchemeName = "JWT";
 
-    // Security 요구사항: JWT를 기본으로 사용하게 함
-    SecurityRequirement securityRequirement = new SecurityRequirement().addList(jwtSchemeName);
+        // Security 요구사항: JWT를 기본으로 사용하게 함
+        SecurityRequirement securityRequirement = new SecurityRequirement().addList(jwtSchemeName);
 
-    // Security 스키마 정의 (Bearer 토큰)
-    SecurityScheme securityScheme = new SecurityScheme()
-        .name(jwtSchemeName)
-        .type(SecurityScheme.Type.HTTP)
-        .scheme("Bearer")
-        .bearerFormat("JWT");
+        // Security 스키마 정의 (Bearer 토큰)
+        SecurityScheme securityScheme = new SecurityScheme()
+                .name(jwtSchemeName)
+                .type(SecurityScheme.Type.HTTP)
+                .scheme("Bearer")
+                .bearerFormat("JWT");
 
-    return new OpenAPI()
-        .info(new Info()
-            .title("CertPilot - Cert Service API")
-            .description("Cert-Service API with JWT Auth")
-            .version("v1.0"))
-        .components(new Components().addSecuritySchemes(jwtSchemeName, securityScheme))
-        .addSecurityItem(securityRequirement);
-  }
+        return new OpenAPI()
+                // OpenAPI 버전 명시
+                .openapi("3.0.1")
+                .info(new Info()
+                        .title("CertPilot - Cert Service API")
+                        .description("Cert-Service API with JWT Auth")
+                        .version("v1.0"))
+                .components(new Components().addSecuritySchemes(jwtSchemeName, securityScheme))
+                .addSecurityItem(securityRequirement);
+    }
 }

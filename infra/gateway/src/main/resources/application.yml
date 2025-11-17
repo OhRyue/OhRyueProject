@@ -111,24 +111,24 @@ spring:
         - id: cert-service
           uri: lb://cert-service
           predicates:
-            - Path=/api/certs/**
+            - Path=/api/cert/**
           filters:
 
         - id: cert-swagger-ui
           uri: lb://cert-service
           predicates:
-            - Path=/api/certs/swagger-ui/**
+            - Path=/api/cert/swagger-ui/**
           filters:
-            - AddRequestHeader=X-Forwarded-Prefix, /api/certs
-            - RewritePath=/api/certs/(?<segment>swagger-ui/.*), /${segment}
+            - AddRequestHeader=X-Forwarded-Prefix, /api/cert
+            - RewritePath=/api/cert/(?<segment>swagger-ui/.*), /${segment}
 
         - id: cert-openapi
           uri: lb://cert-service
           predicates:
-            - Path=/api/certs/v3/api-docs/**
+            - Path=/api/cert/v3/api-docs/**
           filters:
-            - AddRequestHeader=X-Forwarded-Prefix, /api/certs
-            - RewritePath=/api/certs/(?<segment>v3/api-docs.*), /${segment}
+            - AddRequestHeader=X-Forwarded-Prefix, /api/cert
+            - RewritePath=/api/cert/(?<segment>v3/api-docs.*), /${segment}
 
         # --- versus ---
         - id: versus-service

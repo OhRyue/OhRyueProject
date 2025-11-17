@@ -38,3 +38,11 @@ management:
       probes:
         enabled: true
       show-details: never
+
+springdoc:
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

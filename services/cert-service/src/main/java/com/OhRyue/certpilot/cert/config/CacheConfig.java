@@ -11,13 +11,12 @@ import java.time.Duration;
 @Configuration
 public class CacheConfig {
 
-  @Bean
-  public CacheManager cacheManager() {
-    Caffeine<Object, Object> caffeine = Caffeine.newBuilder()
-        .expireAfterWrite(Duration.ofMinutes(30));
-    CaffeineCacheManager manager = new CaffeineCacheManager("cert-current", "cert-tips");
-    manager.setCaffeine(caffeine);
-    return manager;
-  }
+    @Bean
+    public CacheManager cacheManager() {
+        Caffeine<Object, Object> caffeine = Caffeine.newBuilder()
+                .expireAfterWrite(Duration.ofMinutes(30));
+        CaffeineCacheManager manager = new CaffeineCacheManager("cert-current", "cert-tips");
+        manager.setCaffeine(caffeine);
+        return manager;
+    }
 }
-
