@@ -35,14 +35,14 @@ public class CertInfoController {
     @Operation(summary = "사용자의 목표 자격증 상세 정보 조회")
     @GetMapping("/current")
     public ResponseEntity<String> current(Authentication authentication) {
-        // Swagger에 userId 입력칸 없음 → 토큰에서 바로 userId 사용
+        // Swagger에서 userId 입력받지 않고, Authorization 토큰에서 바로 사용
         if (authentication == null || authentication.getName() == null) {
             return ResponseEntity.noContent().build();
         }
         String userId = authentication.getName();
 
         return certInfoService.currentCert(userId)
-                .map(dto -> ResponseEntity.ok(toJson(dto)))  // 서비스에서 DTO → JSON 문자열
+                .map(dto -> ResponseEntity.ok(toJson(dto)))
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 

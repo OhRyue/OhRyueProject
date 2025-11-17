@@ -3,12 +3,9 @@ package com.OhRyue.certpilot.cert.controller;
 import com.OhRyue.certpilot.cert.domain.Concept;
 import com.OhRyue.certpilot.cert.domain.Topic;
 import com.OhRyue.certpilot.cert.domain.enums.ExamMode;
-import com.OhRyue.certpilot.cert.dto.CurriculumDtos.*;
 import com.OhRyue.certpilot.cert.repository.ConceptRepository;
 import com.OhRyue.certpilot.cert.repository.TopicRepository;
 import com.OhRyue.certpilot.cert.service.TopicTreeService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -30,14 +27,14 @@ public class CurriculumController {
     private final TopicRepository topicRepository;
     private final ConceptRepository conceptRepository;
     private final TopicTreeService topicTreeService;
-    private final ObjectMapper objectMapper;
 
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("JSON 직렬화 실패", e);
-        }
+    /* ========================= 공통 escape ========================= */
+
+    private String escape(String s) {
+        if (s == null) return "";
+        return s
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 
     /* ========================= Topic ========================= */
@@ -48,10 +45,32 @@ public class CurriculumController {
     )
     @GetMapping("/topics/{topicId}")
     public String getTopic(@PathVariable Long topicId) {
-        Topic topic = topicRepository.findById(topicId)
+        Topic t = topicRepository.findById(topicId)
                 .orElseThrow(() -> new NoSuchElementException("Topic not found: " + topicId));
-        TopicResponse dto = toTopicResponse(topic);  // 값 생성
-        return toJson(dto);                          // JSON 문자열
+
+        StringBuilder sb = new StringBuilder();
+        sb.append('{')
+                .append("\"id\":").append(t.getId()).append(',')
+                .append("\"certId\":").append(t.getCertId()).append(',');
+
+        sb.append("\"parentId\":");
+        if (t.getParentId() == null) sb.append("null,");
+        else sb.append(t.getParentId()).append(',');
+
+        sb.append("\"code\":\"").append(escape(t.getCode())).append("\",")
+                .append("\"title\":\"").append(escape(t.getTitle())).append("\",");
+
+        if (t.getEmoji() == null) {
+            sb.append("\"emoji\":null,");
+        } else {
+            sb.append("\"emoji\":\"").append(escape(t.getEmoji())).append("\",");
+        }
+
+        sb.append("\"examMode\":\"").append(t.getExamMode().name()).append("\",")
+                .append("\"orderNo\":").append(t.getOrderNo())
+                .append('}');
+
+        return sb.toString();
     }
 
     @Operation(
@@ -86,10 +105,36 @@ public class CurriculumController {
             topics = topicRepository.findAll();
         }
 
-        TopicListResponse dto = new TopicListResponse(
-                topics.stream().map(this::toTopicResponse).toList()
-        );                      // 값 생성
-        return toJson(dto);     // JSON 문자열
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"topics\":[");
+        for (int i = 0; i < topics.size(); i++) {
+            Topic t = topics.get(i);
+            if (i > 0) sb.append(',');
+
+            sb.append('{')
+                    .append("\"id\":").append(t.getId()).append(',')
+                    .append("\"certId\":").append(t.getCertId()).append(',');
+
+            sb.append("\"parentId\":");
+            if (t.getParentId() == null) sb.append("null,");
+            else sb.append(t.getParentId()).append(',');
+
+            sb.append("\"code\":\"").append(escape(t.getCode())).append("\",")
+                    .append("\"title\":\"").append(escape(t.getTitle())).append("\",");
+
+            if (t.getEmoji() == null) {
+                sb.append("\"emoji\":null,");
+            } else {
+                sb.append("\"emoji\":\"").append(escape(t.getEmoji())).append("\",");
+            }
+
+            sb.append("\"examMode\":\"").append(t.getExamMode().name()).append("\",")
+                    .append("\"orderNo\":").append(t.getOrderNo())
+                    .append('}');
+        }
+        sb.append("]}");
+
+        return sb.toString();
     }
 
     @Operation(
@@ -114,10 +159,36 @@ public class CurriculumController {
             topics = topicRepository.findAll();
         }
 
-        TopicListResponse dto = new TopicListResponse(
-                topics.stream().map(this::toTopicResponse).toList()
-        );
-        return toJson(dto);
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"topics\":[");
+        for (int i = 0; i < topics.size(); i++) {
+            Topic t = topics.get(i);
+            if (i > 0) sb.append(',');
+
+            sb.append('{')
+                    .append("\"id\":").append(t.getId()).append(',')
+                    .append("\"certId\":").append(t.getCertId()).append(',');
+
+            sb.append("\"parentId\":");
+            if (t.getParentId() == null) sb.append("null,");
+            else sb.append(t.getParentId()).append(',');
+
+            sb.append("\"code\":\"").append(escape(t.getCode())).append("\",")
+                    .append("\"title\":\"").append(escape(t.getTitle())).append("\",");
+
+            if (t.getEmoji() == null) {
+                sb.append("\"emoji\":null,");
+            } else {
+                sb.append("\"emoji\":\"").append(escape(t.getEmoji())).append("\",");
+            }
+
+            sb.append("\"examMode\":\"").append(t.getExamMode().name()).append("\",")
+                    .append("\"orderNo\":").append(t.getOrderNo())
+                    .append('}');
+        }
+        sb.append("]}");
+
+        return sb.toString();
     }
 
     /* ========================= Concept ========================= */
@@ -130,8 +201,17 @@ public class CurriculumController {
     public String getConcept(@PathVariable Long topicId) {
         Concept concept = conceptRepository.findByTopicId(topicId)
                 .orElseThrow(() -> new NoSuchElementException("Concept not found for topicId: " + topicId));
-        ConceptResponse dto = new ConceptResponse(concept.getTopicId(), concept.getSectionsJson());
-        return toJson(dto);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append('{')
+                .append("\"topicId\":").append(concept.getTopicId()).append(',')
+                // sectionsJson 자체가 JSON 문자열이므로, JSON String 으로 감싸주기
+                .append("\"sectionsJson\":\"")
+                .append(escape(concept.getSectionsJson()))
+                .append("\"")
+                .append('}');
+
+        return sb.toString();
     }
 
     /* ========================= INTERNAL API ========================= */
@@ -149,22 +229,7 @@ public class CurriculumController {
     )
     public String descendantTopicIds(@PathVariable Long rootTopicId) {
         List<Long> ids = topicTreeService.descendantsOf(rootTopicId);
-        // 예: {"ids":[10001,11001,...]}  – 값은 서비스에서, 껍데기만 하드코딩
+        // 예: {"ids":[10001,11001,...]}  ← 껍데기만 하드코딩, 값은 서비스에서 동적
         return "{\"ids\":" + ids.toString() + "}";
-    }
-
-    /* ========================= Mapper ========================= */
-
-    private TopicResponse toTopicResponse(Topic topic) {
-        return new TopicResponse(
-                topic.getId(),
-                topic.getCertId(),
-                topic.getParentId(),
-                topic.getCode(),
-                topic.getTitle(),
-                topic.getEmoji(),
-                topic.getExamMode().name(),
-                topic.getOrderNo()
-        );
     }
 }

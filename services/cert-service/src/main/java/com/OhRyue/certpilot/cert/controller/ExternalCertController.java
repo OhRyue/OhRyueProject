@@ -46,8 +46,8 @@ public class ExternalCertController {
     public String getQualifications(@RequestParam(required = false) String seriesCd) {
         List<ExternalCertDto.Qualification> list = certificationQueryService.findQualifications(seriesCd).stream()
                 .map(mapper::toDto)
-                .toList();          // 서비스에서 값 생성
-        return toJson(list);    // JSON 문자열
+                .toList();
+        return toJson(list);
     }
 
     @Operation(summary = "자격증 시험 일정 조회")
