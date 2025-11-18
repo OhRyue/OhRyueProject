@@ -145,7 +145,7 @@ public class WrittenService {
 
         boolean passedNow = correctCount == req.answers().size();
 
-        // 🔹 이전에 한 번이라도 통과했으면 계속 true 유지
+        // 이전에 한 번이라도 통과했으면 계속 true 유지
         Map<String, Object> prevMiniMeta = sessionManager.loadStepMeta(session, "mini");
         boolean everPassed = Boolean.TRUE.equals(prevMiniMeta.get("passed"));
 
@@ -285,7 +285,7 @@ public class WrittenService {
         mcqMeta.put("lastSubmittedAt", Instant.now().toString());
         sessionManager.saveStepMeta(session, "mcq", mcqMeta);
 
-        // 🔹 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
+        // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
         if (!everCompleted && allCorrect) {
             sessionManager.closeSession(session, scorePct, Map.of("finalScorePct", scorePct));
         } else if (!everCompleted) {
@@ -414,7 +414,7 @@ public class WrittenService {
 
         boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
 
-        // 🔹 이전 메타 불러와서 everCompleted 유지
+        // 이전 메타 불러와서 everCompleted 유지
         Map<String, Object> prevReviewMeta = sessionManager.loadStepMeta(session, "review");
         boolean everCompleted = Boolean.TRUE.equals(prevReviewMeta.get("completed"));
         boolean finalCompleted = everCompleted || allCorrect;
@@ -427,7 +427,7 @@ public class WrittenService {
         reviewMeta.put("lastSubmittedAt", Instant.now().toString());
         sessionManager.saveStepMeta(session, "review", reviewMeta);
 
-        // 🔹 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
+        // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
         if (!everCompleted && allCorrect) {
             double scorePct = req.answers().isEmpty() ? 0.0 : (correctCount * 100.0) / req.answers().size();
             // 스펙 v1.0: passed=true (모든 문제 정답)
@@ -437,7 +437,7 @@ public class WrittenService {
         }
         // everCompleted == true 인 경우는 상태 유지
 
-        // 🔹 Review 세트 완주 시 Flow XP hook (WRITTEN / REVIEW / rootTopicId)
+        // Review 세트 완주 시 Flow XP hook (WRITTEN / REVIEW / rootTopicId)
         // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
         if (finalCompleted && allCorrect && !Boolean.TRUE.equals(session.getXpGranted())) {
             try {
@@ -548,10 +548,9 @@ public class WrittenService {
             status = completed ? "COMPLETE" : "IN_PROGRESS";
         }
 
-        // 🔹 Micro 세트 완주 시 Flow XP hook (WRITTEN / MICRO / topicId)
+        // Micro 세트 완주 시 Flow XP hook (WRITTEN / MICRO / topicId)
         // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
-        if (completed && sessionId != null) {
-            StudySession session = sessionManager.getSession(sessionId);
+        if (completed && sessionId != null && session != null) {
             if (!Boolean.TRUE.equals(session.getXpGranted())) {
                 try {
                     progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(

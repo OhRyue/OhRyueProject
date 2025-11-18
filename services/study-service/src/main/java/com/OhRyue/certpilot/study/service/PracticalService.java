@@ -34,9 +34,9 @@ import java.util.stream.Stream;
 public class PracticalService {
 
     private static final int MINI_SIZE = 4;
-    // 실기 micro 세트는 총 5문제 (SHORT 4 + LONG 1) - 스펙 v1.0
+    // 실기 micro 세트는 총 5문제 (SHORT 3 + LONG 2) - 스펙 v1.0
     private static final int PRACTICAL_SIZE = 5;
-    // 실기 리뷰 세트는 총 10문제 (SHORT 8 + LONG 2) - 스펙 v1.0
+    // 실기 리뷰 세트는 총 10문제 (SHORT 6 + LONG 4) - 스펙 v1.0
     private static final int REVIEW_SIZE = 10;
 
     private final QuestionRepository questionRepository;
@@ -139,7 +139,7 @@ public class PracticalService {
 
         boolean passedNow = wrongIds.isEmpty() && !items.isEmpty();
 
-        // 🔹 이전에 한 번이라도 통과했다면 계속 true 유지
+        // 이전에 한 번이라도 통과했다면 계속 true 유지
         Map<String, Object> prevMiniMeta = sessionManager.loadStepMeta(session, "mini");
         boolean everPassed = Boolean.TRUE.equals(prevMiniMeta.get("passed"));
 
@@ -186,11 +186,11 @@ public class PracticalService {
 
     @Transactional
     public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalSet(String userId, Long topicId) {
-        // SHORT 4 + LONG 1 = 총 5문제 (스펙 v1.0)
+        // SHORT 3 + LONG 2 = 총 5문제 (스펙 v1.0)
         List<Question> shortQuestions = questionRepository.pickRandomByTopic(
-                topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 4));
+                topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 3));
         List<Question> longQuestions = questionRepository.pickRandomByTopic(
-                topicId, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 1));
+                topicId, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 2));
 
         List<Question> combined = Stream.concat(shortQuestions.stream(), longQuestions.stream())
                 .distinct()
@@ -288,7 +288,7 @@ public class PracticalService {
         double avgScore = total == 0 ? 0.0 : totalScore * 1.0 / total;
         boolean allPassedNow = total > 0 && wrongIds.isEmpty();
 
-        // 🔹 이전 메타 불러와서 everCompleted 유지
+        // 이전 메타 불러와서 everCompleted 유지
         Map<String, Object> prevPracticalMeta = sessionManager.loadStepMeta(session, "practical");
         boolean everCompleted = Boolean.TRUE.equals(prevPracticalMeta.get("completed"));
         boolean finalCompleted = everCompleted || allPassedNow;
@@ -301,7 +301,7 @@ public class PracticalService {
         practicalMeta.put("lastSubmittedAt", Instant.now().toString());
         sessionManager.saveStepMeta(session, "practical", practicalMeta);
 
-        // 🔹 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
+        // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
         // 스펙 v1.0: 실기는 60점 이상이면 passed
         if (!everCompleted && allPassedNow) {
             sessionManager.closeSession(session, avgScore, true, Map.of("avgScore", avgScore));
@@ -334,11 +334,11 @@ public class PracticalService {
         Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
         if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
 
-        // SHORT 8 + LONG 2 = 총 10문제 (스펙 v1.0)
+        // SHORT 6 + LONG 4 = 총 10문제 (스펙 v1.0)
         List<Question> shortQuestions = questionRepository.pickRandomByTopicIn(
-                topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 8));
+                topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 6));
         List<Question> longQuestions = questionRepository.pickRandomByTopicIn(
-                topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 2));
+                topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 4));
 
         List<Question> questions = Stream.concat(shortQuestions.stream(), longQuestions.stream())
                 .distinct()
@@ -445,7 +445,7 @@ public class PracticalService {
         double avgScore = total == 0 ? 0.0 : totalScore * 1.0 / total;
         boolean allPassedNow = total > 0 && wrongIds.isEmpty();
 
-        // 🔹 이전 메타 불러와서 everCompleted 유지
+        // 이전 메타 불러와서 everCompleted 유지
         Map<String, Object> prevReviewMeta = sessionManager.loadStepMeta(session, "review");
         boolean everCompleted = Boolean.TRUE.equals(prevReviewMeta.get("completed"));
         boolean finalCompleted = everCompleted || allPassedNow;
@@ -458,7 +458,7 @@ public class PracticalService {
         reviewMeta.put("lastSubmittedAt", Instant.now().toString());
         sessionManager.saveStepMeta(session, "review", reviewMeta);
 
-        // 🔹 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
+        // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
         // 스펙 v1.0: 실기는 60점 이상이면 passed
         if (!everCompleted && allPassedNow) {
             sessionManager.closeSession(session, avgScore, true, Map.of("avgScore", avgScore));
@@ -467,7 +467,7 @@ public class PracticalService {
         }
         // everCompleted == true 인 경우는 상태 유지
 
-        // 🔹 Review 세트 완주 시 Flow XP hook (PRACTICAL / REVIEW / rootTopicId)
+        // Review 세트 완주 시 Flow XP hook (PRACTICAL / REVIEW / rootTopicId)
         // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
         if (finalCompleted && allPassedNow && !Boolean.TRUE.equals(session.getXpGranted())) {
             try {
@@ -587,11 +587,11 @@ public class PracticalService {
             status = completed ? "COMPLETE" : "IN_PROGRESS";
         }
 
-        // 🔹 Practical Micro 세트 완주 시 Flow XP hook (PRACTICAL / MICRO / topicId)
+        // Practical Micro 세트 완주 시 Flow XP hook (PRACTICAL / MICRO / topicId)
         // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
         if (completed && sessionId != null) {
-            StudySession session = sessionManager.getSession(sessionId);
-            if (!Boolean.TRUE.equals(session.getXpGranted())) {
+            StudySession latestSession = sessionManager.getSession(sessionId);
+            if (!Boolean.TRUE.equals(latestSession.getXpGranted())) {
                 try {
                     progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
                             userId,
@@ -600,10 +600,10 @@ public class PracticalService {
                             topicId
                     ));
                     // XP 지급 성공 시 xpGranted 표시 및 세션 완료 처리
-                    sessionManager.markXpGranted(session);
-                    if (!Boolean.TRUE.equals(session.getCompleted())) {
-                        double avgScore = totalSolved == 0 ? 0.0 : totalScore * 1.0 / totalSolved;
-                        sessionManager.closeSession(session, avgScore, completed, Map.of());
+                    sessionManager.markXpGranted(latestSession);
+                    if (!Boolean.TRUE.equals(latestSession.getCompleted())) {
+                        double finalAvgScore = avgScore;
+                        sessionManager.closeSession(latestSession, finalAvgScore, completed, Map.of());
                     }
                 } catch (Exception ignored) {
                     // XP hook 실패는 학습 흐름을 막지 않음
