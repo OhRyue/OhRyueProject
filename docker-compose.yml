@@ -122,6 +122,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SECURITY_JWT_HMAC_SECRET=${STUDY_JWT_SECRET}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - LLM_API_KEY=${LLM_API_KEY:-}
     depends_on:
       mysql:
         condition: service_healthy
@@ -145,6 +147,7 @@ services:
       - "8083:8083"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - GATEWAY_BASE_URL=${GATEWAY_BASE_URL:-http://gateway:8080}
     depends_on:
       mysql:
         condition: service_healthy

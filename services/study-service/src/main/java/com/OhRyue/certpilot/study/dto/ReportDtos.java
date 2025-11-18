@@ -39,4 +39,27 @@ public class ReportDtos {
   public record RecentResultsResp(
       @Schema(description = "일자별 결과(최신순)") List<RecentDailyItem> items
   ) {}
+
+  // 스펙 v1.0: 최근 학습 결과 (세션 기반)
+  @Schema(name = "RecentRecord", description = "최근 학습 결과(최신순 카드 항목)")
+  public record RecentRecord(
+      @Schema(description = "날짜(로컬, KST)", example = "2025-10-22")
+      LocalDate date,
+      @Schema(description = "문제 유형(Micro/Review/Assist 등)", example = "Micro")
+      String type,
+      @Schema(description = "파트/토픽 이름", example = "DB기초")
+      String partTitle,
+      @Schema(description = "전체 문항 수", example = "20")
+      int total,
+      @Schema(description = "정답 수", example = "10")
+      int correct,
+      @Schema(description = "정답률(%)", example = "50.0")
+      double accuracy
+  ) {}
+
+  @Schema(name = "RecentRecordsResp", description = "최근 학습 결과 응답(최신순)")
+  public record RecentRecordsResp(
+      @Schema(description = "최근 학습 결과 목록(최신순)")
+      List<RecentRecord> records
+  ) {}
 }

@@ -57,10 +57,22 @@ public class StudySession {
   @Column(name = "status", nullable = false, length = 16)
   private String status; // OPEN, SUBMITTED, CLOSED
 
+  @Column(name = "completed")
+  private Boolean completed; // 모든 문제를 풀었는지
+
+  @Column(name = "passed")
+  private Boolean passed; // 모든 문제를 맞췄는지
+
+  @Column(name = "xp_granted")
+  private Boolean xpGranted; // XP가 이미 반영되었는지
+
   @PrePersist
   void onCreate() {
     if (startedAt == null) startedAt = Instant.now();
     if (status == null) status = "OPEN";
+    if (completed == null) completed = false;
+    if (passed == null) passed = false;
+    if (xpGranted == null) xpGranted = false;
   }
 }
 

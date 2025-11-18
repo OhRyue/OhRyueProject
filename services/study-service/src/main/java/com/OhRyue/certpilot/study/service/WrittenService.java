@@ -430,14 +430,16 @@ public class WrittenService {
         // 🔹 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
         if (!everCompleted && allCorrect) {
             double scorePct = req.answers().isEmpty() ? 0.0 : (correctCount * 100.0) / req.answers().size();
-            sessionManager.closeSession(session, scorePct, Map.of("reviewScorePct", scorePct));
+            // 스펙 v1.0: passed=true (모든 문제 정답)
+            sessionManager.closeSession(session, scorePct, true, Map.of("reviewScorePct", scorePct));
         } else if (!everCompleted) {
             sessionManager.updateStatus(session, "OPEN");
         }
         // everCompleted == true 인 경우는 상태 유지
 
         // 🔹 Review 세트 완주 시 Flow XP hook (WRITTEN / REVIEW / rootTopicId)
-        if (finalCompleted) {
+        // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
+        if (finalCompleted && allCorrect && !Boolean.TRUE.equals(session.getXpGranted())) {
             try {
                 progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
                         req.userId(),
@@ -445,6 +447,8 @@ public class WrittenService {
                         "REVIEW",
                         rootTopicId
                 ));
+                // XP 지급 성공 시 xpGranted 표시
+                sessionManager.markXpGranted(session);
             } catch (Exception ignored) {
                 // XP hook 실패는 학습 흐름을 막지 않음
             }
@@ -545,16 +549,26 @@ public class WrittenService {
         }
 
         // 🔹 Micro 세트 완주 시 Flow XP hook (WRITTEN / MICRO / topicId)
+        // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
         if (completed && sessionId != null) {
-            try {
-                progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-                        userId,
-                        ExamMode.WRITTEN.name(),
-                        "MICRO",
-                        topicId
-                ));
-            } catch (Exception ignored) {
-                // XP hook 실패는 학습 흐름을 막지 않음
+            StudySession session = sessionManager.getSession(sessionId);
+            if (!Boolean.TRUE.equals(session.getXpGranted())) {
+                try {
+                    progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+                            userId,
+                            ExamMode.WRITTEN.name(),
+                            "MICRO",
+                            topicId
+                    ));
+                    // XP 지급 성공 시 xpGranted 표시 및 세션 완료 처리
+                    sessionManager.markXpGranted(session);
+                    if (!Boolean.TRUE.equals(session.getCompleted())) {
+                        double scorePct = totalSolved == 0 ? 0.0 : (totalCorrect * 100.0) / totalSolved;
+                        sessionManager.closeSession(session, scorePct, completed, Map.of());
+                    }
+                } catch (Exception ignored) {
+                    // XP hook 실패는 학습 흐름을 막지 않음
+                }
             }
         }
 

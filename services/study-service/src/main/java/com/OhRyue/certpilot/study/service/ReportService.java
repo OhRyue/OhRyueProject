@@ -1,14 +1,23 @@
 package com.OhRyue.certpilot.study.service;
 
 import com.OhRyue.certpilot.study.client.CertCurriculumClient;
+import com.OhRyue.certpilot.study.client.CurriculumGateway;
+import com.OhRyue.certpilot.study.domain.StudySession;
+import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.domain.UserAnswer;
 import com.OhRyue.certpilot.study.domain.UserProgress;
 import com.OhRyue.certpilot.study.dto.ReportDtos.ReportSummaryResp;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentDailyItem;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentResultsResp;
+import com.OhRyue.certpilot.study.dto.ReportDtos.RecentRecord;
+import com.OhRyue.certpilot.study.dto.ReportDtos.RecentRecordsResp;
 import com.OhRyue.certpilot.study.dto.ReportDtos.ProgressCardResp;
+import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
+import com.OhRyue.certpilot.study.repository.StudySessionRepository;
 import com.OhRyue.certpilot.study.repository.UserAnswerRepository;
 import com.OhRyue.certpilot.study.repository.UserProgressRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +36,11 @@ public class ReportService {
     private final UserAnswerRepository userAnswerRepository;
     private final UserProgressRepository userProgressRepository;
     private final CertCurriculumClient certCurriculumClient;  // cert-service 커리큘럼 조회용 Feign
+    // 스펙 v1.0: 최근 학습 결과를 위한 의존성
+    private final StudySessionRepository studySessionRepository;
+    private final StudySessionItemRepository studySessionItemRepository;
+    private final CurriculumGateway curriculumGateway;
+    private final ObjectMapper objectMapper;
 
     /* ======================= 요약 카드 ======================= */
 
@@ -159,6 +173,84 @@ public class ReportService {
                 completionRate,
                 lastStudiedAt
         );
+    }
+
+    /* ======================= 최근 학습 결과 (세션 기반) - 스펙 v1.0 ======================= */
+
+    public RecentRecordsResp recentRecords(String userId, int limit) {
+        if (limit <= 0) limit = 30;
+        
+        // 최근 완료된 세션 조회 (SUBMITTED 또는 CLOSED 상태)
+        List<StudySession> sessions = studySessionRepository.findByUserIdOrderByStartedAtDesc(userId)
+                .stream()
+                .filter(s -> s.getFinishedAt() != null && Boolean.TRUE.equals(s.getCompleted()))
+                .limit(limit * 2) // 여유있게 가져와서 필터링
+                .toList();
+
+        List<RecentRecord> records = new ArrayList<>();
+        for (StudySession session : sessions) {
+            if (records.size() >= limit) break;
+            
+            // 세션 아이템에서 정답/전체 개수 계산
+            List<StudySessionItem> items = studySessionItemRepository.findBySessionIdOrderByOrderNoAsc(session.getId());
+            int total = items.size();
+            int correct = (int) items.stream()
+                    .filter(item -> Boolean.TRUE.equals(item.getCorrect()))
+                    .count();
+            double accuracy = total == 0 ? 0.0 : (correct * 100.0) / total;
+            
+            // 세션 타입 변환 (MICRO -> Micro, REVIEW -> Review, ASSIST_* -> Assist)
+            String type = mapSessionTypeToDisplay(session.getMode());
+            
+            // 토픽 제목 조회
+            String partTitle = resolvePartTitle(session);
+            
+            // 날짜 (KST 기준)
+            LocalDate date = session.getFinishedAt() != null
+                    ? session.getFinishedAt().atZone(ZONE).toLocalDate()
+                    : session.getStartedAt().atZone(ZONE).toLocalDate();
+            
+            records.add(new RecentRecord(date, type, partTitle, total, correct, round2(accuracy)));
+        }
+        
+        // 날짜 최신순 정렬 (이미 startedAtDesc로 가져왔지만 한번 더)
+        records.sort(Comparator.comparing(RecentRecord::date).reversed()
+                .thenComparing(RecentRecord::type));
+        
+        return new RecentRecordsResp(records.stream().limit(limit).toList());
+    }
+
+    private String mapSessionTypeToDisplay(String mode) {
+        if (mode == null) return "Unknown";
+        return switch (mode.toUpperCase()) {
+            case "MICRO" -> "Micro";
+            case "REVIEW" -> "Review";
+            case "ASSIST_CATEGORY", "ASSIST_DIFFICULTY", "ASSIST_WEAK" -> "Assist";
+            default -> mode;
+        };
+    }
+
+    private String resolvePartTitle(StudySession session) {
+        try {
+            // topicScopeJson에서 topicId 또는 rootTopicId 추출
+            if (session.getTopicScopeJson() != null && !session.getTopicScopeJson().isBlank()) {
+                TypeReference<Map<String, Object>> typeRef = new TypeReference<>() {};
+                Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), typeRef);
+                Long topicId = scope.containsKey("topicId") 
+                        ? ((Number) scope.get("topicId")).longValue()
+                        : (scope.containsKey("rootTopicId") 
+                                ? ((Number) scope.get("rootTopicId")).longValue() 
+                                : null);
+                
+                if (topicId != null) {
+                    CurriculumGateway.CurriculumConcept concept = curriculumGateway.getConceptWithTopic(topicId);
+                    return concept != null ? concept.topicTitle() : "알 수 없음";
+                }
+            }
+        } catch (Exception e) {
+            // 조회 실패 시 기본값
+        }
+        return "알 수 없음";
     }
 
     /* ======================= 내부 유틸 ======================= */

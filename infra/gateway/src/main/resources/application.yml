@@ -42,8 +42,6 @@ spring:
           predicates:
             - Path=/api/study/**
           filters:
-            - AddRequestHeader=X-Forwarded-Prefix, /api/study
-            - RewritePath=/api/study/(?<segment>.*), /${segment}
 
         - id: study-swagger-ui
           uri: lb://study-service

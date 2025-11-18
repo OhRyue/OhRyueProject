@@ -117,6 +117,12 @@ public class StudySessionManager {
 
     /* ===================== 세션 종료/요약/상태 변경 (쓰기) ===================== */
 
+    /**
+     * 세션 종료 (스펙 v1.0)
+     * - completed: 모든 문제를 풀었는지 (항상 true)
+     * - passed: 모든 문제를 맞췄는지 (scorePct >= 100.0 또는 allCorrect)
+     * - xpGranted: XP가 이미 반영되었는지 (초기값 false, XP 지급 시 true로 변경)
+     */
     @Transactional
     public void closeSession(StudySession session, double scorePct, Map<String, Object> summary) {
         Map<String, Object> current = loadMeta(session);
@@ -125,7 +131,38 @@ public class StudySessionManager {
         session.setSummaryJson(stringify(current));
         session.setFinishedAt(Instant.now());
         session.setStatus("SUBMITTED");
+        // 스펙 v1.0: completed, passed, xpGranted 설정
+        session.setCompleted(true); // 모든 문제를 풀었으므로 true
+        session.setPassed(scorePct >= 100.0); // 100% 정답이면 passed
+        // xpGranted는 XP 지급 시점에 별도로 설정 (기본값 false 유지)
         sessionRepository.save(session);
+    }
+
+    /**
+     * 세션 종료 (passed 여부 명시적 지정)
+     */
+    @Transactional
+    public void closeSession(StudySession session, double scorePct, boolean passed, Map<String, Object> summary) {
+        Map<String, Object> current = loadMeta(session);
+        current.putAll(summary);
+        session.setScorePct(scorePct);
+        session.setSummaryJson(stringify(current));
+        session.setFinishedAt(Instant.now());
+        session.setStatus("SUBMITTED");
+        session.setCompleted(true);
+        session.setPassed(passed);
+        sessionRepository.save(session);
+    }
+
+    /**
+     * XP 지급 완료 표시 (idempotent)
+     */
+    @Transactional
+    public void markXpGranted(StudySession session) {
+        if (!Boolean.TRUE.equals(session.getXpGranted())) {
+            session.setXpGranted(true);
+            sessionRepository.save(session);
+        }
     }
 
     public List<StudySessionItem> items(Long sessionId) {

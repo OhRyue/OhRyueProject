@@ -34,9 +34,9 @@ import java.util.stream.Stream;
 public class PracticalService {
 
     private static final int MINI_SIZE = 4;
-    // 실기 micro 세트는 총 5문제 (SHORT 3 + LONG 2)
+    // 실기 micro 세트는 총 5문제 (SHORT 4 + LONG 1) - 스펙 v1.0
     private static final int PRACTICAL_SIZE = 5;
-    // 실기 리뷰 세트는 총 10문제 (SHORT 6 + LONG 4)
+    // 실기 리뷰 세트는 총 10문제 (SHORT 8 + LONG 2) - 스펙 v1.0
     private static final int REVIEW_SIZE = 10;
 
     private final QuestionRepository questionRepository;
@@ -186,11 +186,11 @@ public class PracticalService {
 
     @Transactional
     public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalSet(String userId, Long topicId) {
-        // SHORT 3 + LONG 2 = 총 5문제
+        // SHORT 4 + LONG 1 = 총 5문제 (스펙 v1.0)
         List<Question> shortQuestions = questionRepository.pickRandomByTopic(
-                topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 3));
+                topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 4));
         List<Question> longQuestions = questionRepository.pickRandomByTopic(
-                topicId, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 2));
+                topicId, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 1));
 
         List<Question> combined = Stream.concat(shortQuestions.stream(), longQuestions.stream())
                 .distinct()
@@ -302,8 +302,9 @@ public class PracticalService {
         sessionManager.saveStepMeta(session, "practical", practicalMeta);
 
         // 🔹 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
+        // 스펙 v1.0: 실기는 60점 이상이면 passed
         if (!everCompleted && allPassedNow) {
-            sessionManager.closeSession(session, avgScore, Map.of("avgScore", avgScore));
+            sessionManager.closeSession(session, avgScore, true, Map.of("avgScore", avgScore));
         } else if (!everCompleted) {
             sessionManager.updateStatus(session, "OPEN");
         }
@@ -333,11 +334,11 @@ public class PracticalService {
         Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
         if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
 
-        // SHORT 6 + LONG 4 = 총 10문제
+        // SHORT 8 + LONG 2 = 총 10문제 (스펙 v1.0)
         List<Question> shortQuestions = questionRepository.pickRandomByTopicIn(
-                topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 6));
+                topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 8));
         List<Question> longQuestions = questionRepository.pickRandomByTopicIn(
-                topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 4));
+                topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 2));
 
         List<Question> questions = Stream.concat(shortQuestions.stream(), longQuestions.stream())
                 .distinct()
@@ -458,15 +459,17 @@ public class PracticalService {
         sessionManager.saveStepMeta(session, "review", reviewMeta);
 
         // 🔹 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
+        // 스펙 v1.0: 실기는 60점 이상이면 passed
         if (!everCompleted && allPassedNow) {
-            sessionManager.closeSession(session, avgScore, Map.of("avgScore", avgScore));
+            sessionManager.closeSession(session, avgScore, true, Map.of("avgScore", avgScore));
         } else if (!everCompleted) {
             sessionManager.updateStatus(session, "OPEN");
         }
         // everCompleted == true 인 경우는 상태 유지
 
         // 🔹 Review 세트 완주 시 Flow XP hook (PRACTICAL / REVIEW / rootTopicId)
-        if (finalCompleted) {
+        // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
+        if (finalCompleted && allPassedNow && !Boolean.TRUE.equals(session.getXpGranted())) {
             try {
                 progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
                         req.userId(),
@@ -474,6 +477,8 @@ public class PracticalService {
                         "REVIEW",
                         req.rootTopicId()
                 ));
+                // XP 지급 성공 시 xpGranted 표시
+                sessionManager.markXpGranted(session);
             } catch (Exception ignored) {
                 // XP hook 실패는 학습 흐름을 막지 않음
             }
@@ -583,16 +588,26 @@ public class PracticalService {
         }
 
         // 🔹 Practical Micro 세트 완주 시 Flow XP hook (PRACTICAL / MICRO / topicId)
+        // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
         if (completed && sessionId != null) {
-            try {
-                progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-                        userId,
-                        ExamMode.PRACTICAL.name(),
-                        "MICRO",
-                        topicId
-                ));
-            } catch (Exception ignored) {
-                // XP hook 실패는 학습 흐름을 막지 않음
+            StudySession session = sessionManager.getSession(sessionId);
+            if (!Boolean.TRUE.equals(session.getXpGranted())) {
+                try {
+                    progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+                            userId,
+                            ExamMode.PRACTICAL.name(),
+                            "MICRO",
+                            topicId
+                    ));
+                    // XP 지급 성공 시 xpGranted 표시 및 세션 완료 처리
+                    sessionManager.markXpGranted(session);
+                    if (!Boolean.TRUE.equals(session.getCompleted())) {
+                        double avgScore = totalSolved == 0 ? 0.0 : totalScore * 1.0 / totalSolved;
+                        sessionManager.closeSession(session, avgScore, completed, Map.of());
+                    }
+                } catch (Exception ignored) {
+                    // XP hook 실패는 학습 흐름을 막지 않음
+                }
             }
         }
 

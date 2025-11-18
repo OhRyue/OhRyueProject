@@ -204,17 +204,38 @@ public class AIExplanationService {
         "핵심 키워드를 정리하고 재서술 훈련을 반복해보세요.";
   }
 
+  /**
+   * AI 장애 시 실기 문제 Fallback 채점
+   * 스펙 v1.0: 실기 서술형은 solution_text의 답안을 단어로 잘라 사용자의 답안과 비교
+   * - 키워드 3개 이상 겹침: 100점
+   * - 키워드 1~2개 겹침: 60점
+   * - 키워드 0개 겹침: 0점
+   */
   private static int heuristicScore(Question question, String userText) {
     String reference = Optional.ofNullable(question.getSolutionText()).orElse("").toLowerCase(Locale.ROOT);
     String answer = Optional.ofNullable(userText).orElse("").toLowerCase(Locale.ROOT);
     if (reference.isBlank() || answer.isBlank()) return 0;
-    String[] tokens = Arrays.stream(reference.split("[^a-zA-Z0-9가-힣]+"))
+
+    // solution_text를 단어로 분리 (한글, 영문, 숫자만, 최소 2자 이상)
+    Set<String> referenceKeywords = Arrays.stream(reference.split("[^a-zA-Z0-9가-힣]+"))
         .filter(s -> s.length() >= 2)
-        .limit(6)
-        .toArray(String[]::new);
-    if (tokens.length == 0) return 0;
-    long matches = Arrays.stream(tokens).filter(answer::contains).count();
-    return clamp((int) Math.round(matches * 100.0 / tokens.length));
+        .collect(Collectors.toSet());
+
+    if (referenceKeywords.isEmpty()) return 0;
+
+    // 사용자 답안에서 매칭되는 키워드 개수 계산
+    long matchCount = referenceKeywords.stream()
+        .filter(answer::contains)
+        .count();
+
+    // 스펙 v1.0: 키워드 매칭 개수에 따른 점수 부여
+    if (matchCount >= 3) {
+      return 100;
+    } else if (matchCount >= 1) {
+      return 60;
+    } else {
+      return 0;
+    }
   }
 
   private static int clamp(int value) {

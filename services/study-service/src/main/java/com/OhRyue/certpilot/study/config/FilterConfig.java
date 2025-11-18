@@ -1,4 +1,3 @@
-// src/main/java/com/OhRyue/certpilot/study/config/FilterConfig.java
 package com.OhRyue.certpilot.study.config;
 
 import com.OhRyue.certpilot.study.security.RateLimitFilter;
