@@ -1,7 +1,6 @@
-package com.OhRyue.certpilot.cert.config;
+package com.OhRyue.certpilot.versus.config;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.annotation.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,26 +19,26 @@ import java.nio.charset.StandardCharsets;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity // @PreAuthorize 등 사용 대비
+@EnableMethodSecurity
 public class SecurityConfig {
 
-    // Swagger & Actuator 경로 화이트리스트
-    private static final String[] SWAGGER_WHITELIST = {
-            "/swagger-ui.html",
+    private static final String[] SWAGGER = {
             "/swagger-ui/**",
+            "/swagger-ui.html",
             "/v3/api-docs/**"
     };
 
-    private static final String[] ACTUATOR_WHITELIST = {
+    private static final String[] ACTUATOR = {
             "/actuator/health",
             "/actuator/info"
     };
 
     /**
-     * account-service / study-service와 동일한 키를 사용하기 위해
-     * jwt.secret-key 설정을 그대로 사용합니다.
+     * account-service / study-service / cert / community / progress 와
+     * 동일한 jwt.secret-key 를 사용합니다.
      *
-     * 예) application.yml
+     * application.yml 예시:
+     *
      * jwt:
      *   secret-key: ${JWT_SECRET_KEY:your-super-secure-secret-key123456}
      */
@@ -48,47 +47,36 @@ public class SecurityConfig {
 
     @PostConstruct
     void logSecretLength() {
-        // 디버깅용(원치 않으면 제거 가능)
         if (jwtSecret != null && !jwtSecret.isBlank()) {
             int len = jwtSecret.getBytes(StandardCharsets.UTF_8).length;
-            System.out.println("[cert-service] jwt.secret-key length = " + len + " bytes");
+            System.out.println("[versus-service] jwt.secret-key length = " + len + " bytes");
         } else {
-            System.out.println("[cert-service] WARNING: jwt.secret-key is blank");
+            System.out.println("[versus-service] WARNING: jwt.secret-key is blank");
         }
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http
-                // CSRF 비활성화 (API 서버, JWT 기반)
+                // JWT 기반이므로 CSRF 비활성화
                 .csrf(csrf -> csrf.disable())
-
-                // 세션은 사용하지 않음 (Stateless)
+                // 세션 미사용 (STATELESS)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-
-                // 요청별 인가 규칙
+                // 인가 정책
                 .authorizeHttpRequests(auth -> auth
-                        // Swagger 문서
-                        .requestMatchers(SWAGGER_WHITELIST).permitAll()
-                        // 기본 health/info
-                        .requestMatchers(ACTUATOR_WHITELIST).permitAll()
-                        // 나머지 actuator도 개발 단계에서는 열어둠 (필요 시 tighten)
+                        .requestMatchers(SWAGGER).permitAll()
+                        .requestMatchers(ACTUATOR).permitAll()
                         .requestMatchers("/actuator/**").permitAll()
-                        // 실제 Cert API는 JWT 필요
+                        // 대전/토너먼트/골든벨 API 는 전부 로그인 사용자 기준이므로 인증 필수
                         .requestMatchers("/api/**").authenticated()
-                        // 그 외 요청은 일단 허용
                         .anyRequest().permitAll()
                 )
-
-                // Resource Server: JWT 기반 인증 사용
-                .oauth2ResourceServer(oauth2 ->
-                        oauth2.jwt(Customizer.withDefaults())
-                )
-
-                // 기본 로그인 폼 / HTTP Basic 인증 비활성화
+                // Resource Server - JWT 사용
+                .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
+                // 폼 로그인 / HTTP Basic 비활성
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .formLogin(form -> form.disable());
 
@@ -98,7 +86,7 @@ public class SecurityConfig {
     @Bean
     public JwtDecoder jwtDecoder() {
         if (jwtSecret == null || jwtSecret.isBlank()) {
-            throw new IllegalStateException("cert-service: jwt.secret-key must be configured.");
+            throw new IllegalStateException("versus-service: jwt.secret-key must be configured.");
         }
         SecretKey key = new SecretKeySpec(jwtSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(key).build();
