@@ -8,17 +8,20 @@ import org.springframework.context.annotation.Configuration;
 public class QnetProperties {
 
     /**
-     * Raw service key. It will be URL-encoded per request.
+     * - 코드에서는 별도의 URLEncoder 처리 없이 그대로 serviceKey 파라미터로 사용합니다.
+     *   (Feign 이 쿼리스트링을 알아서 인코딩해 주기 때문에, 여기서 다시 인코딩하면 이중 인코딩 문제가 발생합니다.)
      */
     private String key;
 
     /**
-     * Base URL for primary Q-Net APIs.
+     * Q-Net OpenAPI 기본 URL
+     * 예) https://openapi.q-net.or.kr/api/service/rest
      */
     private String baseUrl;
 
     /**
-     * Base URL for data.go.kr Q-Net APIs.
+     * data.go.kr (B490007) Q-Net 연계 OpenAPI 기본 URL
+     * 예) https://apis.data.go.kr/B490007
      */
     private String dataUrl;
 

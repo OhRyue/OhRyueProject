@@ -4,17 +4,32 @@ server:
 spring:
   application:
     name: cert-service
+
   datasource:
     url: jdbc:mysql://mysql:3306/certpilot_cert?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
     username: cert
     password: certpw
+
   jpa:
     hibernate:
       ddl-auto: none
     open-in-view: false
+
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+  # OpenFeign 기본 설정 (Q-Net / data.go.kr 호출 타임아웃)
+  cloud:
+    openfeign:
+      client:
+        config:
+          qnetClient:
+            connectTimeout: 3000      # ms
+            readTimeout: 5000         # ms
+          datagoClient:
+            connectTimeout: 3000      # ms
+            readTimeout: 5000         # ms
 
 eureka:
   client:
@@ -49,3 +64,46 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
+
+# Q-Net / data.go.kr 공공데이터 연동 설정
+cert:
+  qnet:
+    # 공공데이터 포털 "디코딩(복호화) 서비스키"
+    key: ${QNET_SERVICE_KEY:}
+    # Q-Net(OpenAPI) 기본 URL (자격/종목 정보)
+    base-url: https://openapi.q-net.or.kr/api/service/rest
+    # data.go.kr B490007 기반 URL (시험 일정, 공개 문제)
+    data-url: https://apis.data.go.kr/B490007
+    # 타임아웃(ms) – 필요하면 QnetProperties에서 사용
+    timeout: 5000
+
+# Resilience4j 설정 – Q-Net / data.go.kr 호출 안정성 확보
+resilience4j:
+  circuitbreaker:
+    instances:
+      qnetClient:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+      datagoClient:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+  retry:
+    instances:
+      qnetClient:
+        maxAttempts: 3
+        waitDuration: 500ms
+      datagoClient:
+        maxAttempts: 3
+        waitDuration: 500ms
+
+# Q-Net 연동 디버깅용 로깅 레벨
+logging:
+  level:
+    com.OhRyue.certpilot.cert.client: DEBUG
+    com.OhRyue.certpilot.cert.service.QnetSyncService: DEBUG
