@@ -1,0 +1,44 @@
+name: Deploy to KT Cloud
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 현재 커밋 체크아웃 - 로그 확인용
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # KT Cloud 서버에 SSH 접속해서 배포 스크립트 실행
+      - name: SSH to KT Cloud and deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.KT_HOST }}
+          username: ${{ secrets.KT_USER }}
+          key: ${{ secrets.KT_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+
+            echo "==[Step 1] Move to project directory=="
+            cd /opt/certpilot/OhRyueProject
+
+            echo "==[Step 2] Git fetch & reset to origin/main=="
+            git fetch --all
+            git reset --hard origin/main
+
+            echo "==[Step 3] Docker compose build=="
+            docker compose build --progress=plain
+
+            echo "==[Step 4] Docker compose up=="
+            docker compose up -d --remove-orphans
+
+            echo "==[Step 5] Clean old images=="
+            docker image prune -f
+
+            echo "==[Done] Deploy finished=="
