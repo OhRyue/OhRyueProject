@@ -23,17 +23,18 @@ spring:
             redis-rate-limiter.requestedTokens: 6
             key-resolver: "#{@userKeyResolver}"
 
+      # ✅ camelCase로 변경
       globalcors:
         add-to-simple-url-handler-mapping: true
-        cors-configurations:
+        corsConfigurations:
           "[/**]":
-            allowed-origins:
+            allowedOrigins:
               - ${FRONTEND_ORIGIN:http://localhost:3000}
               - https://mycertpilot.com
               - https://www.mycertpilot.com
-            allowed-methods: "*"
-            allowed-headers: "*"
-            allow-credentials: true
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
 
       routes:
         # --- study ---
@@ -41,7 +42,7 @@ spring:
           uri: lb://study-service
           predicates:
             - Path=/api/study/**
-          filters:
+          filters: []
 
         - id: study-swagger-ui
           uri: lb://study-service
@@ -64,7 +65,7 @@ spring:
           uri: lb://account-service
           predicates:
             - Path=/api/account/**
-          filters:
+          filters: []
 
         - id: account-swagger-ui
           uri: lb://account-service
@@ -87,7 +88,7 @@ spring:
           uri: lb://progress-service
           predicates:
             - Path=/api/progress/**
-          filters:
+          filters: []
 
         - id: progress-swagger-ui
           uri: lb://progress-service
@@ -110,7 +111,7 @@ spring:
           uri: lb://cert-service
           predicates:
             - Path=/api/cert/**
-          filters:
+          filters: []
 
         - id: cert-swagger-ui
           uri: lb://cert-service
@@ -133,7 +134,7 @@ spring:
           uri: lb://versus-service
           predicates:
             - Path=/api/versus/**
-          filters:
+          filters: []
 
         - id: versus-swagger-ui
           uri: lb://versus-service
@@ -156,7 +157,7 @@ spring:
           uri: lb://community-service
           predicates:
             - Path=/api/community/**
-          filters:
+          filters: []
 
         - id: community-swagger-ui
           uri: lb://community-service

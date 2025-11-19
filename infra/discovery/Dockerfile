@@ -1,11 +1,13 @@
 # ---------- Builder ----------
-FROM eclipse-temurin:17-jdk AS builder
+FROM gradle:8.10.2-jdk17 AS builder
+
+ENV GRADLE_USER_HOME=/home/gradle/.gradle
+
 WORKDIR /workspace
 
-COPY . ./
-RUN chmod +x ./gradlew || true
+COPY . .
 
-RUN ./gradlew :infra:discovery:bootJar --no-daemon -x test
+RUN gradle :infra:discovery:bootJar --no-daemon -x test
 
 # ---------- Runner ----------
 FROM eclipse-temurin:17-jre

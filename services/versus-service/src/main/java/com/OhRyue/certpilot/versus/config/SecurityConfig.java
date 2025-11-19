@@ -30,7 +30,8 @@ public class SecurityConfig {
 
     private static final String[] ACTUATOR = {
             "/actuator/health",
-            "/actuator/info"
+            "/actuator/info",
+            "/actuator/prometheus"
     };
 
     /**

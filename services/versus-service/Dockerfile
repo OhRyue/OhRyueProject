@@ -1,11 +1,13 @@
 # ---------- Builder Stage ----------
-FROM eclipse-temurin:17-jdk AS builder
+FROM gradle:8.10.2-jdk17 AS builder
+
+ENV GRADLE_USER_HOME=/home/gradle/.gradle
+
 WORKDIR /workspace
 
-COPY . ./
-RUN chmod +x ./gradlew || true
+COPY . .
 
-RUN ./gradlew :services:versus-service:bootJar --no-daemon -x test
+RUN gradle :services:versus-service:bootJar --no-daemon -x test
 
 # ---------- Runtime Stage ----------
 FROM eclipse-temurin:17-jre
