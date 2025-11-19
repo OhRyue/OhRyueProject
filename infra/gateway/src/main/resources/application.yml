@@ -183,6 +183,10 @@ management:
     health:
       probes:
         enabled: true
+      show-details: never
+  metrics:
+    tags:
+      application: gateway
 
 eureka:
   client:
