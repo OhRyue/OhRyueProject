@@ -40,4 +40,7 @@ dependencies {
     // 이메일 전송
     implementation 'org.springframework.boot:spring-boot-starter-mail'
     implementation 'com.sun.mail:jakarta.mail:2.0.1'
+
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
 }

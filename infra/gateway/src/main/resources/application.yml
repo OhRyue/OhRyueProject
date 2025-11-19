@@ -28,9 +28,7 @@ spring:
         cors-configurations:
           "[/**]":
             allowed-origins:
-              - ${FRONTEND_ORIGIN:http://localhost:5173}
-              - http://localhost:3000
-              - http://210.110.33.222:3000
+              - ${FRONTEND_ORIGIN:http://localhost:3000}
             allowed-methods: "*"
             allowed-headers: "*"
             allow-credentials: true
@@ -170,7 +168,7 @@ spring:
           uri: lb://community-service
           predicates:
             - Path=/api/community/v3/api-docs/**
-          filters:  
+          filters:
             - AddRequestHeader=X-Forwarded-Prefix, /api/community
             - RewritePath=/api/community/(?<segment>v3/api-docs.*), /${segment}
 

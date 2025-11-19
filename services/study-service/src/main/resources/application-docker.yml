@@ -38,7 +38,7 @@ llm:
   timeout-ms: 3000
 
 frontend:
-  origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+  origin: ${FRONTEND_ORIGIN:http://localhost:5173,http://localhost:3000}
 
 # === CircuitBreaker 전역 스위치 (Feign에 적용) ===
 feign:
@@ -114,3 +114,6 @@ management:
       probes:
         enabled: true
       show-details: never
+  metrics:
+    tags:
+      application: study-service

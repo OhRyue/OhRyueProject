@@ -56,6 +56,9 @@ management:
       probes:
         enabled: true
       show-details: never
+  metrics:
+    tags:
+      application: cert-service
 
 springdoc:
   default-consumes-media-type: application/json

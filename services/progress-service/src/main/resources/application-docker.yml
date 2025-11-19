@@ -38,6 +38,9 @@ management:
       probes:
         enabled: true
       show-details: never
+  metrics:
+    tags:
+      application: progress-service
 
 logging:
   level:
