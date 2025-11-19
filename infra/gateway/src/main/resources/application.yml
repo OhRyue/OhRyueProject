@@ -29,6 +29,8 @@ spring:
           "[/**]":
             allowed-origins:
               - ${FRONTEND_ORIGIN:http://localhost:3000}
+              - https://mycertpilot.com
+              - https://www.mycertpilot.com
             allowed-methods: "*"
             allowed-headers: "*"
             allow-credentials: true
