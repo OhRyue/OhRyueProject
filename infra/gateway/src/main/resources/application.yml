@@ -23,7 +23,6 @@ spring:
             redis-rate-limiter.requestedTokens: 6
             key-resolver: "#{@userKeyResolver}"
 
-      # ✅ camelCase로 변경
       globalcors:
         add-to-simple-url-handler-mapping: true
         corsConfigurations:
