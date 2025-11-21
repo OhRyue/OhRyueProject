@@ -1,4 +1,4 @@
-package com.OhRyue.common.web;
+package com.OhRyue.common.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;

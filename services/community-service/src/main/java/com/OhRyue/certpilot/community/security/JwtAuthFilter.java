@@ -1,6 +1,6 @@
 package com.OhRyue.certpilot.community.security;
 
-import com.OhRyue.common.web.JwtUtil;
+import com.OhRyue.common.security.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

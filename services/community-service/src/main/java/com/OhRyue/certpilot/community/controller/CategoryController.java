@@ -17,15 +17,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CategoryController {
 
-  private final CategoryService categoryService;
+    private final CategoryService categoryService;
 
-  @Operation(summary = "커뮤니티 카테고리 목록 조회")
-  @GetMapping
-  public CategoryDtos.CategoryListResponse categories() {
-    var categories = categoryService.findAll().stream()
-        .map(cat -> new CategoryDtos.CategoryResponse(cat.getCode(), cat.getName()))
-        .collect(Collectors.toList());
-    return new CategoryDtos.CategoryListResponse(categories);
-  }
+    @Operation(summary = "커뮤니티 카테고리 목록 조회")
+    @GetMapping
+    public CategoryDtos.CategoryListResponse categories() {
+        var categories = categoryService.findAll().stream()
+                .map(cat -> new CategoryDtos.CategoryResponse(cat.getCode(), cat.getName()))
+                .collect(Collectors.toList());
+        return new CategoryDtos.CategoryListResponse(categories);
+    }
 }
-

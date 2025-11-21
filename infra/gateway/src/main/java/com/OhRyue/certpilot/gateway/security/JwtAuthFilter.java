@@ -1,6 +1,6 @@
 package com.OhRyue.certpilot.gateway.security;
 
-import com.OhRyue.common.web.JwtUtil;
+import com.OhRyue.common.security.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
