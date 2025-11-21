@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.client.CurriculumGateway;
 import com.OhRyue.certpilot.study.client.ProgressHookClient;
 import com.OhRyue.certpilot.study.domain.*;
@@ -27,7 +28,6 @@ public class WrittenService {
 
     private static final int MINI_SIZE = 4;
     private static final int MCQ_SIZE = 5;
-    // 리뷰는 10문제
     private static final int REVIEW_SIZE = 10;
 
     private final QuestionRepository questionRepository;
@@ -40,8 +40,6 @@ public class WrittenService {
     private final TopicTreeService topicTreeService;
     private final ProgressHookClient progressHookClient;
     private final ObjectMapper objectMapper;
-
-    // cert-service 커리큘럼 연동
     private final CurriculumGateway curriculumGateway;
 
     /* ========================= 개념 ========================= */
@@ -49,11 +47,9 @@ public class WrittenService {
     @Transactional(readOnly = true)
     public WrittenDtos.ConceptResp loadConcept(Long topicId) {
 
-        // Resilience4j 서킷브레이커가 적용된 게이트웨이 호출
         CurriculumGateway.CurriculumConcept concept =
                 curriculumGateway.getConceptWithTopic(topicId);
 
-        // sections_json → Section 리스트 변환 (기존 ConceptMapper 재사용)
         List<WrittenDtos.ConceptResp.Section> sections =
                 ConceptMapper.toSections(concept.sectionsJson());
 
@@ -67,7 +63,9 @@ public class WrittenService {
     /* ========================= 미니체크(OX) ========================= */
 
     @Transactional
-    public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> miniSet(String userId, Long topicId) {
+    public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> miniSet(Long topicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         List<Question> questions = questionRepository.pickRandomByTopic(
                 topicId, ExamMode.WRITTEN, QuestionType.OX, PageRequest.of(0, MINI_SIZE));
 
@@ -96,11 +94,13 @@ public class WrittenService {
 
     @Transactional
     public FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> submitMini(WrittenDtos.MiniSubmitReq req) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         Map<Long, Question> questionMap = fetchQuestions(req.answers().stream()
                 .map(WrittenDtos.MiniAnswer::questionId).toList(), QuestionType.OX);
 
         StudySession session = sessionManager.ensureMicroSession(
-                req.userId(), req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+                userId, req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
         int baseOrder = sessionManager.items(session.getId()).size();
 
         int correctCount = 0;
@@ -138,14 +138,13 @@ public class WrittenService {
                     null
             );
 
-            persistUserAnswer(req.userId(), question, userAnswer, isCorrect, 100, session, item, "MICRO_MINI");
-            pushProgressHook(req.userId(), ExamMode.WRITTEN, QuestionType.OX, isCorrect, 100, question.getId());
-            updateProgress(req.userId(), question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
+            persistUserAnswer(userId, question, userAnswer, isCorrect, 100, session, item, "MICRO_MINI");
+            pushProgressHook(userId, ExamMode.WRITTEN, QuestionType.OX, isCorrect, 100, question.getId());
+            updateProgress(userId, question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
         }
 
         boolean passedNow = correctCount == req.answers().size();
 
-        // 이전에 한 번이라도 통과했으면 계속 true 유지
         Map<String, Object> prevMiniMeta = sessionManager.loadStepMeta(session, "mini");
         boolean everPassed = Boolean.TRUE.equals(prevMiniMeta.get("passed"));
 
@@ -157,7 +156,6 @@ public class WrittenService {
         miniMeta.put("lastSubmittedAt", Instant.now().toString());
         sessionManager.saveStepMeta(session, "mini", miniMeta);
 
-        // 틀려도 다음 단계는 항상 MICRO_MCQ 로 진행 가능
         String status = "COMPLETE";
         String nextStep = "MICRO_MCQ";
 
@@ -175,16 +173,15 @@ public class WrittenService {
     /* ========================= MCQ ========================= */
 
     @Transactional
-    public FlowDtos.StepEnvelope<WrittenDtos.McqSet> mcqSet(Long topicId, String userId) {
-        // 1) 세션 확보
+    public FlowDtos.StepEnvelope<WrittenDtos.McqSet> mcqSet(Long topicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         StudySession session = sessionManager.ensureMicroSession(
                 userId, topicId, ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
 
-        // 3) MCQ 메타(이미 완료한 상태인지 여부)
         Map<String, Object> mcqMeta = sessionManager.loadStepMeta(session, "mcq");
         boolean completed = Boolean.TRUE.equals(mcqMeta.get("completed"));
 
-        // 4) 랜덤 MCQ 5문 추출
         List<Question> questions = questionRepository.pickRandomByTopic(
                 topicId, ExamMode.WRITTEN, QuestionType.MCQ, PageRequest.of(0, MCQ_SIZE));
 
@@ -213,11 +210,13 @@ public class WrittenService {
 
     @Transactional
     public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> submitMcq(WrittenDtos.McqSubmitReq req) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         Map<Long, Question> questionMap = fetchQuestions(req.answers().stream()
                 .map(WrittenDtos.McqAnswer::questionId).toList(), QuestionType.MCQ);
 
         StudySession session = sessionManager.ensureMicroSession(
-                req.userId(), req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+                userId, req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
 
         int baseOrder = sessionManager.items(session.getId()).size();
 
@@ -263,15 +262,14 @@ public class WrittenService {
                     aiExplanation.isBlank() ? null : toJson(Map.of("explain", aiExplanation))
             );
 
-            persistUserAnswer(req.userId(), question, answer.label(), isCorrect, 100, session, item, "MICRO_MCQ");
-            pushProgressHook(req.userId(), ExamMode.WRITTEN, QuestionType.MCQ, isCorrect, 100, question.getId());
-            updateProgress(req.userId(), question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
+            persistUserAnswer(userId, question, answer.label(), isCorrect, 100, session, item, "MICRO_MCQ");
+            pushProgressHook(userId, ExamMode.WRITTEN, QuestionType.MCQ, isCorrect, 100, question.getId());
+            updateProgress(userId, question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
         }
 
         boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
         double scorePct = items.isEmpty() ? 0.0 : (correctCount * 100.0) / items.size();
 
-        // 🔹 이전 메타 불러와서 everCompleted 유지
         Map<String, Object> prevMcqMeta = sessionManager.loadStepMeta(session, "mcq");
         boolean everCompleted = Boolean.TRUE.equals(prevMcqMeta.get("completed"));
         boolean finalCompleted = everCompleted || allCorrect;
@@ -285,13 +283,11 @@ public class WrittenService {
         mcqMeta.put("lastSubmittedAt", Instant.now().toString());
         sessionManager.saveStepMeta(session, "mcq", mcqMeta);
 
-        // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
         if (!everCompleted && allCorrect) {
             sessionManager.closeSession(session, scorePct, Map.of("finalScorePct", scorePct));
         } else if (!everCompleted) {
             sessionManager.updateStatus(session, "OPEN");
         }
-        // everCompleted == true 인 경우는 상태 유지
 
         return new FlowDtos.StepEnvelope<>(
                 session.getId(),
@@ -307,8 +303,9 @@ public class WrittenService {
     /* ========================= 리뷰 ========================= */
 
     @Transactional
-    public FlowDtos.StepEnvelope<ReviewDtos.ReviewSet> reviewSet(String userId, Long rootTopicId) {
-        // rootTopicId 포함 + 모든 하위 토픽 id
+    public FlowDtos.StepEnvelope<ReviewDtos.ReviewSet> reviewSet(Long rootTopicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
         if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
 
@@ -343,10 +340,10 @@ public class WrittenService {
     }
 
     @Transactional
-    public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> reviewSubmitWritten(
-            WrittenDtos.McqSubmitReq req, Long rootTopicId) {
+    public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> reviewSubmitWritten(WrittenDtos.McqSubmitReq req,
+                                                                                Long rootTopicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
 
-        // rootTopicId + 하위 토픽 전체를 타겟으로 필터링
         Set<Long> rawIds = topicTreeService.descendantsOf(rootTopicId);
         Set<Long> topicIds = new HashSet<>(rawIds);
         if (topicIds.isEmpty()) {
@@ -361,7 +358,7 @@ public class WrittenService {
                 .collect(Collectors.toMap(Question::getId, q -> q));
 
         StudySession session = sessionManager.ensureReviewSession(
-                req.userId(), rootTopicId, ExamMode.WRITTEN, REVIEW_SIZE);
+                userId, rootTopicId, ExamMode.WRITTEN, REVIEW_SIZE);
         int baseOrder = sessionManager.items(session.getId()).size();
 
         int correctCount = 0;
@@ -406,15 +403,13 @@ public class WrittenService {
                     aiExplanation.isBlank() ? null : toJson(Map.of("explain", aiExplanation))
             );
 
-            persistUserAnswer(req.userId(), question, answer.label(), isCorrect, 100, session, item, "REVIEW_MCQ");
-            // 리뷰도 XP / Progress 에 반영 (XP는 flow-complete 기준, ingest 쪽은 통계용)
-            pushProgressHook(req.userId(), ExamMode.WRITTEN, QuestionType.MCQ, isCorrect, 100, question.getId());
-            updateProgress(req.userId(), question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
+            persistUserAnswer(userId, question, answer.label(), isCorrect, 100, session, item, "REVIEW_MCQ");
+            pushProgressHook(userId, ExamMode.WRITTEN, QuestionType.MCQ, isCorrect, 100, question.getId());
+            updateProgress(userId, question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
         }
 
         boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
 
-        // 이전 메타 불러와서 everCompleted 유지
         Map<String, Object> prevReviewMeta = sessionManager.loadStepMeta(session, "review");
         boolean everCompleted = Boolean.TRUE.equals(prevReviewMeta.get("completed"));
         boolean finalCompleted = everCompleted || allCorrect;
@@ -427,30 +422,23 @@ public class WrittenService {
         reviewMeta.put("lastSubmittedAt", Instant.now().toString());
         sessionManager.saveStepMeta(session, "review", reviewMeta);
 
-        // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
         if (!everCompleted && allCorrect) {
             double scorePct = req.answers().isEmpty() ? 0.0 : (correctCount * 100.0) / req.answers().size();
-            // 스펙 v1.0: passed=true (모든 문제 정답)
             sessionManager.closeSession(session, scorePct, true, Map.of("reviewScorePct", scorePct));
         } else if (!everCompleted) {
             sessionManager.updateStatus(session, "OPEN");
         }
-        // everCompleted == true 인 경우는 상태 유지
 
-        // Review 세트 완주 시 Flow XP hook (WRITTEN / REVIEW / rootTopicId)
-        // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
         if (finalCompleted && allCorrect && !Boolean.TRUE.equals(session.getXpGranted())) {
             try {
                 progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-                        req.userId(),
+                        userId,
                         ExamMode.WRITTEN.name(),
                         "REVIEW",
                         rootTopicId
                 ));
-                // XP 지급 성공 시 xpGranted 표시
                 sessionManager.markXpGranted(session);
             } catch (Exception ignored) {
-                // XP hook 실패는 학습 흐름을 막지 않음
             }
         }
 
@@ -468,7 +456,9 @@ public class WrittenService {
     /* ========================= 요약 ========================= */
 
     @Transactional(readOnly = true)
-    public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(String userId, Long topicId) {
+    public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(Long topicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         StudySession session = sessionManager.latestMicroSession(userId, topicId).orElse(null);
 
         int miniTotal = 0;
@@ -515,13 +505,11 @@ public class WrittenService {
         int totalCorrect = miniCorrect + mcqCorrect;
         boolean completed = miniPassed && mcqCompleted;
 
-        // 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
         String topicTitle = "";
         try {
             CurriculumGateway.CurriculumConcept curriculum = curriculumGateway.getConceptWithTopic(topicId);
             topicTitle = curriculum.topicTitle();
         } catch (Exception ignored) {
-            // 커리큘럼 장애 시 요약은 "제목 없음"으로라도 진행
         }
 
         String summaryText = aiExplanationService.summarizeWritten(
@@ -548,8 +536,6 @@ public class WrittenService {
             status = completed ? "COMPLETE" : "IN_PROGRESS";
         }
 
-        // Micro 세트 완주 시 Flow XP hook (WRITTEN / MICRO / topicId)
-        // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
         if (completed && sessionId != null && session != null) {
             if (!Boolean.TRUE.equals(session.getXpGranted())) {
                 try {
@@ -559,14 +545,12 @@ public class WrittenService {
                             "MICRO",
                             topicId
                     ));
-                    // XP 지급 성공 시 xpGranted 표시 및 세션 완료 처리
                     sessionManager.markXpGranted(session);
                     if (!Boolean.TRUE.equals(session.getCompleted())) {
                         double scorePct = totalSolved == 0 ? 0.0 : (totalCorrect * 100.0) / totalSolved;
                         sessionManager.closeSession(session, scorePct, completed, Map.of());
                     }
                 } catch (Exception ignored) {
-                    // XP hook 실패는 학습 흐름을 막지 않음
                 }
             }
         }
@@ -585,16 +569,16 @@ public class WrittenService {
     /* ========================= Wrong Recap (세션 기준) ========================= */
 
     @Transactional(readOnly = true)
-    public WrongRecapDtos.WrongRecapSet wrongRecapBySession(String userId, Long sessionId, String stepCode) {
+    public WrongRecapDtos.WrongRecapSet wrongRecapBySession(Long sessionId, String stepCode) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         StudySession session = sessionManager.getSession(sessionId);
         if (!session.getUserId().equals(userId)) {
             throw new IllegalStateException("세션 소유자가 아닙니다.");
         }
 
-        // stepCode(MICRO_OX / MICRO_MCQ / REVIEW 등)를 UserAnswer.source 값과 매핑
         String source = mapStepToSource(stepCode);
 
-        // 이 사용자 + 해당 세션 + 해당 step(source)에서 틀린 답안만 수집
         List<UserAnswer> wrongAnswers = userAnswerRepository.findByUserId(userId).stream()
                 .filter(ans -> Objects.equals(ans.getSessionId(), sessionId))
                 .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
@@ -607,7 +591,6 @@ public class WrittenService {
             return new WrongRecapDtos.WrongRecapSet(List.of());
         }
 
-        // 문제 캐시
         LinkedHashSet<Long> qIds = wrongAnswers.stream()
                 .map(UserAnswer::getQuestionId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -631,8 +614,11 @@ public class WrittenService {
     /* ========================= Wrong Recap (토픽/전체 기준) ========================= */
 
     @Transactional(readOnly = true)
-    public WrongRecapDtos.WrongRecapSet wrongRecap(Long topicId, String userId, int limit) {
+    public WrongRecapDtos.WrongRecapSet wrongRecap(Long topicId, int limit) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         List<UserAnswer> wrongAnswers = userAnswerRepository.findByUserId(userId).stream()
+                .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN) // 🔹 필기만
                 .filter(ans -> Boolean.FALSE.equals(ans.getCorrect()))
                 .sorted(Comparator.comparing(UserAnswer::getAnsweredAt).reversed())
                 .toList();
@@ -640,9 +626,11 @@ public class WrittenService {
         Set<Long> answerQuestionIds = wrongAnswers.stream()
                 .map(UserAnswer::getQuestionId)
                 .collect(Collectors.toSet());
+
         Map<Long, Question> questionCache = questionRepository.findByIdIn(answerQuestionIds).stream()
                 .filter(q -> Objects.equals(q.getTopicId(), topicId))
                 .collect(Collectors.toMap(Question::getId, q -> q));
+
         Map<Long, UserAnswer> latestAnswers = latestAnswerMap(userId);
 
         LinkedHashSet<Long> questionIds = new LinkedHashSet<>();
@@ -663,46 +651,33 @@ public class WrittenService {
         return new WrongRecapDtos.WrongRecapSet(items);
     }
 
-    @Transactional(readOnly = true)
-    public WrongRecapDtos.WrongRecapSet wrongRecapByIds(String ids, String userId) {
-        List<Long> questionIds = Arrays.stream(ids.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .map(Long::valueOf)
-                .distinct()
-                .toList();
-
-        Map<Long, UserAnswer> latestAnswers = latestAnswerMap(userId);
-        List<WrongRecapDtos.WrongRecapSet.Item> items = questionRepository.findAllById(questionIds).stream()
-                .map(question -> toWrongRecapItem(question, latestAnswers))
-                .toList();
-
-        return new WrongRecapDtos.WrongRecapSet(items);
-    }
 
     /* ========================= 즉시 채점 ========================= */
 
     public WrittenDtos.MiniGradeOneResp gradeOneMini(WrittenDtos.MiniGradeOneReq req) {
-        FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> envelope = submitMini(new WrittenDtos.MiniSubmitReq(
-                req.userId(),
-                req.topicId(),
-                List.of(new WrittenDtos.MiniAnswer(req.questionId(), req.answer()))
-        ));
+        FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> envelope =
+                submitMini(new WrittenDtos.MiniSubmitReq(
+                        req.topicId(),
+                        List.of(new WrittenDtos.MiniAnswer(req.questionId(), req.answer()))
+                ));
 
         WrittenDtos.MiniSubmitResp resp = envelope.payload();
         WrittenDtos.MiniSubmitItem item = resp.items().isEmpty()
                 ? new WrittenDtos.MiniSubmitItem(req.questionId(), false, "", "")
                 : resp.items().get(0);
 
-        return new WrittenDtos.MiniGradeOneResp(item.correct(), item.explanation());
+        return new WrittenDtos.MiniGradeOneResp(
+                item.correct(),
+                item.explanation()
+        );
     }
 
     public WrittenDtos.McqGradeOneResp gradeOneMcq(WrittenDtos.McqGradeOneReq req) {
-        FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> envelope = submitMcq(new WrittenDtos.McqSubmitReq(
-                req.userId(),
-                req.topicId(),
-                List.of(new WrittenDtos.McqAnswer(req.questionId(), req.label()))
-        ));
+        FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> envelope =
+                submitMcq(new WrittenDtos.McqSubmitReq(
+                        req.topicId(),
+                        List.of(new WrittenDtos.McqAnswer(req.questionId(), req.label()))
+                ));
 
         WrittenDtos.McqSubmitResp resp = envelope.payload();
         WrittenDtos.McqSubmitItem item = resp.items().isEmpty()
@@ -716,6 +691,7 @@ public class WrittenService {
                 item.aiExplanation()
         );
     }
+
 
     /* ========================= 내부 유틸 ========================= */
 
@@ -889,6 +865,7 @@ public class WrittenService {
 
     private Map<Long, UserAnswer> latestAnswerMap(String userId) {
         return userAnswerRepository.findByUserId(userId).stream()
+                .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN) // 🔹 필기만
                 .collect(Collectors.groupingBy(
                         UserAnswer::getQuestionId,
                         Collectors.collectingAndThen(

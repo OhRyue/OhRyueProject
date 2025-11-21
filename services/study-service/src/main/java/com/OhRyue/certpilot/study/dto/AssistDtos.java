@@ -12,25 +12,22 @@ import java.util.List;
  */
 public class AssistDtos {
 
-    /* ===================== Start Requests (기존 유지, 필요 시 사용) ===================== */
+    /* ===================== Start Requests ===================== */
 
     @Schema(description = "카테고리(주제) 기반 시작 요청: topicIds 범위에서 n문제")
     public record CategoryStartReq(
             @Schema(description = "출제 범위 토픽 ID 목록") List<Long> topicIds,
-            @Schema(description = "출제 문항 수(권장: 10/20/50)") int count,
-            @Schema(description = "대상 사용자 ID", nullable = true) String userId
+            @Schema(description = "출제 문항 수(권장: 10/20/50)") int count
     ) {}
 
     @Schema(description = "난이도 기반 시작 요청: 선택 난이도에서 n문제")
     public record DifficultyStartReq(
             @Schema(description = "난이도(EASY|NORMAL|HARD)") @NotNull Difficulty difficulty,
-            @Schema(description = "출제 문항 수(권장: 10/20/50)") int count,
-            @Schema(description = "대상 사용자 ID", nullable = true) String userId
+            @Schema(description = "출제 문항 수(권장: 10/20/50)") int count
     ) {}
 
     @Schema(description = "약점 보완 시작 요청: 최근 통계로 약한 토픽/난이도를 추출해 n문제")
     public record WeaknessStartReq(
-            @Schema(description = "대상 사용자 ID") @NotNull String userId,
             @Schema(description = "출제 문항 수(권장: 10/20/50)") int count
     ) {}
 
@@ -59,7 +56,6 @@ public class AssistDtos {
 
     @Schema(description = "보조학습(필기) 제출 요청")
     public record WrittenSubmitReq(
-            @Schema(description = "사용자 ID") String userId,
             @Schema(description = "답안 목록") List<WrittenAnswer> answers
     ) {}
 
@@ -88,7 +84,6 @@ public class AssistDtos {
 
     @Schema(description = "보조학습(실기) 제출 요청")
     public record PracticalSubmitReq(
-            @Schema(description = "사용자 ID") String userId,
             @Schema(description = "답안 목록") List<PracticalAnswer> answers
     ) {}
 

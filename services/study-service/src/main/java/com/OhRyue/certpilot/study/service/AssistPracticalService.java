@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.client.ProgressQueryClient;
 import com.OhRyue.certpilot.study.domain.Question;
 import com.OhRyue.certpilot.study.domain.UserProgress;
@@ -29,8 +30,7 @@ import java.util.stream.Stream;
 @Transactional(readOnly = true)
 public class AssistPracticalService {
 
-    private static final List<Integer> ALLOWED_COUNTS = List.of(10, 20, 50);
-
+    private static final List<Integer> ALLOWED_COUNTS = List.of(5, 10, 20);
     private final QuestionRepository questionRepository;
     private final UserProgressRepository progressRepository;
     private final ProgressQueryClient progressQueryClient;
@@ -39,9 +39,9 @@ public class AssistPracticalService {
 
     /* ================= 카테고리: rootTopicId 기준 하위 토픽 전체 ================= */
 
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(String userId,
-                                                                     Long rootTopicId,
+    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(Long rootTopicId,
                                                                      Integer count) {
+        String userId = AuthUserUtil.getCurrentUserId();
         int want = sanitizeCount(count);
 
         Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
@@ -69,9 +69,9 @@ public class AssistPracticalService {
 
     /* ================= 난이도 ================= */
 
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByDifficulty(String userId,
-                                                                       Difficulty diff,
+    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByDifficulty(Difficulty diff,
                                                                        Integer count) {
+        String userId = AuthUserUtil.getCurrentUserId();
         Difficulty difficulty = (diff == null ? Difficulty.NORMAL : diff);
         int want = sanitizeCount(count);
 
@@ -94,8 +94,8 @@ public class AssistPracticalService {
 
     /* ================= 약점 보완 ================= */
 
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByWeakness(String userId,
-                                                                     Integer count) {
+    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByWeakness(Integer count) {
+        String userId = AuthUserUtil.getCurrentUserId();
         int want = sanitizeCount(count);
 
         List<UserProgress> ps = progressRepository.findByUserId(userId);
@@ -139,7 +139,11 @@ public class AssistPracticalService {
     /* ================= 제출(실기 – SHORT/LONG, LLM 채점) ================= */
 
     @Transactional
-    public FlowDtos.StepEnvelope<AssistDtos.PracticalSubmitResp> submit(AssistDtos.PracticalSubmitReq req) {
+    public FlowDtos.StepEnvelope<AssistDtos.PracticalSubmitResp> submit(
+            AssistDtos.PracticalSubmitReq req
+    ) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         if (req == null || req.answers() == null || req.answers().isEmpty()) {
             return new FlowDtos.StepEnvelope<>(
                     null,
@@ -147,7 +151,7 @@ public class AssistPracticalService {
                     "ASSIST_PRACTICAL_SUBMIT",
                     "COMPLETE",
                     null,
-                    fetchStats(req != null ? req.userId() : null),
+                    fetchStats(userId),
                     new AssistDtos.PracticalSubmitResp(0, 0, List.of())
             );
         }
@@ -201,7 +205,7 @@ public class AssistPracticalService {
                 "ASSIST_PRACTICAL_SUBMIT",
                 "COMPLETE",
                 null,
-                fetchStats(req.userId()),
+                fetchStats(userId),
                 payload
         );
     }

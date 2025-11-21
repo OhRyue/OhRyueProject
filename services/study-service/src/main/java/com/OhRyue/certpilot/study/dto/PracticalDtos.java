@@ -32,7 +32,6 @@ public class PracticalDtos {
     // 실기 제출 요청(배치)
     @Schema(description = "실기 제출 요청")
     public record PracticalSubmitReq(
-            String userId,                 // 사용자 식별자
             Long topicId,                  // 토픽 ID
             List<PracticalAnswer> answers  // 제출 답안 목록
     ) {}
@@ -57,7 +56,6 @@ public class PracticalDtos {
 
     @Schema(description = "실기 리뷰 제출 요청")
     public record PracticalReviewSubmitReq(
-            String userId,
             Long rootTopicId,
             List<PracticalAnswer> answers
     ) {}
@@ -75,7 +73,6 @@ public class PracticalDtos {
     // 실기 즉시 채점 요청
     @Schema(description = "실기 단건 즉시 채점 요청")
     public record PracticalGradeOneReq(
-            String userId,   // 사용자 ID
             Long topicId,    // 토픽 ID
             Long questionId, // 문제 ID
             String userText  // 사용자의 주관식 답변

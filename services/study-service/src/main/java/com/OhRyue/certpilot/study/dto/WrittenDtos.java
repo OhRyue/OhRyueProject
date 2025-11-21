@@ -56,7 +56,6 @@ public class WrittenDtos {
     // OX 제출 요청(배치)
     @Schema(name = "MiniSubmitReq")
     public record MiniSubmitReq(
-            String userId,             // 사용자 ID
             Long topicId,              // 토픽 ID
             List<MiniAnswer> answers   // 답안 목록
     ) {}
@@ -114,7 +113,6 @@ public class WrittenDtos {
     // MCQ 제출 요청(배치)
     @Schema(name = "McqSubmitReq")
     public record McqSubmitReq(
-            String userId,            // 사용자 ID
             Long topicId,             // 토픽 ID
             List<McqAnswer> answers   // 답안 목록
     ) {}
@@ -164,7 +162,6 @@ public class WrittenDtos {
     // OX 단건 즉시 채점 요청
     @Schema(name = "MiniGradeOneReq")
     public record MiniGradeOneReq(
-            String userId,   // 사용자 ID
             Long topicId,    // 토픽 ID
             Long questionId, // 문제 ID
             Boolean answer   // 사용자 답
@@ -182,7 +179,6 @@ public class WrittenDtos {
     // MCQ 즉시 채점 요청
     @Schema(name = "McqGradeOneReq")
     public record McqGradeOneReq(
-            String userId,   // 사용자 ID
             Long topicId,    // 토픽 ID
             Long questionId, // 문제 ID
             String label     // 사용자 선택 라벨

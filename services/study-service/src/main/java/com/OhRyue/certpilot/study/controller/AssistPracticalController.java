@@ -27,29 +27,29 @@ public class AssistPracticalController {
     @GetMapping("/category/{rootTopicId}")
     public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(
             @PathVariable Long rootTopicId,
-            @RequestParam(required = false) Integer count,
-            @RequestParam(required = false) String userId
+            @RequestParam(required = false) Integer count
     ) {
-        return practicalService.startByCategory(userId, rootTopicId, count);
+        // userId는 서비스 내부에서 AuthUserUtil로 조회
+        return practicalService.startByCategory(rootTopicId, count);
     }
 
     @Operation(summary = "실기: 난이도 기반 보조학습 세트 시작")
     @GetMapping("/difficulty")
     public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByDifficulty(
             @RequestParam(required = false) Difficulty difficulty,
-            @RequestParam(required = false) Integer count,
-            @RequestParam(required = false) String userId
+            @RequestParam(required = false) Integer count
     ) {
-        return practicalService.startByDifficulty(userId, difficulty, count);
+        // userId는 서비스 내부에서 AuthUserUtil로 조회
+        return practicalService.startByDifficulty(difficulty, count);
     }
 
     @Operation(summary = "실기: 약점 보완 보조학습 세트 시작")
     @GetMapping("/weakness")
     public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByWeakness(
-            @RequestParam String userId,
             @RequestParam(required = false) Integer count
     ) {
-        return practicalService.startByWeakness(userId, count);
+        // userId는 서비스 내부에서 AuthUserUtil로 조회
+        return practicalService.startByWeakness(count);
     }
 
     @Operation(summary = "실기: 보조학습 세트 제출 (혼자풀기 채점)")

@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.client.CurriculumGateway;
 import com.OhRyue.certpilot.study.client.ProgressHookClient;
 import com.OhRyue.certpilot.study.domain.Question;
@@ -34,9 +35,7 @@ import java.util.stream.Stream;
 public class PracticalService {
 
     private static final int MINI_SIZE = 4;
-    // 실기 micro 세트는 총 5문제 (SHORT 3 + LONG 2) - 스펙 v1.0
     private static final int PRACTICAL_SIZE = 5;
-    // 실기 리뷰 세트는 총 10문제 (SHORT 6 + LONG 4) - 스펙 v1.0
     private static final int REVIEW_SIZE = 10;
 
     private final QuestionRepository questionRepository;
@@ -55,7 +54,9 @@ public class PracticalService {
     /* ========================= 미니체크(OX) ========================= */
 
     @Transactional
-    public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> miniSet(String userId, Long topicId) {
+    public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> miniSet(Long topicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         StudySession session = sessionManager.ensureMicroSession(
                 userId, topicId, ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
 
@@ -65,7 +66,10 @@ public class PracticalService {
         List<Question> questions = questionRepository.pickRandomByTopic(
                 topicId, ExamMode.PRACTICAL, QuestionType.OX, PageRequest.of(0, MINI_SIZE));
         List<WrittenDtos.MiniQuestion> items = questions.stream()
-                .map(q -> new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse("")))
+                .map(q -> new WrittenDtos.MiniQuestion(
+                        q.getId(),
+                        Optional.ofNullable(q.getStem()).orElse(""))
+                )
                 .toList();
 
         String status = passed ? "COMPLETE" : "IN_PROGRESS";
@@ -85,14 +89,18 @@ public class PracticalService {
 
     @Transactional
     public FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> submitMini(WrittenDtos.MiniSubmitReq req) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         Map<Long, Question> questionMap = questionRepository.findByIdIn(
-                        req.answers().stream().map(WrittenDtos.MiniAnswer::questionId).toList())
+                        req.answers().stream()
+                                .map(WrittenDtos.MiniAnswer::questionId)
+                                .toList())
                 .stream()
                 .filter(q -> q.getMode() == ExamMode.PRACTICAL && q.getType() == QuestionType.OX)
                 .collect(Collectors.toMap(Question::getId, q -> q));
 
         StudySession session = sessionManager.ensureMicroSession(
-                req.userId(), req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
+                userId, req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
         int baseOrder = sessionManager.items(session.getId()).size();
 
         int correctCount = 0;
@@ -133,8 +141,20 @@ public class PracticalService {
                     null
             );
 
-            persistUserAnswer(req.userId(), question, userAnswer, correct, correct ? 100 : 0, session, item, "PRACTICAL_MINI");
-            pushProgressHook(req.userId(), QuestionType.OX, correct, correct ? 100 : 0, question.getId());
+            // examMode/PRACTICAL 일관성 유지
+            persistUserAnswer(
+                    userId,
+                    question,
+                    userAnswer,
+                    correct,
+                    correct ? 100 : 0,
+                    session,
+                    item,
+                    "PRACTICAL_MINI"
+            );
+            pushProgressHook(userId, QuestionType.OX, correct, correct ? 100 : 0, question.getId());
+            // 실기 OX 도 진행도에 반영
+            updateProgress(userId, question.getTopicId(), correct ? 100 : 0);
         }
 
         boolean passedNow = wrongIds.isEmpty() && !items.isEmpty();
@@ -171,21 +191,26 @@ public class PracticalService {
     }
 
     public WrittenDtos.MiniGradeOneResp gradeOneMini(WrittenDtos.MiniGradeOneReq req) {
-        FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> envelope = submitMini(new WrittenDtos.MiniSubmitReq(
-                req.userId(),
-                req.topicId(),
-                List.of(new WrittenDtos.MiniAnswer(req.questionId(), req.answer()))
-        ));
-        WrittenDtos.MiniSubmitItem item = envelope.payload().items().isEmpty()
+        FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> envelope =
+                submitMini(new WrittenDtos.MiniSubmitReq(
+                        req.topicId(),
+                        List.of(new WrittenDtos.MiniAnswer(req.questionId(), req.answer()))
+                ));
+
+        WrittenDtos.MiniSubmitResp resp = envelope.payload();
+        WrittenDtos.MiniSubmitItem item = resp.items().isEmpty()
                 ? new WrittenDtos.MiniSubmitItem(req.questionId(), false, "", "")
-                : envelope.payload().items().get(0);
+                : resp.items().get(0);
+
         return new WrittenDtos.MiniGradeOneResp(item.correct(), item.explanation());
     }
 
     /* ========================= 실기 세트 (Micro) ========================= */
 
     @Transactional
-    public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalSet(String userId, Long topicId) {
+    public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalSet(Long topicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         // SHORT 3 + LONG 2 = 총 5문제 (스펙 v1.0)
         List<Question> shortQuestions = questionRepository.pickRandomByTopic(
                 topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 3));
@@ -226,6 +251,8 @@ public class PracticalService {
 
     @Transactional
     public FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> submitPractical(PracticalDtos.PracticalSubmitReq req) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         Map<Long, Question> questionMap = questionRepository.findByIdIn(
                         req.answers().stream().map(PracticalDtos.PracticalAnswer::questionId).toList())
                 .stream()
@@ -233,9 +260,8 @@ public class PracticalService {
                 .collect(Collectors.toMap(Question::getId, q -> q));
 
         StudySession session = sessionManager.ensureMicroSession(
-                req.userId(), req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
+                userId, req.topicId(), ExamMode.PRACTICAL, MINI_SIZE + PRACTICAL_SIZE);
 
-        // 미니 통과 여부와 관계없이 제출/채점이 항상 가능
         int baseOrder = sessionManager.items(session.getId()).size();
 
         List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
@@ -279,9 +305,18 @@ public class PracticalService {
                     toJson(Map.of("explain", result.explain(), "tips", result.tips()))
             );
 
-            persistUserAnswer(req.userId(), question, answer.userText(), passed, score, session, item, "MICRO_PRACTICAL");
-            pushProgressHook(req.userId(), question.getType(), passed, score, question.getId());
-            updateProgress(req.userId(), question.getTopicId(), score);
+            persistUserAnswer(
+                    userId,
+                    question,
+                    answer.userText(),
+                    passed,
+                    score,
+                    session,
+                    item,
+                    "MICRO_PRACTICAL"
+            );
+            pushProgressHook(userId, question.getType(), passed, score, question.getId());
+            updateProgress(userId, question.getTopicId(), score);
         }
 
         int total = items.size();
@@ -329,7 +364,9 @@ public class PracticalService {
     /* ========================= 실기 리뷰 (Review) ========================= */
 
     @Transactional
-    public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalReviewSet(String userId, Long rootTopicId) {
+    public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalReviewSet(Long rootTopicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         // rootTopicId 포함 + 모든 하위 토픽 id
         Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
         if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
@@ -374,6 +411,8 @@ public class PracticalService {
     public FlowDtos.StepEnvelope<PracticalDtos.PracticalReviewSubmitResp> practicalReviewSubmit(
             PracticalDtos.PracticalReviewSubmitReq req) {
 
+        String userId = AuthUserUtil.getCurrentUserId();
+
         // rootTopicId + 하위 토픽 전체를 타겟으로 필터링
         Set<Long> rawIds = topicTreeService.descendantsOf(req.rootTopicId());
         Set<Long> topicIds = new HashSet<>(rawIds);
@@ -389,7 +428,7 @@ public class PracticalService {
                 .collect(Collectors.toMap(Question::getId, q -> q));
 
         StudySession session = sessionManager.ensureReviewSession(
-                req.userId(), req.rootTopicId(), ExamMode.PRACTICAL, REVIEW_SIZE);
+                userId, req.rootTopicId(), ExamMode.PRACTICAL, REVIEW_SIZE);
         int baseOrder = sessionManager.items(session.getId()).size();
 
         List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
@@ -435,10 +474,19 @@ public class PracticalService {
                     toJson(Map.of("explain", result.explain(), "tips", result.tips()))
             );
 
-            persistUserAnswer(req.userId(), question, answer.userText(), passed, score, session, item, "PRACTICAL_REVIEW");
-            pushProgressHook(req.userId(), question.getType(), passed, score, question.getId());
+            persistUserAnswer(
+                    userId,
+                    question,
+                    answer.userText(),
+                    passed,
+                    score,
+                    session,
+                    item,
+                    "PRACTICAL_REVIEW"
+            );
+            pushProgressHook(userId, question.getType(), passed, score, question.getId());
             // 실기 리뷰도 Progress 에 반영
-            updateProgress(req.userId(), question.getTopicId(), score);
+            updateProgress(userId, question.getTopicId(), score);
         }
 
         int total = items.size();
@@ -459,7 +507,7 @@ public class PracticalService {
         sessionManager.saveStepMeta(session, "review", reviewMeta);
 
         // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
-        // 스펙 v1.0: 실기는 60점 이상이면 passed
+        // 실기는 60점 이상이면 passed
         if (!everCompleted && allPassedNow) {
             sessionManager.closeSession(session, avgScore, true, Map.of("avgScore", avgScore));
         } else if (!everCompleted) {
@@ -472,7 +520,7 @@ public class PracticalService {
         if (finalCompleted && allPassedNow && !Boolean.TRUE.equals(session.getXpGranted())) {
             try {
                 progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-                        req.userId(),
+                        userId,
                         ExamMode.PRACTICAL.name(),
                         "REVIEW",
                         req.rootTopicId()
@@ -503,7 +551,9 @@ public class PracticalService {
     /* ========================= 요약 (Micro Practical Summary) ========================= */
 
     @Transactional(readOnly = true)
-    public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(String userId, Long topicId) {
+    public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(Long topicId) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         StudySession session = sessionManager.latestMicroSession(userId, topicId).orElse(null);
 
         int miniTotal = 0;
@@ -552,7 +602,7 @@ public class PracticalService {
 
         boolean completed = miniPassed && practicalCompleted;
         int totalSolved = miniTotal + practicalTotal;
-        int totalPassed = miniCorrect + practicalPassed;
+        int totalPassed = miniCorrect + practicalPassed; // 현재는 사용 X이지만 남겨둠
 
         // 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
         String topicTitle = "";
@@ -623,24 +673,30 @@ public class PracticalService {
     }
 
     public PracticalDtos.PracticalGradeOneResp gradeOnePractical(PracticalDtos.PracticalGradeOneReq req) {
-        FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> envelope = submitPractical(new PracticalDtos.PracticalSubmitReq(
-                req.userId(),
-                req.topicId(),
-                List.of(new PracticalDtos.PracticalAnswer(req.questionId(), req.userText()))
-        ));
+        FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> envelope =
+                submitPractical(new PracticalDtos.PracticalSubmitReq(
+                        req.topicId(),
+                        List.of(new PracticalDtos.PracticalAnswer(req.questionId(), req.userText()))
+                ));
 
         PracticalDtos.PracticalSubmitResp resp = envelope.payload();
         PracticalDtos.PracticalSubmitItem item = resp.items().isEmpty()
                 ? new PracticalDtos.PracticalSubmitItem(req.questionId(), 0, "", "")
                 : resp.items().get(0);
 
-        return new PracticalDtos.PracticalGradeOneResp(item.score(), item.baseExplanation(), item.aiExplanation());
+        return new PracticalDtos.PracticalGradeOneResp(
+                item.score(),
+                item.baseExplanation(),
+                item.aiExplanation()
+        );
     }
 
     /* ========================= Wrong Recap (세션 기준) ========================= */
 
     @Transactional(readOnly = true)
-    public WrongRecapDtos.WrongRecapSet wrongRecapBySession(String userId, Long sessionId, String stepCode) {
+    public WrongRecapDtos.WrongRecapSet wrongRecapBySession(Long sessionId, String stepCode) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         StudySession session = sessionManager.getSession(sessionId);
         if (!session.getUserId().equals(userId)) {
             throw new IllegalStateException("세션 소유자가 아닙니다.");
@@ -683,6 +739,68 @@ public class PracticalService {
         return new WrongRecapDtos.WrongRecapSet(items);
     }
 
+    /* ========================= Wrong Recap (토픽/전체 기준) ========================= */
+
+    @Transactional(readOnly = true)
+    public WrongRecapDtos.WrongRecapSet wrongRecap(Long topicId, int limit) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
+        List<UserAnswer> wrongAnswers = userAnswerRepository.findByUserId(userId).stream()
+                .filter(ans -> ans.getExamMode() == ExamMode.PRACTICAL) // 🔹 실기만
+                .filter(ans -> Boolean.FALSE.equals(ans.getCorrect()))
+                .sorted(Comparator.comparing(UserAnswer::getAnsweredAt).reversed())
+                .toList();
+
+        Set<Long> answerQuestionIds = wrongAnswers.stream()
+                .map(UserAnswer::getQuestionId)
+                .collect(Collectors.toSet());
+
+        Map<Long, Question> questionCache = questionRepository.findByIdIn(answerQuestionIds).stream()
+                .filter(q -> q.getMode() == ExamMode.PRACTICAL)
+                .filter(q -> Objects.equals(q.getTopicId(), topicId))
+                .collect(Collectors.toMap(Question::getId, q -> q));
+
+        Map<Long, UserAnswer> latestAnswers = latestAnswerMap(userId);
+
+        LinkedHashSet<Long> questionIds = new LinkedHashSet<>();
+        for (UserAnswer ans : wrongAnswers) {
+            if (questionCache.containsKey(ans.getQuestionId())) {
+                questionIds.add(ans.getQuestionId());
+                if (questionIds.size() >= Math.max(limit, 50)) break;
+            }
+        }
+
+        List<WrongRecapDtos.WrongRecapSet.Item> items = questionIds.stream()
+                .map(questionCache::get)
+                .filter(Objects::nonNull)
+                .map(question -> toWrongRecapItem(question, latestAnswers))
+                .limit(limit)
+                .toList();
+
+        return new WrongRecapDtos.WrongRecapSet(items);
+    }
+
+    @Transactional(readOnly = true)
+    public WrongRecapDtos.WrongRecapSet wrongRecapByIds(String ids) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
+        List<Long> questionIds = Arrays.stream(ids.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(Long::valueOf)
+                .distinct()
+                .toList();
+
+        Map<Long, UserAnswer> latestAnswers = latestAnswerMap(userId);
+
+        List<WrongRecapDtos.WrongRecapSet.Item> items = questionRepository.findAllById(questionIds).stream()
+                .filter(q -> q.getMode() == ExamMode.PRACTICAL)
+                .map(question -> toWrongRecapItem(question, latestAnswers))
+                .toList();
+
+        return new WrongRecapDtos.WrongRecapSet(items);
+    }
+
     /* ========================= Helper Methods ========================= */
 
     private boolean isPractical(Question question) {
@@ -700,7 +818,7 @@ public class PracticalService {
         UserAnswer userAnswer = UserAnswer.builder()
                 .userId(userId)
                 .questionId(question.getId())
-                .examMode(ExamMode.PRACTICAL)
+                .examMode(question.getMode())
                 .questionType(question.getType())
                 .answeredAt(Instant.now())
                 .userAnswerJson(toJson(Map.of(
@@ -775,7 +893,7 @@ public class PracticalService {
         }
     }
 
-    // 세션 기반 recap용: Question + UserAnswer 로 recap 아이템 구성
+    // 세션/토픽 기반 recap용: Question + UserAnswer 로 recap 아이템 구성
     private WrongRecapDtos.WrongRecapSet.Item buildWrongRecapItem(Question question, UserAnswer answer) {
         String stem = Optional.ofNullable(question.getStem()).orElse("");
         String baseExplain = Optional.ofNullable(question.getSolutionText()).orElse("");
@@ -793,6 +911,23 @@ public class PracticalService {
                 baseExplain,
                 question.getImageUrl()
         );
+    }
+
+    private WrongRecapDtos.WrongRecapSet.Item toWrongRecapItem(Question question, Map<Long, UserAnswer> latestAnswers) {
+        UserAnswer latest = latestAnswers.get(question.getId());
+        return buildWrongRecapItem(question, latest);
+    }
+
+    private Map<Long, UserAnswer> latestAnswerMap(String userId) {
+        return userAnswerRepository.findByUserId(userId).stream()
+                .filter(ans -> ans.getExamMode() == ExamMode.PRACTICAL) // 🔹 실기만
+                .collect(Collectors.groupingBy(
+                        UserAnswer::getQuestionId,
+                        Collectors.collectingAndThen(
+                                Collectors.maxBy(Comparator.comparing(UserAnswer::getAnsweredAt)),
+                                opt -> opt.orElse(null)
+                        )
+                ));
     }
 
     private int readInt(Map<String, Object> meta, String key) {
@@ -853,7 +988,7 @@ public class PracticalService {
             case "MICRO_OX", "PRACTICAL_MINI" -> "PRACTICAL_MINI";              // 실기 OX
             case "PRACTICAL_SET", "MICRO_PRACTICAL" -> "MICRO_PRACTICAL";       // 실기 Micro 세트
             case "REVIEW", "PRACTICAL_REVIEW_SET", "PRACTICAL_REVIEW" -> "PRACTICAL_REVIEW"; // 실기 Review
-            default -> stepCode; // 혹시 다른 source 를 그대로 사용하고 싶을 때
+            default -> stepCode; // 다른 source 를 그대로 사용하고 싶을 때
         };
     }
 }

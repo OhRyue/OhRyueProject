@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.domain.LearnSession;
 import com.OhRyue.certpilot.study.domain.LearnStep;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -50,12 +52,17 @@ public class StudySessionService {
         }
     }
 
-    /** 세션 시작 (resume=true면 최신 세션 재개) */
+    /**
+     * 세션 시작 (resume=true면 최신 세션 재개)
+     * - 외부 시그니처에서 userId 제거, 내부에서 JWT 기반 AuthUserUtil 사용
+     */
     @Transactional
     public StartResp start(StartReq req) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         if (Boolean.TRUE.equals(req.resume())) {
             var found = sessionRepo.findFirstByUserIdAndTopicIdAndModeOrderByIdDesc(
-                    req.userId(), req.topicId(), String.valueOf(req.mode()));
+                    userId, req.topicId(), String.valueOf(req.mode()));
             if (found.isPresent()) {
                 var s = found.get();
                 s.setUpdatedAt(Instant.now());
@@ -67,7 +74,7 @@ public class StudySessionService {
         String modeStr = String.valueOf(req.mode());
 
         var s = sessionRepo.save(LearnSession.builder()
-                .userId(req.userId())
+                .userId(userId)
                 .topicId(req.topicId())
                 .mode(modeStr)                 // 엔티티에 String으로 보관
                 .status("IN_PROGRESS")
@@ -91,23 +98,37 @@ public class StudySessionService {
 
     @Transactional(readOnly = true)
     public SessionResp get(Long sessionId) {
+        String currentUserId = AuthUserUtil.getCurrentUserId();
+
         var s = sessionRepo.findById(sessionId)
                 .orElseThrow(() -> new NoSuchElementException("session not found"));
+
+        if (!Objects.equals(s.getUserId(), currentUserId)) {
+            throw new IllegalStateException("세션 소유자가 아닙니다.");
+        }
+
         var steps = stepRepo.findBySessionIdOrderByIdAsc(sessionId).stream()
                 .map(x -> new SessionResp.StepItem(x.getId(), x.getStep(), x.getState(), x.getScore(), x.getDetailsJson()))
                 .toList();
-        return new SessionResp(s.getId(), s.getUserId(), s.getTopicId(), s.getMode(),
+        return new SessionResp(s.getId(), s.getTopicId(), s.getMode(),
                 s.getStatus(), s.getProgressJson(), steps);
     }
 
     /**
      * 현재 step을 COMPLETE 처리(프런트가 '해당 단계 문제를 전부 완료'한 뒤 호출).
      * 다음 READY 단계로 이동. 남은 READY 단계가 없으면 DONE.
+     * - JWT 기반 유저 검증 추가
      */
     @Transactional
     public AdvanceResp advance(AdvanceReq req) {
+        String currentUserId = AuthUserUtil.getCurrentUserId();
+
         var s = sessionRepo.findById(req.sessionId())
                 .orElseThrow(() -> new NoSuchElementException("session not found"));
+
+        if (!Objects.equals(s.getUserId(), currentUserId)) {
+            throw new IllegalStateException("세션 소유자가 아닙니다.");
+        }
 
         var steps = stepRepo.findBySessionIdOrderByIdAsc(s.getId());
         var current = steps.stream()

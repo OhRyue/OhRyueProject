@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.client.ProgressQueryClient;
 import com.OhRyue.certpilot.study.domain.Question;
 import com.OhRyue.certpilot.study.domain.QuestionChoice;
@@ -49,9 +50,9 @@ public class AssistWrittenService {
 
     /* ================= 카테고리: 2레벨 토픽 선택 → 하위 토픽 전체에서 출제 ================= */
 
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(String userId,
-                                                                     Long rootTopicId,
+    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(Long rootTopicId,
                                                                      Integer count) {
+        String userId = AuthUserUtil.getCurrentUserId();
         int want = sanitizeCount(count);
 
         // rootTopicId 포함 + 모든 하위 토픽 ID
@@ -75,9 +76,9 @@ public class AssistWrittenService {
 
     /* ================= 난이도 ================= */
 
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByDifficulty(String userId,
-                                                                       Difficulty diff,
+    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByDifficulty(Difficulty diff,
                                                                        Integer count) {
+        String userId = AuthUserUtil.getCurrentUserId();
         Difficulty difficulty = (diff == null ? Difficulty.NORMAL : diff);
         int want = sanitizeCount(count);
 
@@ -96,8 +97,8 @@ public class AssistWrittenService {
 
     /* ================= 약점 보완 ================= */
 
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByWeakness(String userId,
-                                                                     Integer count) {
+    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByWeakness(Integer count) {
+        String userId = AuthUserUtil.getCurrentUserId();
         int want = sanitizeCount(count);
 
         List<UserProgress> progresses = progressRepository.findByUserId(userId);
@@ -133,7 +134,11 @@ public class AssistWrittenService {
     // 스펙 v1.0: StudySession 기록, UserAnswer 저장, 틀린 문제 수집, XP 지급
 
     @Transactional
-    public FlowDtos.StepEnvelope<AssistDtos.WrittenSubmitResp> submit(AssistDtos.WrittenSubmitReq req) {
+    public FlowDtos.StepEnvelope<AssistDtos.WrittenSubmitResp> submit(
+            AssistDtos.WrittenSubmitReq req
+    ) {
+        String userId = AuthUserUtil.getCurrentUserId();
+
         if (req == null || req.answers() == null || req.answers().isEmpty()) {
             return new FlowDtos.StepEnvelope<>(
                     null,
@@ -141,7 +146,7 @@ public class AssistWrittenService {
                     "ASSIST_WRITTEN_SUBMIT",
                     "COMPLETE",
                     null,
-                    fetchStats(req != null ? req.userId() : null, "WRITTEN"),
+                    fetchStats(userId, "WRITTEN"),
                     new AssistDtos.WrittenSubmitResp(0, 0, List.of())
             );
         }
@@ -157,11 +162,10 @@ public class AssistWrittenService {
                 .collect(java.util.stream.Collectors.toMap(Question::getId, q -> q));
 
         // 스펙 v1.0: Assist용 StudySession 생성 (mode: ASSIST_CATEGORY/ASSIST_DIFFICULTY/ASSIST_WEAK)
-        // scope에는 assistType 정보 포함 (카테고리면 rootTopicId, 난이도면 difficulty, 약점이면 "WEAK")
-        String assistMode = "ASSIST_CATEGORY"; // 기본값, 실제로는 req에서 assistType을 받아야 함
+        String assistMode = "ASSIST_CATEGORY"; // TODO: 실제로는 요청/컨트롤러에서 assistType 전달 받아야 함
         Map<String, Object> scope = Map.of("assistType", assistMode, "questionCount", req.answers().size());
         com.OhRyue.certpilot.study.domain.StudySession session = sessionManager.ensureSession(
-                req.userId(), scope, assistMode, ExamMode.WRITTEN, req.answers().size());
+                userId, scope, assistMode, ExamMode.WRITTEN, req.answers().size());
 
         List<AssistDtos.WrittenResultItem> items = new ArrayList<>();
         List<Long> wrongQuestionIds = new ArrayList<>();
@@ -205,30 +209,39 @@ public class AssistWrittenService {
             Map<String, Object> answerPayload = Map.of("label", userLabel, "correct", isCorrect);
             String answerJson = toJson(answerPayload);
             String aiExplainJson = aiExplanation.isBlank() ? null : toJson(Map.of("explain", aiExplanation));
-            
+
             com.OhRyue.certpilot.study.domain.StudySessionItem item = sessionManager.upsertItem(
                     session, q.getId(), orderNo, answerJson, isCorrect, isCorrect ? 100 : 0, aiExplainJson);
 
             // UserAnswer 저장
-            com.OhRyue.certpilot.study.domain.UserAnswer userAnswer = com.OhRyue.certpilot.study.domain.UserAnswer.builder()
-                    .userId(req.userId())
-                    .questionId(q.getId())
-                    .examMode(ExamMode.WRITTEN)
-                    .questionType(QuestionType.MCQ)
-                    .userAnswerJson(answerJson)
-                    .correct(isCorrect)
-                    .score(isCorrect ? 100 : 0)
-                    .source("ASSIST_WRITTEN")
-                    .sessionId(session.getId())
-                    .sessionItemId(item.getId())
-                    .build();
+            com.OhRyue.certpilot.study.domain.UserAnswer userAnswer =
+                    com.OhRyue.certpilot.study.domain.UserAnswer.builder()
+                            .userId(userId)
+                            .questionId(q.getId())
+                            .examMode(ExamMode.WRITTEN)
+                            .questionType(QuestionType.MCQ)
+                            .userAnswerJson(answerJson)
+                            .correct(isCorrect)
+                            .score(isCorrect ? 100 : 0)
+                            .source("ASSIST_WRITTEN")
+                            .sessionId(session.getId())
+                            .sessionItemId(item.getId())
+                            .build();
             userAnswerRepository.save(userAnswer);
-            
+
             // Progress hook (통계용)
             try {
-                progressHookClient.submit(new com.OhRyue.certpilot.study.client.ProgressHookClient.SubmitPayload(
-                        req.userId(), ExamMode.WRITTEN.name(), QuestionType.MCQ.name(),
-                        isCorrect, isCorrect ? 100 : 0, List.of(), "ASSIST_WRITTEN"));
+                progressHookClient.submit(
+                        new com.OhRyue.certpilot.study.client.ProgressHookClient.SubmitPayload(
+                                userId,
+                                ExamMode.WRITTEN.name(),
+                                QuestionType.MCQ.name(),
+                                isCorrect,
+                                isCorrect ? 100 : 0,
+                                List.of(),
+                                "ASSIST_WRITTEN"
+                        )
+                );
             } catch (Exception e) {
                 log.debug("Progress hook failed: {}", e.getMessage());
             }
@@ -246,12 +259,14 @@ public class AssistWrittenService {
         // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
         if (allCorrect && !Boolean.TRUE.equals(session.getXpGranted())) {
             try {
-                progressHookClient.flowComplete(new com.OhRyue.certpilot.study.client.ProgressHookClient.FlowCompletePayload(
-                        req.userId(),
-                        ExamMode.WRITTEN.name(),
-                        "ASSIST",
-                        null // Assist는 topicId 없음
-                ));
+                progressHookClient.flowComplete(
+                        new com.OhRyue.certpilot.study.client.ProgressHookClient.FlowCompletePayload(
+                                userId,
+                                ExamMode.WRITTEN.name(),
+                                "ASSIST",
+                                null // Assist는 topicId 없음
+                        )
+                );
                 sessionManager.markXpGranted(session);
             } catch (Exception e) {
                 log.debug("XP grant failed for assist session {}: {}", session.getId(), e.getMessage());
@@ -267,7 +282,7 @@ public class AssistWrittenService {
                 "ASSIST_WRITTEN_SUBMIT",
                 "COMPLETE",
                 null,
-                fetchStats(req.userId(), "WRITTEN"),
+                fetchStats(userId, "WRITTEN"),
                 payload
         );
     }
