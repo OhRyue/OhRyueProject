@@ -2,3 +2,7 @@ server.port: 8086
 spring.application.name: community-service
 management.endpoints.web.exposure.include: '*'
 eureka.client.serviceUrl.defaultZone: http://discovery:8761/eureka
+
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}

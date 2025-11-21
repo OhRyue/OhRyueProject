@@ -33,5 +33,9 @@ eureka:
     service-url:
       defaultZone: http://discovery:8761/eureka
 
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}
+
 jwt:
-  secret-key: "your-super-secure-secret-key123456"
+  secret-key: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}

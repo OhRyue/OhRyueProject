@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -46,8 +47,8 @@ public class JwtTokenProvider {
 
         this.originalSecretKey = secretKey;
 
-        // JwtUtil 과 완전히 동일한 방식으로 키 생성
-        byte[] keyBytes = secretKey.getBytes(StandardCharsets.UTF_8);
+        // JwtUtil 과 완전히 동일한 방식으로 키 생성 (Base64 디코딩 포함)
+        byte[] keyBytes = decodeSecret(secretKey);
         if (keyBytes.length < 32) {
             // JwtUtil 도 동일하게 32바이트 미만이면 IllegalArgumentException 를 던지므로,
             // 여기서도 명시적으로 막아줍니다.
@@ -60,8 +61,26 @@ public class JwtTokenProvider {
 
         this.key = Keys.hmacShaKeyFor(keyBytes);
 
-        log.info("🔑 JwtTokenProvider 초기화 완료 - 알고리즘: HS256, Secret Key 길이: {} bytes",
-                originalSecretKey.getBytes(StandardCharsets.UTF_8).length);
+        log.info("🔑 JwtTokenProvider 초기화 완료 - 알고리즘: HS256, Secret Key 길이: {} bytes (원본 문자열 길이: {} chars)",
+                keyBytes.length, originalSecretKey.length());
+    }
+
+    /**
+     * Secret을 디코딩합니다.
+     * - Base64 문자열인 경우 디코딩
+     * - 그 외의 경우 UTF-8 bytes로 변환
+     */
+    private byte[] decodeSecret(String secret) {
+        try {
+            // Base64 디코딩 시도
+            byte[] decoded = Base64.getDecoder().decode(secret);
+            log.debug("🔓 Base64 디코딩 성공 - 원본 길이: {} chars, 디코딩 후: {} bytes", secret.length(), decoded.length);
+            return decoded;
+        } catch (IllegalArgumentException e) {
+            // Base64가 아니면 raw string으로 처리
+            log.debug("🔓 Base64 디코딩 실패 → raw string으로 처리 - 길이: {} bytes", secret.getBytes(StandardCharsets.UTF_8).length);
+            return secret.getBytes(StandardCharsets.UTF_8);
+        }
     }
 
     // ------------------------------------------------------------------------

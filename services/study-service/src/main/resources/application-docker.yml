@@ -27,11 +27,11 @@ eureka:
 
 auth:
   jwt:
-    secret: ${JWT_SECRET:eW91ci1zdXBlci1zZWN1cmUtc2VjcmV0LWtleTEyMzQ1Ng==}
+    secret: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}
 
 security:
   jwt:
-    hmac-secret: ${SECURITY_JWT_HMAC_SECRET:eW91ci1zdXBlci1zZWN1cmUtc2VjcmV0LWtleTEyMzQ1Ng==}
+    hmac-secret: ${SECURITY_JWT_HMAC_SECRET:${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}}
 
 llm:
   base-url: ${LLM_BASE_URL:https://api.openai.com/v1}

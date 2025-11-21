@@ -20,9 +20,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     private final JwtUtil jwtUtil;
 
     public JwtAuthFilter(@Value("${auth.jwt.secret}") String secret) {
+        log.info("🔑 [GATEWAY] JwtAuthFilter 초기화 - auth.jwt.secret 길이: {} chars", secret != null ? secret.length() : 0);
         this.jwtUtil = new JwtUtil(secret);
+        log.info("✅ [GATEWAY] JwtAuthFilter 초기화 완료");
     }
-
     @Override
     public Mono<Void> filter(ServerWebExchange exchange,
                              org.springframework.cloud.gateway.filter.GatewayFilterChain chain) {
@@ -69,15 +70,23 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     }
 
     private boolean isPublicPath(String path) {
-        // account 공개 API 전부 허용 (gateway 기준 경로)
-        return path.startsWith("/api/account/auth")
 
-                // 공통 health / swagger
+        // 1) Account - 로그인 이전 공개 API
+        return path.startsWith("/api/account/login")              // 로그인
+                || path.startsWith("/api/account/register")           // 회원가입
+                || path.startsWith("/api/account/check-userId")       // 아이디 중복 확인
+                || path.startsWith("/api/account/send-verification")  // 인증 이메일 전송
+                || path.startsWith("/api/account/verify-email")       // 이메일 인증 확인
+                || path.startsWith("/api/account/reset-password")     // 비밀번호 재설정
+                || path.startsWith("/api/account/refresh")            // 토큰 재발급
+
+                // 2) 공통 공개 API (health, swagger)
                 || path.startsWith("/actuator")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-ui")
                 || path.startsWith("/swagger-ui.html");
     }
+
 
     private Mono<Void> unauthorized(ServerWebExchange exchange, String msg) {
         exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);

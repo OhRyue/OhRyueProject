@@ -54,3 +54,7 @@ resilience4j:
       datagoClient:
         maxAttempts: 3
         waitDuration: 500ms
+
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}

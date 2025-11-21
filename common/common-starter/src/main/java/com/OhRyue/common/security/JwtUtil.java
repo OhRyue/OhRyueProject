@@ -6,6 +6,7 @@ import io.jsonwebtoken.security.Keys;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
+import java.util.Base64;
 import java.util.Date;
 
 /**
@@ -18,7 +19,24 @@ public class JwtUtil {
     private final Key key;
 
     public JwtUtil(String secret) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = decodeSecret(secret);
+        this.key = Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    /**
+     * Secret을 디코딩합니다.
+     * - Base64 문자열인 경우 디코딩
+     * - 그 외의 경우 UTF-8 bytes로 변환
+     */
+    private byte[] decodeSecret(String secret) {
+        try {
+            // Base64 디코딩 시도
+            byte[] decoded = Base64.getDecoder().decode(secret);
+            return decoded;
+        } catch (IllegalArgumentException e) {
+            // Base64가 아니면 raw string으로 처리
+            return secret.getBytes(StandardCharsets.UTF_8);
+        }
     }
 
     /**
