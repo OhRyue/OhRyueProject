@@ -11,26 +11,23 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SwaggerConfig {
 
-  @Bean
-  public OpenAPI customOpenAPI() {
-    String jwtSchemeName = "JWT";
+    @Bean
+    public OpenAPI certpilotAccountOpenAPI() {
+        String schemeName = "bearerAuth";
 
-    // Security 요구사항: JWT를 기본으로 사용하게 함
-    SecurityRequirement securityRequirement = new SecurityRequirement().addList(jwtSchemeName);
-
-    // Security 스키마 정의 (Bearer 토큰)
-    SecurityScheme securityScheme = new SecurityScheme()
-        .name(jwtSchemeName)
-        .type(SecurityScheme.Type.HTTP)
-        .scheme("Bearer")
-        .bearerFormat("JWT");
-
-    return new OpenAPI()
-        .info(new Info()
-            .title("CertPilot - Account Service API")
-            .description("Account-Service API with JWT Auth")
-            .version("v1.0"))
-        .components(new Components().addSecuritySchemes(jwtSchemeName, securityScheme))
-        .addSecurityItem(securityRequirement);
-  }
+        return new OpenAPI()
+                .info(new Info()
+                        .title("CertPilot Account API")
+                        .version("v1")
+                        .description("CertPilot Account-service API 문서 (JWT 기반 인증)"))
+                .components(new Components()
+                        .addSecuritySchemes(schemeName,
+                                new SecurityScheme()
+                                        .name(schemeName)
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")))
+                // 기본적으로 모든 API에 JWT 보안 스키마 적용
+                .addSecurityItem(new SecurityRequirement().addList(schemeName));
+    }
 }

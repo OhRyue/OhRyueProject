@@ -1,29 +1,23 @@
 package com.OhRyue.certpilot.cert.config;
 
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.Nullable;
-import org.springframework.beans.factory.annotation.Value;
+import com.OhRyue.certpilot.cert.security.JwtAuthFilter;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
-
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity // @PreAuthorize 등 사용 대비
+@EnableMethodSecurity // @PreAuthorize 사용 가능
+@RequiredArgsConstructor
 public class SecurityConfig {
 
-    // Swagger & Actuator 경로 화이트리스트
     private static final String[] SWAGGER_WHITELIST = {
             "/swagger-ui.html",
             "/swagger-ui/**",
@@ -35,27 +29,7 @@ public class SecurityConfig {
             "/actuator/info"
     };
 
-    /**
-     * account-service / study-service와 동일한 키를 사용하기 위해
-     * jwt.secret-key 설정을 그대로 사용합니다.
-     *
-     * 예) application.yml
-     * jwt:
-     *   secret-key: ${JWT_SECRET_KEY:your-super-secure-secret-key123456}
-     */
-    @Value("${jwt.secret-key:}")
-    private String jwtSecret;
-
-    @PostConstruct
-    void logSecretLength() {
-        // 디버깅용(원치 않으면 제거 가능)
-        if (jwtSecret != null && !jwtSecret.isBlank()) {
-            int len = jwtSecret.getBytes(StandardCharsets.UTF_8).length;
-            System.out.println("[cert-service] jwt.secret-key length = " + len + " bytes");
-        } else {
-            System.out.println("[cert-service] WARNING: jwt.secret-key is blank");
-        }
-    }
+    private final JwtAuthFilter jwtAuthFilter;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -69,38 +43,36 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
 
+                // 인증 실패 처리
+                .exceptionHandling(ex ->
+                        ex.authenticationEntryPoint((request, response, authException) -> {
+                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "인증이 필요합니다");
+                        })
+                )
+
                 // 요청별 인가 규칙
                 .authorizeHttpRequests(auth -> auth
                         // Swagger 문서
                         .requestMatchers(SWAGGER_WHITELIST).permitAll()
-                        // 기본 health/info
+                        // health/info
                         .requestMatchers(ACTUATOR_WHITELIST).permitAll()
-                        // 나머지 actuator도 개발 단계에서는 열어둠 (필요 시 tighten)
-                        .requestMatchers("/actuator/**").permitAll()
-                        // 실제 Cert API는 JWT 필요
-                        .requestMatchers("/api/**").authenticated()
+                        // 개발 단계에서 다른 actuator도 열어두고 싶다면:
+                        // .requestMatchers("/actuator/**").permitAll()
+
+                        // 실제 Cert API (자격증 정보/토픽 등)는 JWT 필요
+                        .requestMatchers("/api/cert/**").authenticated()
+
                         // 그 외 요청은 일단 허용
                         .anyRequest().permitAll()
                 )
 
-                // Resource Server: JWT 기반 인증 사용
-                .oauth2ResourceServer(oauth2 ->
-                        oauth2.jwt(Customizer.withDefaults())
-                )
+                // Resource Server 방식 대신, 커스텀 JwtAuthFilter 사용
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
 
                 // 기본 로그인 폼 / HTTP Basic 인증 비활성화
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .formLogin(form -> form.disable());
 
         return http.build();
-    }
-
-    @Bean
-    public JwtDecoder jwtDecoder() {
-        if (jwtSecret == null || jwtSecret.isBlank()) {
-            throw new IllegalStateException("cert-service: jwt.secret-key must be configured.");
-        }
-        SecretKey key = new SecretKeySpec(jwtSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        return NimbusJwtDecoder.withSecretKey(key).build();
     }
 }

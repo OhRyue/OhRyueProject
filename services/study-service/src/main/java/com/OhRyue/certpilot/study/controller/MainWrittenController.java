@@ -15,7 +15,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 @Tag(name = "Main - Written(필기)")
 @RestController
 @RequestMapping("/api/study/written")
-@SecurityRequirement(name = "JWT")
 @RequiredArgsConstructor
 public class MainWrittenController {
 

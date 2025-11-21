@@ -43,8 +43,9 @@ eureka:
 frontend:
   origin: ${FRONTEND_ORIGIN:http://localhost:5173}
 
-jwt:
-  secret-key: ${JWT_SECRET_KEY:your-super-secure-secret-key123456}
+auth:
+  jwt:
+    secret: ${JWT_SECRET:eW91ci1zdXBlci1zZWN1cmUtc2VjcmV0LWtleTEyMzQ1Ng==}
 
 management:
   endpoints:

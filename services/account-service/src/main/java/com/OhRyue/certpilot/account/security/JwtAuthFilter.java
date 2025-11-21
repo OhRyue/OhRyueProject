@@ -17,13 +17,31 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 @Component
-public class JwtAuthenticationFilter extends OncePerRequestFilter {
+public class JwtAuthFilter extends OncePerRequestFilter {
 
-    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
     private final JwtTokenProvider jwtTokenProvider;
 
-    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
+    public JwtAuthFilter(JwtTokenProvider jwtTokenProvider) {
         this.jwtTokenProvider = jwtTokenProvider;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        // JWT 없이 열어둘 경로들
+        return path.startsWith("/api/account/login")
+                || path.startsWith("/api/account/refresh")
+                || path.startsWith("/api/account/send-verification")
+                || path.startsWith("/api/account/verify-email")
+                || path.startsWith("/api/account/check-userId")
+                || path.startsWith("/api/account/forgot-password")
+                || path.startsWith("/api/account/forgot-password/verify")
+                || path.startsWith("/api/account/forgot-password/reset")
+                || path.startsWith("/v3/api-docs")
+                || path.startsWith("/swagger-ui")
+                || path.startsWith("/swagger-ui.html")
+                || path.startsWith("/actuator");
     }
 
     @Override
@@ -32,50 +50,40 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         String requestPath = request.getRequestURI();
-        
-        // 1. Authorization 헤더에서 JWT 가져오기
+
         String token = resolveToken(request);
 
-        if (token == null) {
-            log.info("🔍 JWT 토큰 없음 - 경로: {}", requestPath);
-        } else {
-            log.info("🔍 JWT 토큰 발견 - 경로: {}, 토큰 앞 20자: {}", 
-                requestPath, token.length() > 20 ? token.substring(0, 20) + "..." : token);
+        if (!StringUtils.hasText(token)) {
+            // 토큰 없으면 그냥 다음 필터로 넘김 (401은 SecurityConfig 인가 규칙에서 결정)
+            filterChain.doFilter(request, response);
+            return;
         }
 
-        // 2. 유효한 토큰인지 확인
-        if (token != null && jwtTokenProvider.validateToken(token)) {
+        if (jwtTokenProvider.validateToken(token)) {
             try {
-                // 3. 토큰에서 userId, role 가져오기
                 String userId = jwtTokenProvider.getUsernameFromToken(token);
                 String role = jwtTokenProvider.getRoleFromToken(token);
 
-                log.info("✅ JWT 인증 성공 - userId: {}, role: {}, 경로: {}", userId, role, requestPath);
-
-                // 4. 시큐리티 인증 객체 만들기
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(
-                                userId,           // principal: userId
-                                null,             // credentials (우리는 비밀번호 안 씀)
-                                jwtTokenProvider.getAuthorities(role) // ROLE_USER 등
-                        );
+                var auth = new UsernamePasswordAuthenticationToken(
+                        userId,
+                        null,
+                        jwtTokenProvider.getAuthorities(role)
+                );
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-                // 5. 시큐리티 컨텍스트에 저장
                 SecurityContextHolder.getContext().setAuthentication(auth);
+
+                log.debug("✅ [account-service] JWT 인증 성공 - userId: {}, role: {}, path: {}",
+                        userId, role, requestPath);
             } catch (Exception e) {
-                log.error("❌ JWT 토큰에서 사용자 정보 추출 실패 - 경로: {}, 오류: {}", 
-                    requestPath, e.getMessage(), e);
+                log.error("❌ [account-service] JWT 파싱 중 오류 - path: {}, error: {}",
+                        requestPath, e.getMessage());
+                SecurityContextHolder.clearContext();
             }
-        } else if (token != null) {
-            log.warn("❌ JWT 토큰 검증 실패 - 경로: {}", requestPath);
         }
 
-        // 다음 필터로 넘김
         filterChain.doFilter(request, response);
     }
 
-    // 헤더에서 토큰 분리
     private String resolveToken(HttpServletRequest request) {
         String bearer = request.getHeader("Authorization");
         if (StringUtils.hasText(bearer) && bearer.startsWith("Bearer ")) {
