@@ -13,6 +13,7 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 @Configuration
@@ -25,12 +26,11 @@ public class SecurityConfig {
 
   /** account-service의 jwt.secret-key(Base64) 사용 */
   @Bean
-  public ReactiveJwtDecoder jwtDecoder(@Value("${security.jwt.hmac-secret}") String base64Secret) {
-    if (base64Secret == null || base64Secret.isBlank()) {
+  public ReactiveJwtDecoder jwtDecoder(@Value("${security.jwt.hmac-secret}") String secret) {
+    if (secret == null || secret.isBlank()) {
       throw new IllegalStateException("GATEWAY security.jwt.hmac-secret is not configured.");
     }
-    // Base64 디코딩하여 실제 HMAC 키 생성
-    byte[] keyBytes = Base64.getDecoder().decode(base64Secret);
+    byte[] keyBytes = decodeSecret(secret);
     SecretKey key = new SecretKeySpec(keyBytes, "HmacSHA256");
     return NimbusReactiveJwtDecoder.withSecretKey(key).build();
   }
@@ -45,5 +45,13 @@ public class SecurityConfig {
         )
         .oauth2ResourceServer(o -> o.jwt(j -> { /* 기본 서명검증 */ }))
         .build();
+  }
+
+  private byte[] decodeSecret(String secret) {
+    try {
+      return Base64.getDecoder().decode(secret);
+    } catch (IllegalArgumentException ex) {
+      return secret.getBytes(StandardCharsets.UTF_8);
+    }
   }
 }
