@@ -9,8 +9,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 
 public class VersusDtos {
 
@@ -18,6 +18,7 @@ public class VersusDtos {
   public record CreateRoomReq(
       @NotNull MatchMode mode,
       String scopeJson,
+      // 🔸 초대 대상자(다른 사람들)의 userId 리스트는 도메인 데이터라서 그대로 유지
       List<@NotBlank String> participants,
       List<@Valid QuestionInfo> questions,
       String tournamentBracketJson,
@@ -25,13 +26,12 @@ public class VersusDtos {
       String goldenbellRuleJson
   ) {}
 
-  public record JoinRoomReq(
-      @NotBlank String userId
-  ) {}
+  // 🔥 JoinRoomReq 는 더 이상 필요 없으므로 제거했습니다.
+  // public record JoinRoomReq(...)
 
   public record SubmitAnswerReq(
       @NotNull Long questionId,
-      @NotBlank String userId,
+      // 🔥 userId 제거 – JWT에서 가져옵니다.
       boolean correct,
       @Min(0) Integer timeMs,
       Integer scoreDelta,
@@ -109,4 +109,3 @@ public class VersusDtos {
       RealtimeSnapshot realtime
   ) {}
 }
- 

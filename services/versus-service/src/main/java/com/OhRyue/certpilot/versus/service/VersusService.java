@@ -228,9 +228,11 @@ public class VersusService {
   }
 
   @Transactional
-  public VersusDtos.ScoreBoardResp submitAnswer(Long roomId, VersusDtos.SubmitAnswerReq req) {
+  public VersusDtos.ScoreBoardResp submitAnswer(Long roomId,
+                                                String userId,
+                                                VersusDtos.SubmitAnswerReq req) {
     MatchRoom room = findRoomOrThrow(roomId);
-    MatchParticipant participant = participantRepository.findByRoomIdAndUserId(roomId, req.userId())
+    MatchParticipant participant = participantRepository.findByRoomIdAndUserId(roomId, userId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Participant not joined"));
 
     if (room.getMode() == MatchMode.TOURNAMENT && participant.isEliminated()) {
@@ -238,7 +240,7 @@ public class VersusService {
     }
 
     if (room.getMode() == MatchMode.GOLDENBELL) {
-      GoldenbellState state = goldenbellStateRepository.findByRoomIdAndUserId(roomId, req.userId())
+      GoldenbellState state = goldenbellStateRepository.findByRoomIdAndUserId(roomId, userId)
           .orElse(null);
       if (state != null && !state.isAlive()) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Eliminated participant cannot submit answers");
@@ -248,11 +250,11 @@ public class VersusService {
     MatchQuestion question = resolveQuestion(roomId, req.questionId());
 
     MatchAnswer answer = answerRepository.findByRoomIdAndQuestionIdAndUserId(
-            roomId, req.questionId(), req.userId())
+            roomId, req.questionId(), userId)
         .orElse(MatchAnswer.builder()
             .roomId(roomId)
             .questionId(req.questionId())
-            .userId(req.userId())
+            .userId(userId)
             .build());
 
     ScoreOutcome outcome = evaluateScore(question, req.correct(), req.timeMs());
@@ -265,7 +267,7 @@ public class VersusService {
     answerRepository.save(answer);
 
     recordEvent(roomId, "ANSWER_SUBMITTED", Map.of(
-        "userId", req.userId(),
+        "userId", userId,
         "questionId", req.questionId(),
         "round", question.getRoundNo(),
         "phase", question.getPhase().name(),
@@ -1010,4 +1012,3 @@ public class VersusService {
     }
   }
 }
- 

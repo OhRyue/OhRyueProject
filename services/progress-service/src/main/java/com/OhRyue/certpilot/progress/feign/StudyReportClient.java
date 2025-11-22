@@ -13,16 +13,21 @@ import org.springframework.web.bind.annotation.RequestParam;
 )
 public interface StudyReportClient {
 
-  /** study-service 쪽 시그니처와 정확히 일치해야 합니다. */
+  /**
+   * study-service의 /api/study/report/recent-records 와 시그니처를 맞춘다.
+   * userId는 JWT에서 가져오므로 파라미터 없음.
+   */
   @GetMapping("/report/recent-records")
   RecentRecordsResp recent(
-      @RequestParam("userId") String userId,
       @RequestParam(value = "limit", defaultValue = "30") int limit
   );
 
+  /**
+   * /api/study/report/progress-card
+   * userId는 JWT에서 가져오고, certId만 QueryParam으로 전달.
+   */
   @GetMapping("/report/progress-card")
   HomeProgressCard progressCard(
-      @RequestParam("userId") String userId,
       @RequestParam("certId") Long certId
   );
 }

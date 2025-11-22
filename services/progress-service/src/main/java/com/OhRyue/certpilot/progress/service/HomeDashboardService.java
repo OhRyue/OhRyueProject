@@ -45,8 +45,9 @@ public class HomeDashboardService {
   private final ReportDailyRepository reportDailyRepository;
   private final UserXpWalletRepository userXpWalletRepository;
 
-  public HomeOverview overview(String authorization, String userId) {
-    AccountMeResponse me = accountClient.me(authorization);
+  public HomeOverview overview(String userId) {
+    // JWT 기반 Feign Interceptor가 Authorization 헤더를 자동으로 붙인다고 가정
+    AccountMeResponse me = accountClient.me();
     AccountMeResponse.Profile profile = me.profile();
     UserXpWallet wallet = xpService.getWallet(userId);
     UserStreak streak = streakService.get(userId);
@@ -73,17 +74,20 @@ public class HomeDashboardService {
     return new HomeOverview(userCard, goal);
   }
 
-  public HomeProgressCard progressCard(String authorization, String userId) {
-    AccountMeResponse me = accountClient.me(authorization);
+  public HomeProgressCard progressCard(String userId) {
+    AccountMeResponse me = accountClient.me();
     if (me.goal() == null || me.goal().certId() == null) {
       return new HomeProgressCard(0, 0, 0, 0.0, null);
     }
+    // StudyReportClient 쪽은 원래대로 userId + certId 조합 유지
     return studyReportClient.progressCard(userId, me.goal().certId());
   }
 
-  public HomeRanking ranking(String authorization, String userId) {
+  public HomeRanking ranking(String userId) {
     List<UserRankScore> top = rankService.topN(5);
-    List<String> userIds = top.stream().map(UserRankScore::getUserId).collect(Collectors.toList());
+    List<String> userIds = top.stream()
+        .map(UserRankScore::getUserId)
+        .collect(Collectors.toList());
 
     if (!userIds.contains(userId)) {
       userIds.add(userId);
@@ -91,7 +95,8 @@ public class HomeDashboardService {
 
     List<ProfileSummaryResponse> summaries = userIds.isEmpty()
         ? List.of()
-        : accountClient.summaries(authorization, userIds);
+        : accountClient.summaries(userIds);
+
     Map<String, ProfileSummaryResponse> summaryMap = summaries.stream()
         .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s, (a, b) -> a));
 
@@ -145,8 +150,12 @@ public class HomeDashboardService {
     LocalDate today = LocalDate.now(KST);
     LocalDate yesterday = today.minusDays(1);
 
-    ReportDaily todayReport = reportDailyRepository.findByUserIdAndDate(userId, today).orElse(null);
-    ReportDaily yesterdayReport = reportDailyRepository.findByUserIdAndDate(userId, yesterday).orElse(null);
+    ReportDaily todayReport = reportDailyRepository
+        .findByUserIdAndDate(userId, today)
+        .orElse(null);
+    ReportDaily yesterdayReport = reportDailyRepository
+        .findByUserIdAndDate(userId, yesterday)
+        .orElse(null);
 
     int solved = todayReport == null ? 0 : todayReport.getSolvedCount();
     int minutes = todayReport == null ? 0 : todayReport.getTimeSpentSec() / 60;
@@ -156,7 +165,13 @@ public class HomeDashboardService {
     double yesterdayAccuracy = yesterdayReport == null ? 0.0 : toDoublePercent(yesterdayReport.getAccuracy());
     double delta = Math.round((accuracy - yesterdayAccuracy) * 10.0) / 10.0;
 
-    return new HomeQuickStats(solved, minutes, Math.round(accuracy * 10.0) / 10.0, xp, delta);
+    return new HomeQuickStats(
+        solved,
+        minutes,
+        Math.round(accuracy * 10.0) / 10.0,
+        xp,
+        delta
+    );
   }
 
   public HomeQuickMenu quickMenu() {
@@ -181,4 +196,3 @@ public class HomeDashboardService {
         .build();
   }
 }
-

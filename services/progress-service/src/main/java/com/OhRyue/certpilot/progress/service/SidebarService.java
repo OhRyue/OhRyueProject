@@ -25,8 +25,8 @@ public class SidebarService {
   private final StreakService streakService;
   private final StoreService storeService;
 
-  public SidebarSummary sidebar(String authorization, String userId) {
-    AccountMeResponse me = accountClient.me(authorization);
+  public SidebarSummary sidebar(String userId) {
+    AccountMeResponse me = accountClient.me();
     AccountMeResponse.Profile profile = me.profile();
 
     UserXpWallet wallet = xpService.getWallet(userId);
@@ -46,6 +46,7 @@ public class SidebarService {
     int itemCount = catalog.categories().stream()
         .mapToInt(section -> section.items().size())
         .sum();
+
     StorePreview storePreview = new StorePreview(
         catalog.user().pointBalance(),
         catalog.user().ownedItemCount(),
@@ -64,4 +65,3 @@ public class SidebarService {
     );
   }
 }
-

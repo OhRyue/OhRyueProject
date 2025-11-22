@@ -38,7 +38,7 @@ public class CertInfoService {
 
   @Cacheable(value = "cert-current", key = "#userId", unless = "!#result.isPresent()")
   public Optional<CertInfoDto.CurrentCertResponse> currentCert(String userId) {
-    AccountGoalClient.GoalResponse goal = fetchGoal(userId);
+    AccountGoalClient.GoalResponse goal = fetchGoal();
     if (goal == null || goal.certId() == null) {
       return Optional.empty();
     }
@@ -111,9 +111,9 @@ public class CertInfoService {
         });
   }
 
-  private AccountGoalClient.GoalResponse fetchGoal(String userId) {
+  private AccountGoalClient.GoalResponse fetchGoal() {
     try {
-      return accountGoalClient.goal(userId);
+      return accountGoalClient.goal();
     } catch (FeignException e) {
       if (e.status() == 404 || e.status() == 204) {
         return null;

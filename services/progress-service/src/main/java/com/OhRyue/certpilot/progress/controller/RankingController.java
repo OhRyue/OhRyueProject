@@ -7,10 +7,11 @@ import com.OhRyue.certpilot.progress.service.LeaderboardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import static com.OhRyue.common.auth.AuthUserUtil.getCurrentUserId;
 
 @Tag(name = "Progress - Ranking", description = "랭킹 및 배지 조회 API")
 @RestController
@@ -26,8 +27,8 @@ public class RankingController {
   @Operation(summary = "랭킹 조회", description = "scope: OVERALL/WEEKLY/HALL_OF_FAME/FRIENDS")
   @GetMapping("/rankings/{scope}")
   public RankDtos.LeaderboardResponse leaderboard(@PathVariable RankScope scope,
-                                                  @RequestParam @NotBlank String userId,
                                                   @RequestParam(required = false) String reference) {
+    String userId = getCurrentUserId();
     return leaderboardService.leaderboard(scope, userId, reference);
   }
 
@@ -47,14 +48,15 @@ public class RankingController {
   /* -------- 배지 -------- */
   @Operation(summary = "사용자 배지 현황 조회")
   @GetMapping("/badges")
-  public RankDtos.BadgeStatusResponse badges(@RequestParam @NotBlank String userId) {
+  public RankDtos.BadgeStatusResponse badges() {
+    String userId = getCurrentUserId();
     return badgeService.status(userId);
   }
 
   @Operation(summary = "배지 조건 재평가", description = "사용자의 최신 데이터를 기준으로 배지를 다시 계산합니다.")
   @PostMapping("/badges/evaluate")
   public RankDtos.BadgeStatusResponse evaluate(@Valid @RequestBody RankDtos.BadgeEvaluateRequest request) {
+    // 이 엔드포인트는 특정 userId를 지정해서 재평가하는 관리자 용도로 유지합니다.
     return badgeService.evaluate(request.userId());
   }
 }
-

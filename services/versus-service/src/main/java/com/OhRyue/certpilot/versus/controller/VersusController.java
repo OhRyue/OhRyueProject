@@ -4,6 +4,7 @@ import com.OhRyue.certpilot.versus.domain.MatchMode;
 import com.OhRyue.certpilot.versus.domain.MatchStatus;
 import com.OhRyue.certpilot.versus.dto.VersusDtos;
 import com.OhRyue.certpilot.versus.service.VersusService;
+import com.OhRyue.common.auth.AuthUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -50,9 +51,10 @@ public class VersusController {
   /* -------- 참가/시작 -------- */
   @Operation(summary = "대전 방 참가")
   @PostMapping("/rooms/{roomId}/join")
-  public VersusDtos.RoomDetailResp joinRoom(@PathVariable Long roomId,
-                                            @Valid @RequestBody VersusDtos.JoinRoomReq req) {
-    return versusService.joinRoom(roomId, req.userId());
+  public VersusDtos.RoomDetailResp joinRoom(@PathVariable Long roomId) {
+    // 🔹 JWT 에서 현재 로그인한 사용자 ID 추출
+    String userId = AuthUserUtil.getCurrentUserId();
+    return versusService.joinRoom(roomId, userId);
   }
 
   @Operation(summary = "대전 방 시작")
@@ -66,7 +68,9 @@ public class VersusController {
   @PostMapping("/rooms/{roomId}/answers")
   public VersusDtos.ScoreBoardResp submitAnswer(@PathVariable Long roomId,
                                                 @Valid @RequestBody VersusDtos.SubmitAnswerReq req) {
-    return versusService.submitAnswer(roomId, req);
+    // 🔹 여기서도 userId는 JWT에서만 가져옴
+    String userId = AuthUserUtil.getCurrentUserId();
+    return versusService.submitAnswer(roomId, userId, req);
   }
 
   @Operation(summary = "실시간 스코어보드 조회")

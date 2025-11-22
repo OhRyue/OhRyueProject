@@ -8,25 +8,29 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import static com.OhRyue.common.auth.AuthUserUtil.getCurrentUserId;
+
 @Tag(name = "Progress - XP", description = "경험치 관리 APIs")
 @RestController
 @RequestMapping("/api/progress/xp")
 @RequiredArgsConstructor
 public class XpController {
+
   private final XpService xp;
 
-  @Operation(summary="XP 지갑 조회")
+  @Operation(summary = "XP 지갑 조회")
   @GetMapping("/wallet")
-  public UserXpWallet wallet(@RequestParam String userId){
+  public UserXpWallet wallet() {
+    String userId = getCurrentUserId();
     return xp.getWallet(userId);
   }
 
-  @Operation(summary="XP 적립")
+  @Operation(summary = "XP 적립")
   @PostMapping("/gain")
-  public UserXpWallet gain(@RequestParam String userId,
-                           @RequestParam int delta,
+  public UserXpWallet gain(@RequestParam int delta,
                            @RequestParam(defaultValue = "ETC") XpReason reason,
-                           @RequestParam(required = false) String refId){
+                           @RequestParam(required = false) String refId) {
+    String userId = getCurrentUserId();
     return xp.addXp(userId, delta, reason, refId);
   }
 }

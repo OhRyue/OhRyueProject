@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import static com.OhRyue.common.auth.AuthUserUtil.getCurrentUserId;
+
 @Tag(name = "Progress - Reports", description = "학습 리포트 APIs")
 @RestController
 @RequestMapping("/api/progress/report")
@@ -21,20 +23,16 @@ public class ReportController {
 
   @Operation(summary = "리포트 개요", description = "총 학습시간/문항수/정답률, 주간 변화, 연속학습일 계산")
   @GetMapping("/overview")
-  public Overview overview(
-      @RequestParam String userId,
-      @RequestParam(defaultValue = "WRITTEN") String mode
-  ) {
+  public Overview overview(@RequestParam(defaultValue = "WRITTEN") String mode) {
+    String userId = getCurrentUserId();
     return report.overview(userId, mode);
   }
 
   @Operation(summary = "태그별 능력지수", description = "태그별 정답/전체/정답률 Top-N")
   @GetMapping("/ability-by-tag")
-  public TagAbilityResp abilityByTag(
-      @RequestParam String userId,
-      @RequestParam(defaultValue = "WRITTEN") String mode,
-      @RequestParam(defaultValue = "20") int limit
-  ) {
+  public TagAbilityResp abilityByTag(@RequestParam(defaultValue = "WRITTEN") String mode,
+                                     @RequestParam(defaultValue = "20") int limit) {
+    String userId = getCurrentUserId();
     return report.abilityByTag(userId, mode, limit);
   }
 
@@ -64,10 +62,8 @@ public class ReportController {
       }
   )
   @GetMapping("/recent-records")
-  public RecentRecordsResp recentRecords(
-      @RequestParam String userId,
-      @RequestParam(defaultValue = "30") int limit
-  ) {
+  public RecentRecordsResp recentRecords(@RequestParam(defaultValue = "30") int limit) {
+    String userId = getCurrentUserId();
     return report.recentRecords(userId, limit);
   }
 }
