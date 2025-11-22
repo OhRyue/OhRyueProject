@@ -7,8 +7,9 @@ public class SessionDtos {
 
   @Schema(description = "세션 시작/재개 요청")
   public record StartReq(
-      String userId, Long topicId, String mode, // WRITTEN | PRACTICAL
-      Boolean resume                            // true면 최근 세션 재개
+      Long topicId,
+      String mode,   // WRITTEN | PRACTICAL
+      Boolean resume // true면 최근 세션 재개
   ) {}
 
   @Schema(description = "세션 시작/재개 응답")
@@ -16,8 +17,12 @@ public class SessionDtos {
 
   @Schema(description = "세션 상세 조회 응답")
   public record SessionResp(
-      Long sessionId, String userId, Long topicId, String mode, String status,
-      String progressJson, List<StepItem> steps
+      Long sessionId,
+      Long topicId,
+      String mode,
+      String status,
+      String progressJson,
+      List<StepItem> steps
   ) {
     public record StepItem(Long id, String step, String state, Integer score, String detailsJson) {}
   }
@@ -31,5 +36,5 @@ public class SessionDtos {
   ) {}
 
   @Schema(description = "단계 전이 응답")
-  public record AdvanceResp(Long sessionId, String movedTo, String status) {}
+  public record AdvanceResp(Long sessionId, String status, String movedTo) {}
 }

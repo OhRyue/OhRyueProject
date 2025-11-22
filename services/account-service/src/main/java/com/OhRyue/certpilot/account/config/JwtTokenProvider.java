@@ -24,8 +24,6 @@ public class JwtTokenProvider {
 
     /**
      * 프로젝트 공통 JWT 시크릿.
-     * - 신규: auth.jwt.secret
-     * - 구버전: jwt.secret-key (fallback)
      */
     @Value("${auth.jwt.secret:${jwt.secret-key:}}")
     private String secretKey;

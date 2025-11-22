@@ -48,7 +48,9 @@ public class GlobalExceptionHandler {
     log.error("unexpected error", e);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
         "error", "internal_server_error",
-        "message", "서버 에러가 발생했습니다"
+        "message", "서버 에러가 발생했습니다",
+        "exception", e.getClass().getName(),
+        "detail", e.getMessage()
     ));
   }
 }

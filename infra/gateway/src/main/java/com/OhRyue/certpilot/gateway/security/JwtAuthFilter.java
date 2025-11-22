@@ -20,9 +20,9 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     private final JwtUtil jwtUtil;
 
     public JwtAuthFilter(@Value("${auth.jwt.secret}") String secret) {
-        log.info("🔑 [GATEWAY] JwtAuthFilter 초기화 - auth.jwt.secret 길이: {} chars", secret != null ? secret.length() : 0);
+        log.debug("🔑 [GATEWAY] JwtAuthFilter 초기화 - auth.jwt.secret 길이: {} chars", secret != null ? secret.length() : 0);
         this.jwtUtil = new JwtUtil(secret);
-        log.info("✅ [GATEWAY] JwtAuthFilter 초기화 완료");
+        log.debug("✅ [GATEWAY] JwtAuthFilter 초기화 완료");
     }
     @Override
     public Mono<Void> filter(ServerWebExchange exchange,

@@ -21,42 +21,42 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class AssistPracticalController {
 
-    private final AssistPracticalService practicalService;
+  private final AssistPracticalService practicalService;
 
-    @Operation(summary = "실기: 카테고리 기반 보조학습 세트 시작")
-    @GetMapping("/category/{rootTopicId}")
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(
-            @PathVariable Long rootTopicId,
-            @RequestParam(required = false) Integer count,
-            @RequestParam(required = false) String userId
-    ) {
-        return practicalService.startByCategory(userId, rootTopicId, count);
-    }
+  @Operation(summary = "실기: 카테고리 기반 보조학습 세트 시작")
+  @GetMapping("/category/{rootTopicId}")
+  public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(
+      @PathVariable Long rootTopicId,
+      @RequestParam(required = false) Integer count
+  ) {
+    // userId는 서비스 내부에서 AuthUserUtil로 조회
+    return practicalService.startByCategory(rootTopicId, count);
+  }
 
-    @Operation(summary = "실기: 난이도 기반 보조학습 세트 시작")
-    @GetMapping("/difficulty")
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByDifficulty(
-            @RequestParam(required = false) Difficulty difficulty,
-            @RequestParam(required = false) Integer count,
-            @RequestParam(required = false) String userId
-    ) {
-        return practicalService.startByDifficulty(userId, difficulty, count);
-    }
+  @Operation(summary = "실기: 난이도 기반 보조학습 세트 시작")
+  @GetMapping("/difficulty")
+  public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByDifficulty(
+      @RequestParam(required = false) Difficulty difficulty,
+      @RequestParam(required = false) Integer count
+  ) {
+    // userId는 서비스 내부에서 AuthUserUtil로 조회
+    return practicalService.startByDifficulty(difficulty, count);
+  }
 
-    @Operation(summary = "실기: 약점 보완 보조학습 세트 시작")
-    @GetMapping("/weakness")
-    public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByWeakness(
-            @RequestParam String userId,
-            @RequestParam(required = false) Integer count
-    ) {
-        return practicalService.startByWeakness(userId, count);
-    }
+  @Operation(summary = "실기: 약점 보완 보조학습 세트 시작")
+  @GetMapping("/weakness")
+  public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByWeakness(
+      @RequestParam(required = false) Integer count
+  ) {
+    // userId는 서비스 내부에서 AuthUserUtil로 조회
+    return practicalService.startByWeakness(count);
+  }
 
-    @Operation(summary = "실기: 보조학습 세트 제출 (혼자풀기 채점)")
-    @PostMapping("/submit")
-    public FlowDtos.StepEnvelope<AssistDtos.PracticalSubmitResp> submit(
-            @RequestBody @Valid AssistDtos.PracticalSubmitReq req
-    ) {
-        return practicalService.submit(req);
-    }
+  @Operation(summary = "실기: 보조학습 세트 제출 (혼자풀기 채점)")
+  @PostMapping("/submit")
+  public FlowDtos.StepEnvelope<AssistDtos.PracticalSubmitResp> submit(
+      @RequestBody @Valid AssistDtos.PracticalSubmitReq req
+  ) {
+    return practicalService.submit(req);
+  }
 }

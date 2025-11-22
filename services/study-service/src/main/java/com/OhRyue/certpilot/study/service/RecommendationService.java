@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.config.RecommendationProperties;
 import com.OhRyue.certpilot.study.domain.AnswerLog;
 import com.OhRyue.certpilot.study.domain.Question;
@@ -32,7 +33,8 @@ public class RecommendationService {
   private final QuestionChoiceRepository choiceRepo;
 
   /* ===================== 약점 태그 Top-N ===================== */
-  public WeakTagsResp weakTags(String userId, int topN, int minTried) {
+  public WeakTagsResp weakTags(int topN, int minTried) {
+    String userId = AuthUserUtil.getCurrentUserId();
 
     // 전체 로그 중 내 것만 필터
     List<AnswerLog> allLogs = answerRepo.findAll().stream()
@@ -75,6 +77,7 @@ public class RecommendationService {
   /* ===================== 태그 기반 추천 퀴즈 ===================== */
   @Transactional
   public TagQuizSet tagQuiz(TagQuizReq req) {
+    String userId = AuthUserUtil.getCurrentUserId();
 
     // 1) 파라미터 병합
     int count = (req.count() != null) ? req.count() : props.getDefaultCount();
@@ -112,7 +115,7 @@ public class RecommendationService {
     // 5) 최근 오답 횟수
     Map<Long, Long> recentWrongCount = answerRepo
         .findByUserIdAndQuestionIdInAndAnsweredAtAfter(
-            req.userId(),
+            userId,
             pool.stream().map(Question::getId).toList(),
             after
         )
@@ -122,7 +125,7 @@ public class RecommendationService {
 
     // 6) 태그 약점도(전체기간)
     List<AnswerLog> allUserLogsForPool = answerRepo.findByUserIdAndQuestionIdIn(
-        req.userId(), pool.stream().map(Question::getId).toList());
+        userId, pool.stream().map(Question::getId).toList());
     Map<String, int[]> tagStat = buildTagStat(allUserLogsForPool, qidTags);
 
     Map<String, Double> tagWeakness = new HashMap<>();

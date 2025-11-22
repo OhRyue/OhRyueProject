@@ -14,15 +14,20 @@ public class JwtAuthenticationDebug {
     @Value("${auth.jwt.secret}")
     private String secret;
 
-    @PostConstruct
-    public void init() {
-        log.info("🚀 [GATEWAY] Loaded auth.jwt.secret (raw) = {}", secret);
-
-        try {
-            byte[] decoded = Base64.getDecoder().decode(secret);
-            log.info("🚀 [GATEWAY] Base64 decoded length = {} bytes", decoded.length);
-        } catch (Exception e) {
-            log.warn("⚠️ [GATEWAY] Base64 decode failed → using raw only");
-        }
+  @PostConstruct
+  public void init() {
+    if (secret == null) {
+      log.warn("⚠️ [GATEWAY] auth.jwt.secret is NULL");
+      return;
     }
+
+    log.info("🚀 [GATEWAY] auth.jwt.secret length = {} chars", secret.length());
+
+    try {
+      byte[] decoded = Base64.getDecoder().decode(secret);
+      log.info("🚀 [GATEWAY] Base64 decoded length = {} bytes", decoded.length);
+    } catch (Exception e) {
+      log.warn("⚠️ [GATEWAY] Base64 decode failed → using raw only ({} chars)", secret.length());
+    }
+  }
 }

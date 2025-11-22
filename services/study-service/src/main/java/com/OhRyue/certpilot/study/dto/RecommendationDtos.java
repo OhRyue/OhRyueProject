@@ -1,7 +1,6 @@
 package com.OhRyue.certpilot.study.dto;
 
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
@@ -19,7 +18,6 @@ public class RecommendationDtos {
      - allowedDifficulties, recentWrongWeight 등은 null이면 서버 기본값 사용
    */
   public record TagQuizReq(
-      @NotBlank String userId,
       @NotNull List<String> tags,         // 선호/약점 태그 목록
       List<String> allowedDifficulties,   // 예: ["EASY","NORMAL","HARD"]
       @Min(1) Integer count,              // 총 문항 수(기본 study.reco.default-count)
