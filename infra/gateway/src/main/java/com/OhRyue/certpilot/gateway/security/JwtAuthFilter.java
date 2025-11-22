@@ -8,6 +8,7 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -27,6 +28,11 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange,
                              org.springframework.cloud.gateway.filter.GatewayFilterChain chain) {
+
+        // OPTIONS 요청 (CORS preflight)은 허용
+        if (exchange.getRequest().getMethod() == org.springframework.http.HttpMethod.OPTIONS) {
+            return chain.filter(exchange);
+        }
 
         String path = exchange.getRequest().getPath().value();
 
@@ -78,6 +84,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                 || path.startsWith("/api/account/send-verification")  // 인증 이메일 전송
                 || path.startsWith("/api/account/verify-email")       // 이메일 인증 확인
                 || path.startsWith("/api/account/reset-password")     // 비밀번호 재설정
+                || path.startsWith("/api/account/forgot-password")    // 비밀번호 찾기
                 || path.startsWith("/api/account/refresh")            // 토큰 재발급
 
                 // 2) 공통 공개 API (health, swagger)
@@ -89,9 +96,25 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
 
     private Mono<Void> unauthorized(ServerWebExchange exchange, String msg) {
-        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-        exchange.getResponse().getHeaders().add("X-Auth-Error", msg);
-        return exchange.getResponse().setComplete();
+        ServerHttpResponse response = exchange.getResponse();
+        HttpHeaders headers = response.getHeaders();
+        
+        // CORS 헤더 추가 (인증 실패 응답에도 필요)
+        String origin = exchange.getRequest().getHeaders().getFirst(HttpHeaders.ORIGIN);
+        if (origin != null && isAllowedOrigin(origin)) {
+            headers.add(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+            headers.add(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+        }
+        
+        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        headers.add("X-Auth-Error", msg);
+        return response.setComplete();
+    }
+
+    private boolean isAllowedOrigin(String origin) {
+        return "http://localhost:3000".equals(origin)
+                || "https://mycertpilot.com".equals(origin)
+                || "https://www.mycertpilot.com".equals(origin);
     }
 
     @Override
