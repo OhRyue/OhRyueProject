@@ -368,19 +368,27 @@ public class AssistWrittenService {
     if (userId == null || userId.isBlank()) {
       return meta;
     }
+
+    // 오늘 보조학습 목표 (JWT 기반)
     try {
-      ProgressQueryClient.GoalToday goal = progressQueryClient.getTodayGoal(userId);
+      ProgressQueryClient.GoalToday goal = progressQueryClient.getTodayGoal();
       if (goal != null) {
         meta.put("todayGoal", Map.of(
-            "target", Optional.ofNullable(goal.targetCount()).orElse(0),
-            "progress", Optional.ofNullable(goal.progressCount()).orElse(0)
+            "target", goal.target(),
+            "progress", goal.progress(),
+            "remaining", goal.remaining(),
+            "completed", goal.completed(),
+            "date", goal.date(),
+            "updatedAt", goal.updatedAt()
         ));
       }
     } catch (Exception ex) {
       log.debug("Failed to fetch today goal for {}: {}", userId, ex.getMessage());
     }
+
+    // WRITTEN / PRACTICAL 모드 리포트 개요
     try {
-      ProgressQueryClient.Overview overview = progressQueryClient.overview(userId, reportMode);
+      ProgressQueryClient.Overview overview = progressQueryClient.overview(reportMode);
       if (overview != null) {
         meta.put("weeklySolved", overview.problemsThisWeek());
         meta.put("avgAccuracy", overview.avgAccuracy());
@@ -388,8 +396,10 @@ public class AssistWrittenService {
     } catch (Exception ex) {
       log.debug("Failed to fetch overview for {}: {}", userId, ex.getMessage());
     }
+
     return meta;
   }
+
 
   private String toJson(Map<String, Object> payload) {
     try {
