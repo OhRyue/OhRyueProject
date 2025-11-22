@@ -127,7 +127,7 @@ public class ReportService {
   }
 
   public RecentRecordsResp recentRecords(String userId, int limit) {
-    RecentRecordsResp resp = studyReportClient.recent(userId, limit);
+    RecentRecordsResp resp = studyReportClient.recent(limit);
     if (resp == null || resp.records() == null) {
       return new RecentRecordsResp(List.of());
     }

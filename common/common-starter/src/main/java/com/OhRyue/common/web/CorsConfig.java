@@ -14,6 +14,8 @@ public class CorsConfig {
   public CorsFilter corsFilter(){
     CorsConfiguration cfg = new CorsConfiguration();
     cfg.addAllowedOriginPattern("http://localhost:3000");
+    cfg.addAllowedOrigin("https://mycertpilot.com");
+    cfg.addAllowedOrigin("https://www.mycertpilot.com");
     cfg.addAllowedHeader("*");
     cfg.addAllowedMethod("*");
     cfg.setAllowCredentials(true);

@@ -80,7 +80,7 @@ public class HomeDashboardService {
       return new HomeProgressCard(0, 0, 0, 0.0, null);
     }
     // StudyReportClient 쪽은 원래대로 userId + certId 조합 유지
-    return studyReportClient.progressCard(userId, me.goal().certId());
+    return studyReportClient.progressCard(me.goal().certId());
   }
 
   public HomeRanking ranking(String userId) {
