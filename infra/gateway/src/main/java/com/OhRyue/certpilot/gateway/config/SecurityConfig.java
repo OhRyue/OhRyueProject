@@ -38,7 +38,7 @@ public class SecurityConfig {
   @Bean
   public SecurityWebFilterChain springSecurity(ServerHttpSecurity http) {
     http
-        // ❌ CORS는 전부 application.yml의 spring.cloud.gateway.globalcors 에서만 처리
+        // CORS는 전부 application.yml의 spring.cloud.gateway.globalcors 에서만 처리
         // .cors(...) 자체를 호출하지 않습니다.
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .authorizeExchange(reg -> reg
