@@ -9,6 +9,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -18,45 +19,47 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private static final String[] SWAGGER = {
-            "/swagger-ui/**",
-            "/swagger-ui.html",
-            "/v3/api-docs/**"
-    };
+  private static final String[] SWAGGER = {
+      "/swagger-ui/**",
+      "/swagger-ui.html",
+      "/v3/api-docs/**"
+  };
 
-    private static final String[] ACTUATOR = {
-            "/actuator/health",
-            "/actuator/info",
-            "/actuator/prometheus"
-    };
+  private static final String[] ACTUATOR = {
+      "/actuator/health",
+      "/actuator/info",
+      "/actuator/prometheus"
+  };
 
-    private final JwtAuthFilter jwtAuthFilter;
+  private final JwtAuthFilter jwtAuthFilter;
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+  @Bean
+  public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
-        http
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-                .exceptionHandling(ex ->
-                        ex.authenticationEntryPoint((request, response, authException) -> {
-                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "인증이 필요합니다");
-                        })
-                )
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(SWAGGER).permitAll()
-                        .requestMatchers(ACTUATOR).permitAll()
-                        .requestMatchers("/actuator/**").permitAll()
-                        // 대전/토너먼트/골든벨 API 는 전부 로그인 사용자 기준이므로 인증 필수
-                        .requestMatchers("/api/versus**").authenticated()
-                        .anyRequest().permitAll()
-                )
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                .httpBasic(httpBasic -> httpBasic.disable())
-                .formLogin(form -> form.disable());
+    http
+        // CORS는 Gateway에서만 처리
+        .cors(AbstractHttpConfigurer::disable)
+        .csrf(AbstractHttpConfigurer::disable)
+        .sessionManagement(session ->
+            session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        )
+        .exceptionHandling(ex ->
+            ex.authenticationEntryPoint((request, response, authException) -> {
+              response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "인증이 필요합니다");
+            })
+        )
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers(SWAGGER).permitAll()
+            .requestMatchers(ACTUATOR).permitAll()
+            .requestMatchers("/actuator/**").permitAll()
+            // 대전/토너먼트/골든벨 API 는 전부 로그인 사용자 기준이므로 인증 필수
+            .requestMatchers("/api/versus/**").authenticated()
+            .anyRequest().permitAll()
+        )
+        .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+        .httpBasic(AbstractHttpConfigurer::disable)
+        .formLogin(AbstractHttpConfigurer::disable);
 
-        return http.build();
-    }
+    return http.build();
+  }
 }
