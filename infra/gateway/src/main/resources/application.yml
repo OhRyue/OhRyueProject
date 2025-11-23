@@ -14,9 +14,9 @@ spring:
 
   cloud:
     gateway:
+      # 중복 헤더 제거 + RateLimiter
       default-filters:
-        # CORS 헤더가 여러 번 붙어도, 값이 중복되면 하나로만 남기도록 설정
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin,RETAIN_UNIQUE
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
         - name: RequestRateLimiter
           args:
             redis-rate-limiter.replenishRate: 1
@@ -24,26 +24,25 @@ spring:
             redis-rate-limiter.requestedTokens: 6
             key-resolver: "#{@userKeyResolver}"
 
-      server:
-        webflux:
-          globalcors:
-            add-to-simple-url-handler-mapping: true
-            corsConfigurations:
-              "[/**]":
-                allowedOrigins:
-                  - ${FRONTEND_ORIGIN:http://localhost:3000}
-                  - https://mycertpilot.com
-                  - https://www.mycertpilot.com
-                allowedMethods:
-                  - GET
-                  - POST
-                  - PUT
-                  - DELETE
-                  - OPTIONS
-                  - PATCH
-                allowedHeaders: "*"
-                allowCredentials: true
-                maxAge: 3600
+      # CORS 전역 설정 (Gateway 한 군데에서만 처리)
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        corsConfigurations:
+          "[/**]":
+            allowedOrigins:
+              - ${FRONTEND_ORIGIN:http://localhost:3000}
+              - https://mycertpilot.com
+              - https://www.mycertpilot.com
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+              - PATCH
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
 
       routes:
         # --- study ---
