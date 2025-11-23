@@ -15,7 +15,8 @@ spring:
   cloud:
     gateway:
       default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+        # CORS 헤더가 여러 번 붙어도, 값이 중복되면 하나로만 남기도록 설정
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin,RETAIN_UNIQUE
         - name: RequestRateLimiter
           args:
             redis-rate-limiter.replenishRate: 1
