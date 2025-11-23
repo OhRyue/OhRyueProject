@@ -5,7 +5,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
@@ -39,8 +38,8 @@ public class SecurityConfig {
   @Bean
   public SecurityWebFilterChain springSecurity(ServerHttpSecurity http) {
     return http
-        // Gateway에서도 CORS 활성화
-        .cors(Customizer.withDefaults())
+        // 여기서는 CORS 비활성화 (실제 CORS 설정은 application.yml의 globalcors 에서만 처리)
+        .cors(corsSpec -> corsSpec.disable())
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .authorizeExchange(reg -> reg
             .pathMatchers("/actuator/**").permitAll()
