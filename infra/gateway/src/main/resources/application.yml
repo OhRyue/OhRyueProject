@@ -15,8 +15,9 @@ spring:
   cloud:
     gateway:
       # 중복 헤더 제거 + RateLimiter
+      # DedupeResponseHeader: downstream 서비스가 실수로 CORS 헤더를 추가하는 경우를 대비한 안전장치
       default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin Access-Control-Allow-Methods Access-Control-Allow-Headers RETAIN_FIRST
         - name: RequestRateLimiter
           args:
             redis-rate-limiter.replenishRate: 1
