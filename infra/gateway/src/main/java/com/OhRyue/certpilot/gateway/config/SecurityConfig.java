@@ -5,7 +5,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
@@ -38,9 +37,9 @@ public class SecurityConfig {
 
   @Bean
   public SecurityWebFilterChain springSecurity(ServerHttpSecurity http) {
-    return http
-        // Gateway에서도 CORS 활성화
-        .cors(Customizer.withDefaults())
+    http
+        // ❌ CORS는 전부 application.yml의 spring.cloud.gateway.globalcors 에서만 처리
+        // .cors(...) 자체를 호출하지 않습니다.
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .authorizeExchange(reg -> reg
             .pathMatchers("/actuator/**").permitAll()
@@ -49,8 +48,9 @@ public class SecurityConfig {
         )
         .oauth2ResourceServer(o -> o.jwt(j -> {
           // 기본 서명 검증만 사용 (추가 커스터마이징 필요 시 여기서)
-        }))
-        .build();
+        }));
+
+    return http.build();
   }
 
   private byte[] decodeSecret(String secret) {
