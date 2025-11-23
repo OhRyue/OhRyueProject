@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
@@ -38,12 +39,17 @@ public class SecurityConfig {
   @Bean
   public SecurityWebFilterChain springSecurity(ServerHttpSecurity http) {
     return http
+        // Gateway에서도 CORS 활성화
+        .cors(Customizer.withDefaults())
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .authorizeExchange(reg -> reg
             .pathMatchers("/actuator/**").permitAll()
-            .anyExchange().permitAll() // 인증 강제 X (유효 토큰 시 Principal 채움)
+            // 지금은 인증 강제하지 않고, 유효 토큰이 있으면 Principal만 채우는 모드
+            .anyExchange().permitAll()
         )
-        .oauth2ResourceServer(o -> o.jwt(j -> { /* 기본 서명검증 */ }))
+        .oauth2ResourceServer(o -> o.jwt(j -> {
+          // 기본 서명 검증만 사용 (추가 커스터마이징 필요 시 여기서)
+        }))
         .build();
   }
 

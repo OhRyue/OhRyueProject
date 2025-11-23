@@ -4,12 +4,13 @@ import com.OhRyue.certpilot.account.domain.UserProfile;
 import com.OhRyue.certpilot.account.dto.ProfileDtos.ProfileResponse;
 import com.OhRyue.certpilot.account.dto.ProfileDtos.ProfileUpdateRequest;
 import com.OhRyue.certpilot.account.service.ProfileService;
+import com.OhRyue.common.auth.AuthUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Account - Profile", description = "사용자 프로필 APIs")
@@ -23,8 +24,14 @@ public class ProfileController {
   /* -------- 프로필 조회 -------- */
   @Operation(summary = "내 프로필 조회")
   @GetMapping
-  public ResponseEntity<ProfileResponse> myProfile(Authentication auth) {
-    String userId = auth.getName();
+  public ResponseEntity<ProfileResponse> myProfile() {
+    String userId;
+    try {
+      userId = AuthUserUtil.getCurrentUserId();
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
     UserProfile profile = profileService.get(userId);
     return ResponseEntity.ok(ProfileResponse.builder()
         .userId(profile.getUserId())
@@ -38,9 +45,16 @@ public class ProfileController {
   /* -------- 프로필 수정 -------- */
   @Operation(summary = "내 프로필 갱신")
   @PutMapping
-  public ResponseEntity<ProfileResponse> updateMyProfile(Authentication auth,
-                                                         @RequestBody @Valid ProfileUpdateRequest req) {
-    String userId = auth.getName();
+  public ResponseEntity<ProfileResponse> updateMyProfile(
+      @RequestBody @Valid ProfileUpdateRequest req) {
+
+    String userId;
+    try {
+      userId = AuthUserUtil.getCurrentUserId();
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
     UserProfile saved = profileService.upsert(
         UserProfile.builder()
             .userId(userId)

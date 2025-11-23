@@ -25,7 +25,7 @@ public class JwtTokenProvider {
     /**
      * 프로젝트 공통 JWT 시크릿.
      */
-    @Value("${auth.jwt.secret:${jwt.secret-key:}}")
+    @Value("${security.jwt.hmac-secret}")
     private String secretKey;
 
     private String originalSecretKey; // 원본 secret key (로깅용)
