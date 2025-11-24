@@ -27,6 +27,13 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.ssl.enable: false
+      mail.smtp.connectiontimeout: 30000  # 30초 (방화벽 통과 시간 고려)
+      mail.smtp.timeout: 60000            # 60초 (SMTP 응답 대기 시간)
+      mail.smtp.writetimeout: 30000       # 30초 (데이터 전송 타임아웃)
+      mail.debug: false                   # 디버그 모드 (필요시 true로 변경)
+      mail.smtp.ssl.trust: smtp.gmail.com # Gmail SSL 인증서 신뢰
 
 eureka:
   client:

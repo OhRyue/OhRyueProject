@@ -82,11 +82,13 @@ public class AuthController {
 
     // 1) 코드 먼저 저장 (응답과 상관 없는 빠른 작업)
     verificationCodeService.saveCode(email, code);
+    log.info("📝 [Auth] 인증코드 저장 완료 - email={}", email);
 
     // 2) 메일 발송은 비동기로 처리 (예외는 내부에서 로깅)
+    log.info("📤 [Auth] 비동기 메일 발송 요청 - email={}", email);
     emailService.sendVerificationCodeAsync(email, code);
 
-    // 3) 클라이언트에게는 “발송 요청 접수” 기준으로 빠르게 응답
+    // 3) 클라이언트에게는 "발송 요청 접수" 기준으로 빠르게 응답
     return ResponseEntity.ok(Map.of(
         "message", "인증코드 발송을 요청했습니다. 잠시 후 이메일을 확인해주세요."
     ));
@@ -213,6 +215,7 @@ public class AuthController {
 
     String email = normalizeEmail(user.getEmail());
     String code = verificationCodeService.generateResetCode(email);
+    log.info("📤 [Auth] 비밀번호 찾기 - 비동기 메일 발송 요청 - email={}", email);
     emailService.sendVerificationCodeAsync(email, code);
 
     return ResponseEntity.ok(Map.of(

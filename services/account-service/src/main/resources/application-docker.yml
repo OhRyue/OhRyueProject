@@ -29,9 +29,11 @@ spring:
       mail.smtp.starttls.enable: true     # 587 포트 → STARTTLS 사용
       mail.smtp.starttls.required: true   # TLS 필수
       mail.smtp.ssl.enable: false         # 587에서는 SSL 직접 사용 안 함
-      mail.smtp.connectiontimeout: 5000   # 5초
-      mail.smtp.timeout: 10000            # 10초
-      mail.smtp.writetimeout: 5000        # 5초
+      mail.smtp.connectiontimeout: 30000  # 30초 (방화벽 통과 시간 고려)
+      mail.smtp.timeout: 60000            # 60초 (SMTP 응답 대기 시간)
+      mail.smtp.writetimeout: 30000       # 30초 (데이터 전송 타임아웃)
+      mail.debug: false                   # 디버그 모드 (필요시 true로 변경)
+      mail.smtp.ssl.trust: smtp.gmail.com # Gmail SSL 인증서 신뢰
 
 eureka:
   client:
