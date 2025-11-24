@@ -79,11 +79,16 @@ public class AuthController {
     }
 
     String code = String.format("%06d", (int) (Math.random() * 1_000_000));
-    verificationCodeService.saveCode(email, code);
-    emailService.sendVerificationCode(email, code);
 
+    // 1) 코드 먼저 저장 (응답과 상관 없는 빠른 작업)
+    verificationCodeService.saveCode(email, code);
+
+    // 2) 메일 발송은 비동기로 처리 (예외는 내부에서 로깅)
+    emailService.sendVerificationCodeAsync(email, code);
+
+    // 3) 클라이언트에게는 “발송 요청 접수” 기준으로 빠르게 응답
     return ResponseEntity.ok(Map.of(
-        "message", "인증코드가 이메일로 전송되었습니다."
+        "message", "인증코드 발송을 요청했습니다. 잠시 후 이메일을 확인해주세요."
     ));
   }
 
@@ -208,10 +213,10 @@ public class AuthController {
 
     String email = normalizeEmail(user.getEmail());
     String code = verificationCodeService.generateResetCode(email);
-    emailService.sendVerificationCode(email, code);
+    emailService.sendVerificationCodeAsync(email, code);
 
     return ResponseEntity.ok(Map.of(
-        "message", "인증 코드가 이메일로 전송되었습니다."
+        "message", "인증 코드 발송을 요청했습니다. 잠시 후 이메일을 확인해주세요."
     ));
   }
 
