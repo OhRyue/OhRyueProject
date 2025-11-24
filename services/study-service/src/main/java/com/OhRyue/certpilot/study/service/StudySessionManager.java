@@ -118,7 +118,7 @@ public class StudySessionManager {
     /* ===================== 세션 종료/요약/상태 변경 (쓰기) ===================== */
 
     /**
-     * 세션 종료 (스펙 v1.0)
+     * 세션 종료
      * - completed: 모든 문제를 풀었는지 (항상 true)
      * - passed: 모든 문제를 맞췄는지 (scorePct >= 100.0 또는 allCorrect)
      * - xpGranted: XP가 이미 반영되었는지 (초기값 false, XP 지급 시 true로 변경)
@@ -131,7 +131,7 @@ public class StudySessionManager {
         session.setSummaryJson(stringify(current));
         session.setFinishedAt(Instant.now());
         session.setStatus("SUBMITTED");
-        // 스펙 v1.0: completed, passed, xpGranted 설정
+        // completed, passed, xpGranted 설정
         session.setCompleted(true); // 모든 문제를 풀었으므로 true
         session.setPassed(scorePct >= 100.0); // 100% 정답이면 passed
         // xpGranted는 XP 지급 시점에 별도로 설정 (기본값 false 유지)

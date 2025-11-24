@@ -33,7 +33,7 @@ import java.util.*;
 @Transactional(readOnly = true)
 public class AssistWrittenService {
 
-  // 스펙 v1.0: 문제 수 5/10/20 (기존 10/20/50에서 변경)
+  // 문제 수 5/10/20 (기존 10/20/50에서 변경)
   private static final List<Integer> ALLOWED_COUNTS = List.of(5, 10, 20);
 
   private final QuestionRepository questionRepository;
@@ -41,7 +41,7 @@ public class AssistWrittenService {
   private final UserProgressRepository progressRepository;
   private final ProgressQueryClient progressQueryClient;
   private final TopicTreeService topicTreeService;
-  // 스펙 v1.0: StudySession 관리 및 XP 지급을 위한 의존성 추가
+  // StudySession 관리 및 XP 지급을 위한 의존성 추가
   private final com.OhRyue.certpilot.study.repository.UserAnswerRepository userAnswerRepository;
   private final StudySessionManager sessionManager;
   private final com.OhRyue.certpilot.study.client.ProgressHookClient progressHookClient;
@@ -131,7 +131,7 @@ public class AssistWrittenService {
   }
 
   /* ================= 제출(필기 – MCQ) ================= */
-  // 스펙 v1.0: StudySession 기록, UserAnswer 저장, 틀린 문제 수집, XP 지급
+  // StudySession 기록, UserAnswer 저장, 틀린 문제 수집, XP 지급
 
   @Transactional
   public FlowDtos.StepEnvelope<AssistDtos.WrittenSubmitResp> submit(
@@ -161,7 +161,7 @@ public class AssistWrittenService {
         .filter(q -> q.getMode() == ExamMode.WRITTEN && q.getType() == QuestionType.MCQ)
         .collect(java.util.stream.Collectors.toMap(Question::getId, q -> q));
 
-    // 스펙 v1.0: Assist용 StudySession 생성 (mode: ASSIST_CATEGORY/ASSIST_DIFFICULTY/ASSIST_WEAK)
+    // Assist용 StudySession 생성 (mode: ASSIST_CATEGORY/ASSIST_DIFFICULTY/ASSIST_WEAK)
     String assistMode = "ASSIST_CATEGORY"; // TODO: 실제로는 요청/컨트롤러에서 assistType 전달 받아야 함
     Map<String, Object> scope = Map.of("assistType", assistMode, "questionCount", req.answers().size());
     com.OhRyue.certpilot.study.domain.StudySession session = sessionManager.ensureSession(
@@ -187,7 +187,7 @@ public class AssistWrittenService {
         wrongQuestionIds.add(q.getId());
       }
 
-      // 스펙 v1.0: 오답은 AI 해설 추가
+      // 오답은 AI 해설 추가
       String explanation = Optional.ofNullable(q.getSolutionText()).orElse("");
       String aiExplanation = "";
       if (!isCorrect) {
@@ -205,7 +205,7 @@ public class AssistWrittenService {
           explanation + (aiExplanation.isBlank() ? "" : "\n\n[AI 해설]\n" + aiExplanation)
       ));
 
-      // 스펙 v1.0: StudySessionItem 및 UserAnswer 저장
+      // StudySessionItem 및 UserAnswer 저장
       Map<String, Object> answerPayload = Map.of("label", userLabel, "correct", isCorrect);
       String answerJson = toJson(answerPayload);
       String aiExplainJson = aiExplanation.isBlank() ? null : toJson(Map.of("explain", aiExplanation));
@@ -247,7 +247,7 @@ public class AssistWrittenService {
       }
     }
 
-    // 스펙 v1.0: 세션 완료 처리 및 XP 지급
+    // 세션 완료 처리 및 XP 지급
     boolean allCorrect = !items.isEmpty() && wrongQuestionIds.isEmpty();
     double scorePct = items.isEmpty() ? 0.0 : (correct * 100.0) / items.size();
     sessionManager.closeSession(session, scorePct, allCorrect, Map.of(
@@ -256,7 +256,7 @@ public class AssistWrittenService {
         "wrongQuestionIds", wrongQuestionIds
     ));
 
-    // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
+    // passed=true일 때만 XP 지급, 세션당 1회만
     if (allCorrect && !Boolean.TRUE.equals(session.getXpGranted())) {
       try {
         progressHookClient.flowComplete(
@@ -277,7 +277,7 @@ public class AssistWrittenService {
         new AssistDtos.WrittenSubmitResp(req.answers().size(), correct, items);
 
     return new FlowDtos.StepEnvelope<>(
-        session.getId(), // 스펙 v1.0: sessionId 반환 (틀린 문제 다시보기용)
+        session.getId(), // sessionId 반환 (틀린 문제 다시보기용)
         "ASSIST_WRITTEN",
         "ASSIST_WRITTEN_SUBMIT",
         "COMPLETE",
@@ -332,7 +332,7 @@ public class AssistWrittenService {
     return new AssistDtos.QuizSet(items);
   }
 
-  /** 5/10/20 중 가장 가까운 값으로 보정 (미지정/이상치 방지) - 스펙 v1.0 */
+  /** 5/10/20 중 가장 가까운 값으로 보정 (미지정/이상치 방지) */
   private int sanitizeCount(Integer v) {
     if (v == null) return 10;
     if (ALLOWED_COUNTS.contains(v)) return v;

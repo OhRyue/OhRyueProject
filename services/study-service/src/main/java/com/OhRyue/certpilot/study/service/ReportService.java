@@ -36,7 +36,7 @@ public class ReportService {
     private final UserAnswerRepository userAnswerRepository;
     private final UserProgressRepository userProgressRepository;
     private final CertCurriculumClient certCurriculumClient;  // cert-service 커리큘럼 조회용 Feign
-    // 스펙 v1.0: 최근 학습 결과를 위한 의존성
+    // 최근 학습 결과를 위한 의존성
     private final StudySessionRepository studySessionRepository;
     private final StudySessionItemRepository studySessionItemRepository;
     private final CurriculumGateway curriculumGateway;
@@ -175,7 +175,7 @@ public class ReportService {
         );
     }
 
-    /* ======================= 최근 학습 결과 (세션 기반) - 스펙 v1.0 ======================= */
+    /* ======================= 최근 학습 결과 (세션 기반) ======================= */
 
     public RecentRecordsResp recentRecords(String userId, int limit) {
         if (limit <= 0) limit = 30;

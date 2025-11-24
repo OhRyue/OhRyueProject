@@ -206,7 +206,7 @@ public class AIExplanationService {
 
   /**
    * AI 장애 시 실기 문제 Fallback 채점
-   * 스펙 v1.0: 실기 서술형은 solution_text의 답안을 단어로 잘라 사용자의 답안과 비교
+   * 실기 서술형은 solution_text의 답안을 단어로 잘라 사용자의 답안과 비교
    * - 키워드 3개 이상 겹침: 100점
    * - 키워드 1~2개 겹침: 60점
    * - 키워드 0개 겹침: 0점
@@ -228,7 +228,7 @@ public class AIExplanationService {
         .filter(answer::contains)
         .count();
 
-    // 스펙 v1.0: 키워드 매칭 개수에 따른 점수 부여
+    // 키워드 매칭 개수에 따른 점수 부여
     if (matchCount >= 3) {
       return 100;
     } else if (matchCount >= 1) {

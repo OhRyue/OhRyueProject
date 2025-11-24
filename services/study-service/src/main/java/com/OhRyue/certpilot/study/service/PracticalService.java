@@ -211,7 +211,7 @@ public class PracticalService {
   public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalSet(Long topicId) {
     String userId = AuthUserUtil.getCurrentUserId();
 
-    // SHORT 3 + LONG 2 = 총 5문제 (스펙 v1.0)
+    // SHORT 3 + LONG 2 = 총 5문제
     List<Question> shortQuestions = questionRepository.pickRandomByTopic(
         topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 3));
     List<Question> longQuestions = questionRepository.pickRandomByTopic(
@@ -337,7 +337,7 @@ public class PracticalService {
     sessionManager.saveStepMeta(session, "practical", practicalMeta);
 
     // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
-    // 스펙 v1.0: 실기는 60점 이상이면 passed
+    // 실기는 60점 이상이면 passed
     if (!everCompleted && allPassedNow) {
       sessionManager.closeSession(session, avgScore, true, Map.of("avgScore", avgScore));
     } else if (!everCompleted) {
@@ -371,7 +371,7 @@ public class PracticalService {
     Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
     if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
 
-    // SHORT 6 + LONG 4 = 총 10문제 (스펙 v1.0)
+    // SHORT 6 + LONG 4 = 총 10문제
     List<Question> shortQuestions = questionRepository.pickRandomByTopicIn(
         topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 6));
     List<Question> longQuestions = questionRepository.pickRandomByTopicIn(
@@ -516,7 +516,7 @@ public class PracticalService {
     // everCompleted == true 인 경우는 상태 유지
 
     // Review 세트 완주 시 Flow XP hook (PRACTICAL / REVIEW / rootTopicId)
-    // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
+    // passed=true일 때만 XP 지급, 세션당 1회만
     if (finalCompleted && allPassedNow && !Boolean.TRUE.equals(session.getXpGranted())) {
       try {
         progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
@@ -638,7 +638,7 @@ public class PracticalService {
     }
 
     // Practical Micro 세트 완주 시 Flow XP hook (PRACTICAL / MICRO / topicId)
-    // 스펙 v1.0: passed=true일 때만 XP 지급, 세션당 1회만
+    // passed=true일 때만 XP 지급, 세션당 1회만
     if (completed && sessionId != null) {
       StudySession latestSession = sessionManager.getSession(sessionId);
       if (!Boolean.TRUE.equals(latestSession.getXpGranted())) {
