@@ -83,7 +83,8 @@ public class PracticalService {
         status,
         next,
         sessionManager.loadMeta(session),
-        new WrittenDtos.MiniSet(items)
+        new WrittenDtos.MiniSet(items),
+        null  // PRACTICAL은 LearningSession을 사용하지 않음
     );
   }
 
@@ -186,7 +187,8 @@ public class PracticalService {
         // 항상 PRACTICAL_SET 으로 이동 가능하도록 고정
         "PRACTICAL_SET",
         sessionManager.loadMeta(session),
-        new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, finalPassed, items, wrongIds)
+        new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, finalPassed, items, wrongIds),
+        null  // PRACTICAL은 LearningSession을 사용하지 않음
     );
   }
 
@@ -245,7 +247,8 @@ public class PracticalService {
         status,
         next,
         sessionManager.loadMeta(session),
-        new PracticalDtos.PracticalSet(items)
+        new PracticalDtos.PracticalSet(items),
+        null  // PRACTICAL은 LearningSession을 사용하지 않음
     );
   }
 
@@ -357,7 +360,8 @@ public class PracticalService {
             total == 0 ? 0 : (int) Math.round(avgScore),
             items,
             wrongIds
-        )
+        ),
+        null  // PRACTICAL은 LearningSession을 사용하지 않음
     );
   }
 
@@ -403,7 +407,8 @@ public class PracticalService {
         status,
         next,
         sessionManager.loadMeta(session),
-        new PracticalDtos.PracticalSet(items)
+        new PracticalDtos.PracticalSet(items),
+        null  // REVIEW는 LearningSession을 사용하지 않음
     );
   }
 
@@ -544,7 +549,8 @@ public class PracticalService {
             total == 0 ? 0 : (int) Math.round(avgScore),
             items,
             wrongIds
-        )
+        ),
+        null  // REVIEW는 LearningSession을 사용하지 않음
     );
   }
 
@@ -668,7 +674,8 @@ public class PracticalService {
         status,
         null,
         meta,
-        payload
+        payload,
+        null  // PRACTICAL은 LearningSession을 사용하지 않음
     );
   }
 

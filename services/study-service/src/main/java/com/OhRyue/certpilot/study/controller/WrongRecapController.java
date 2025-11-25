@@ -41,6 +41,14 @@ public class WrongRecapController {
     return written.wrongRecapBySession(sessionId, step);
   }
 
+  @Operation(summary = "LearningSession 기반 틀린 문제 다시보기(필기)", 
+             description = "LearningSession의 MCQ 단계에서 틀린 문제만 조회")
+  @GetMapping("/written/learning-session")
+  public WrongRecapSet recapWrittenLearningSession(@RequestParam Long learningSessionId) {
+    String userId = AuthUserUtil.getCurrentUserId();
+    return written.wrongRecapByLearningSession(learningSessionId);
+  }
+
   @Operation(summary = "세션 기반 틀린 문제 다시보기(실기)")
   @GetMapping("/practical/session")
   public WrongRecapSet recapPracticalSession(@RequestParam Long sessionId,

@@ -1,7 +1,7 @@
 package com.OhRyue.certpilot.study.controller;
 
 import com.OhRyue.certpilot.study.dto.SessionDtos.*;
-import com.OhRyue.certpilot.study.service.StudySessionService;
+import com.OhRyue.certpilot.study.service.LearningSessionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class SessionController {
 
-  private final StudySessionService session;
+  private final LearningSessionService session;
 
   @Operation(summary = "세션 시작/재개")
   @PostMapping("/start")

@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.certpilot.study.domain.LearningStep;
 import com.OhRyue.certpilot.study.domain.StudySession;
 import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
@@ -26,6 +27,41 @@ public class StudySessionManager {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     /* ===================== 세션 생성/보장 (쓰기) ===================== */
+
+    /**
+     * LearningStep에 연결된 StudySession 조회 또는 생성
+     */
+    @Transactional
+    public StudySession ensureStudySessionForStep(LearningStep learningStep, 
+                                                   String userId, 
+                                                   Long topicId, 
+                                                   ExamMode examMode, 
+                                                   int expectedCount) {
+        // 이미 연결된 StudySession이 있으면 반환
+        if (learningStep.getStudySession() != null) {
+            return learningStep.getStudySession();
+        }
+
+        // 새 StudySession 생성
+        String scopeJson = stringify(Map.of("topicId", topicId));
+        StudySession session = StudySession.builder()
+                .userId(userId)
+                .mode("MICRO")  // MINI, MCQ 단계는 MICRO 모드
+                .examMode(examMode)
+                .topicScopeJson(scopeJson)
+                .questionCount(expectedCount)
+                .status("OPEN")
+                .startedAt(Instant.now())
+                .learningStep(learningStep)
+                .build();
+
+        session = sessionRepository.save(session);
+        
+        // LearningStep에 연결 (양방향 관계 설정)
+        learningStep.setStudySession(session);
+        
+        return session;
+    }
 
     @Transactional
     public StudySession ensureMicroSession(String userId, Long topicId, ExamMode examMode, int expectedCount) {

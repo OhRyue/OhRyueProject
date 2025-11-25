@@ -4,6 +4,8 @@ import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.client.CurriculumGateway;
 import com.OhRyue.certpilot.study.client.ProgressHookClient;
 import com.OhRyue.certpilot.study.domain.*;
+import com.OhRyue.certpilot.study.domain.LearningSession;
+import com.OhRyue.certpilot.study.domain.LearningStep;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.domain.enums.QuestionType;
 import com.OhRyue.certpilot.study.dto.FlowDtos;
@@ -36,6 +38,7 @@ public class WrittenService {
   private final UserAnswerRepository userAnswerRepository;
   private final UserProgressRepository userProgressRepository;
   private final StudySessionManager sessionManager;
+  private final LearningSessionService learningSessionService;
   private final AIExplanationService aiExplanationService;
   private final TopicTreeService topicTreeService;
   private final ProgressHookClient progressHookClient;
@@ -66,6 +69,7 @@ public class WrittenService {
   public FlowDtos.StepEnvelope<WrittenDtos.MiniSet> miniSet(Long topicId) {
     String userId = AuthUserUtil.getCurrentUserId();
 
+    // 1. 문제 로드 (세션 생성 없이 문제만 반환)
     List<Question> questions = questionRepository.pickRandomByTopic(
         topicId, ExamMode.WRITTEN, QuestionType.OX, PageRequest.of(0, MINI_SIZE));
 
@@ -73,22 +77,44 @@ public class WrittenService {
         .map(q -> new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse("")))
         .toList();
 
-    StudySession session = sessionManager.ensureMicroSession(
-        userId, topicId, ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
-    Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
-    boolean passed = Boolean.TRUE.equals(miniMeta.get("passed"));
+    // 2. 기존 세션이 있으면 상태 확인 (없어도 문제는 반환)
+    Long sessionId = null;
+    String status = "IN_PROGRESS";
+    String nextStep = null;
+    Map<String, Object> meta = Map.of();
 
-    String status = passed ? "COMPLETE" : "IN_PROGRESS";
-    String nextStep = passed ? "MICRO_MCQ" : null;
+    Optional<LearningSession> existingSession = learningSessionService.findLearningSession(
+        userId, topicId, ExamMode.WRITTEN);
+    
+    if (existingSession.isPresent()) {
+      LearningSession learningSession = existingSession.get();
+      try {
+        LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
+        boolean passed = "COMPLETE".equals(miniStep.getStatus());
+        status = passed ? "COMPLETE" : "IN_PROGRESS";
+        nextStep = passed ? "MCQ" : null;
+        
+        StudySession studySession = miniStep.getStudySession();
+        if (studySession != null) {
+          sessionId = studySession.getId();
+          meta = sessionManager.loadMeta(studySession);
+        }
+      } catch (Exception e) {
+        // LearningStep이 없거나 오류 발생 시 기본값 유지
+      }
+    }
 
+    Long learningSessionId = existingSession.map(LearningSession::getId).orElse(null);
+    
     return new FlowDtos.StepEnvelope<>(
-        session.getId(),
+        sessionId,
         "MICRO",
         "MICRO_MINI",
         status,
         nextStep,
-        sessionManager.loadMeta(session),
-        new WrittenDtos.MiniSet(items)
+        meta,
+        new WrittenDtos.MiniSet(items),
+        learningSessionId
     );
   }
 
@@ -96,11 +122,18 @@ public class WrittenService {
   public FlowDtos.StepEnvelope<WrittenDtos.MiniSubmitResp> submitMini(WrittenDtos.MiniSubmitReq req) {
     String userId = AuthUserUtil.getCurrentUserId();
 
+    // 1. LearningSession과 MINI 단계 조회
+    LearningSession learningSession = learningSessionService.getOrCreateLearningSession(
+        userId, req.topicId(), ExamMode.WRITTEN);
+    LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
+    
+    // 2. StudySession 조회 또는 생성
+    StudySession session = sessionManager.ensureStudySessionForStep(
+        miniStep, userId, req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+    
     Map<Long, Question> questionMap = fetchQuestions(req.answers().stream()
         .map(WrittenDtos.MiniAnswer::questionId).toList(), QuestionType.OX);
-
-    StudySession session = sessionManager.ensureMicroSession(
-        userId, req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+    
     int baseOrder = sessionManager.items(session.getId()).size();
 
     int correctCount = 0;
@@ -145,21 +178,49 @@ public class WrittenService {
     }
 
     boolean passedNow = correctCount == req.answers().size();
+    int scorePct = req.answers().isEmpty() ? 0 : (correctCount * 100) / req.answers().size();
 
-    Map<String, Object> prevMiniMeta = sessionManager.loadStepMeta(session, "mini");
-    boolean everPassed = Boolean.TRUE.equals(prevMiniMeta.get("passed"));
-
+    // 3. LearningStep 업데이트 (이전 메타데이터 불러와서 누적)
+    Map<String, Object> prevMiniMeta = parseJson(miniStep.getMetadataJson());
     Map<String, Object> miniMeta = new HashMap<>(prevMiniMeta);
-    miniMeta.put("total", req.answers().size());
-    miniMeta.put("correct", correctCount);
-    miniMeta.put("passed", everPassed || passedNow);
-    miniMeta.put("wrongQuestionIds", wrongQuestionIds);
+    
+    // 누적 로직
+    int prevTotal = readInt(prevMiniMeta, "total");
+    int prevCorrect = readInt(prevMiniMeta, "correct");
+    @SuppressWarnings("unchecked")
+    List<Long> prevWrongIds = prevMiniMeta.get("wrongQuestionIds") instanceof List<?> 
+        ? (List<Long>) prevMiniMeta.get("wrongQuestionIds")
+        : new ArrayList<>();
+    
+    int newTotal = prevTotal + req.answers().size();
+    int newCorrect = prevCorrect + correctCount;
+    List<Long> allWrongIds = new ArrayList<>(prevWrongIds);
+    allWrongIds.addAll(wrongQuestionIds);
+    boolean everPassed = Boolean.TRUE.equals(prevMiniMeta.get("passed")) || passedNow;
+    
+    miniMeta.put("total", newTotal);
+    miniMeta.put("correct", newCorrect);
+    miniMeta.put("passed", everPassed);
+    miniMeta.put("wrongQuestionIds", allWrongIds);
     miniMeta.put("lastSubmittedAt", Instant.now().toString());
+    
+    // 누적된 값으로 scorePct 재계산
+    int accumulatedScorePct = newTotal > 0 ? (newCorrect * 100) / newTotal : 0;
+    
+    String metadataJson = toJson(miniMeta);
+    learningSessionService.updateStepStatus(miniStep, "COMPLETE", accumulatedScorePct, metadataJson);
+
+    // 4. StudySession의 summaryJson에도 저장 (하위 호환성)
     sessionManager.saveStepMeta(session, "mini", miniMeta);
 
-    String status = "COMPLETE";
-    String nextStep = "MICRO_MCQ";
+    // 5. 미니체크 4문제 완료 시 세션 종료
+    if (newTotal >= MINI_SIZE) {
+      sessionManager.closeSession(session, accumulatedScorePct, Map.of("miniScorePct", accumulatedScorePct));
+    }
 
+    String status = "COMPLETE";
+    String nextStep = "MCQ";
+    
     return new FlowDtos.StepEnvelope<>(
         session.getId(),
         "MICRO",
@@ -167,7 +228,8 @@ public class WrittenService {
         status,
         nextStep,
         sessionManager.loadMeta(session),
-        new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, everPassed || passedNow, resultItems, wrongQuestionIds)
+        new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, everPassed, resultItems, wrongQuestionIds),
+        learningSession.getId()
     );
   }
 
@@ -177,12 +239,16 @@ public class WrittenService {
   public FlowDtos.StepEnvelope<WrittenDtos.McqSet> mcqSet(Long topicId) {
     String userId = AuthUserUtil.getCurrentUserId();
 
-    StudySession session = sessionManager.ensureMicroSession(
-        userId, topicId, ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+    // 1. LearningSession과 MCQ 단계 조회
+    LearningSession learningSession = learningSessionService.getOrCreateLearningSession(
+        userId, topicId, ExamMode.WRITTEN);
+    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
 
-    Map<String, Object> mcqMeta = sessionManager.loadStepMeta(session, "mcq");
-    boolean completed = Boolean.TRUE.equals(mcqMeta.get("completed"));
+    // 2. 해당 단계의 StudySession 조회 또는 생성
+    StudySession studySession = sessionManager.ensureStudySessionForStep(
+        mcqStep, userId, topicId, ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
 
+    // 3. 문제 로드
     List<Question> questions = questionRepository.pickRandomByTopic(
         topicId, ExamMode.WRITTEN, QuestionType.MCQ, PageRequest.of(0, MCQ_SIZE));
 
@@ -195,17 +261,23 @@ public class WrittenService {
         ))
         .toList();
 
+    // 4. 단계 상태 확인
+    boolean completed = "COMPLETE".equals(mcqStep.getStatus());
     String status = completed ? "COMPLETE" : "IN_PROGRESS";
-    String nextStep = completed ? "MICRO_SUMMARY" : null;
+    String nextStep = completed ? "SUMMARY" : null;
+
+    // 5. 메타데이터 로드
+    Map<String, Object> meta = sessionManager.loadMeta(studySession);
 
     return new FlowDtos.StepEnvelope<>(
-        session.getId(),
+        studySession.getId(),
         "MICRO",
         "MICRO_MCQ",
         status,
         nextStep,
-        sessionManager.loadMeta(session),
-        new WrittenDtos.McqSet(items)
+        meta,
+        new WrittenDtos.McqSet(items),
+        learningSession.getId()
     );
   }
 
@@ -213,11 +285,17 @@ public class WrittenService {
   public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> submitMcq(WrittenDtos.McqSubmitReq req) {
     String userId = AuthUserUtil.getCurrentUserId();
 
+    // 1. LearningSession과 MCQ 단계 조회
+    LearningSession learningSession = learningSessionService.getOrCreateLearningSession(
+        userId, req.topicId(), ExamMode.WRITTEN);
+    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+    
+    // 2. StudySession 조회 또는 생성
+    StudySession session = sessionManager.ensureStudySessionForStep(
+        mcqStep, userId, req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
+
     Map<Long, Question> questionMap = fetchQuestions(req.answers().stream()
         .map(WrittenDtos.McqAnswer::questionId).toList(), QuestionType.MCQ);
-
-    StudySession session = sessionManager.ensureMicroSession(
-        userId, req.topicId(), ExamMode.WRITTEN, MINI_SIZE + MCQ_SIZE);
 
     int baseOrder = sessionManager.items(session.getId()).size();
 
@@ -270,24 +348,52 @@ public class WrittenService {
     }
 
     boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
-    double scorePct = items.isEmpty() ? 0.0 : (correctCount * 100.0) / items.size();
+    int scorePct = items.isEmpty() ? 0 : (correctCount * 100) / items.size();
+    boolean mcqCompleted = allCorrect;  // 모든 문제를 맞춰야 완료
 
-    Map<String, Object> prevMcqMeta = sessionManager.loadStepMeta(session, "mcq");
-    boolean everCompleted = Boolean.TRUE.equals(prevMcqMeta.get("completed"));
-    boolean finalCompleted = everCompleted || allCorrect;
-
+    // 3. LearningStep (MCQ) 업데이트 (이전 메타데이터 불러와서 누적)
+    Map<String, Object> prevMcqMeta = parseJson(mcqStep.getMetadataJson());
     Map<String, Object> mcqMeta = new HashMap<>(prevMcqMeta);
-    mcqMeta.put("total", req.answers().size());
-    mcqMeta.put("correct", correctCount);
+    
+    // 누적 로직
+    int prevTotal = readInt(prevMcqMeta, "total");
+    int prevCorrect = readInt(prevMcqMeta, "correct");
+    @SuppressWarnings("unchecked")
+    List<Long> prevWrongIds = prevMcqMeta.get("wrongQuestionIds") instanceof List<?>
+        ? (List<Long>) prevMcqMeta.get("wrongQuestionIds")
+        : new ArrayList<>();
+    
+    int newTotal = prevTotal + req.answers().size();
+    int newCorrect = prevCorrect + correctCount;
+    List<Long> allWrongIds = new ArrayList<>(prevWrongIds);
+    allWrongIds.addAll(wrongIds);
+    boolean prevCompleted = Boolean.TRUE.equals(prevMcqMeta.get("completed"));
+    boolean finalCompleted = prevCompleted || mcqCompleted;
+    int accumulatedScorePct = newTotal > 0 ? (newCorrect * 100) / newTotal : 0;
+    
+    mcqMeta.put("total", newTotal);
+    mcqMeta.put("correct", newCorrect);
     mcqMeta.put("completed", finalCompleted);
-    mcqMeta.put("scorePct", scorePct);
-    mcqMeta.put("wrongQuestionIds", wrongIds);
+    mcqMeta.put("scorePct", accumulatedScorePct);
+    mcqMeta.put("wrongQuestionIds", allWrongIds);
     mcqMeta.put("lastSubmittedAt", Instant.now().toString());
+    
+    String metadataJson = toJson(mcqMeta);
+    learningSessionService.updateStepStatus(mcqStep, "COMPLETE", accumulatedScorePct, metadataJson);
+
+    // 4. 진정한 완료 설정 (MCQ 완료 시)
+    if (finalCompleted && learningSession.getTrulyCompleted() == null) {
+      learningSession.setTrulyCompleted(true);
+      learningSessionService.saveLearningSession(learningSession);
+    }
+
+    // 5. StudySession의 summaryJson에도 저장 (하위 호환성)
     sessionManager.saveStepMeta(session, "mcq", mcqMeta);
 
-    if (!everCompleted && allCorrect) {
-      sessionManager.closeSession(session, scorePct, Map.of("finalScorePct", scorePct));
-    } else if (!everCompleted) {
+    // 6. MCQ 5문제 완료 시 세션 종료
+    if (newTotal >= MCQ_SIZE) {
+      sessionManager.closeSession(session, accumulatedScorePct, Map.of("finalScorePct", accumulatedScorePct));
+    } else {
       sessionManager.updateStatus(session, "OPEN");
     }
 
@@ -295,10 +401,11 @@ public class WrittenService {
         session.getId(),
         "MICRO",
         "MICRO_MCQ",
-        finalCompleted ? "COMPLETE" : "IN_PROGRESS",
-        finalCompleted ? "MICRO_SUMMARY" : "MICRO_MCQ",
+        mcqCompleted ? "COMPLETE" : "IN_PROGRESS",
+        mcqCompleted ? "SUMMARY" : "MICRO_MCQ",
         sessionManager.loadMeta(session),
-        new WrittenDtos.McqSubmitResp(req.answers().size(), correctCount, items, wrongIds)
+        new WrittenDtos.McqSubmitResp(req.answers().size(), correctCount, items, wrongIds),
+        learningSession.getId()
     );
   }
 
@@ -337,7 +444,8 @@ public class WrittenService {
         status,
         nextStep,
         sessionManager.loadMeta(session),
-        new ReviewDtos.ReviewSet(items)
+        new ReviewDtos.ReviewSet(items),
+        null  // REVIEW는 LearningSession을 사용하지 않음
     );
   }
 
@@ -452,7 +560,8 @@ public class WrittenService {
         finalCompleted ? "COMPLETE" : "IN_PROGRESS",
         finalCompleted ? "REVIEW_SUMMARY" : "REVIEW_SET",
         sessionManager.loadMeta(session),
-        new WrittenDtos.McqSubmitResp(req.answers().size(), correctCount, items, wrongIds)
+        new WrittenDtos.McqSubmitResp(req.answers().size(), correctCount, items, wrongIds),
+        null  // REVIEW는 LearningSession을 사용하지 않음
     );
   }
 
@@ -462,6 +571,15 @@ public class WrittenService {
   public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(Long topicId) {
     String userId = AuthUserUtil.getCurrentUserId();
 
+    // 1. LearningSession 조회
+    LearningSession learningSession = null;
+    try {
+      learningSession = learningSessionService.getOrCreateLearningSession(userId, topicId, ExamMode.WRITTEN);
+    } catch (Exception e) {
+      // 세션이 없으면 null로 처리
+    }
+    
+    // 2. StudySession 조회 (하위 호환성을 위해)
     StudySession session = sessionManager.latestMicroSession(userId, topicId).orElse(null);
 
     int miniTotal = 0;
@@ -476,32 +594,73 @@ public class WrittenService {
     Map<String, Object> meta = Map.of();
     Long sessionId = null;
 
-    if (session != null) {
+    if (learningSession != null) {
+      try {
+        // LearningStep에서 메타데이터 추출
+        LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
+        LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+        
+        if (miniStep.getMetadataJson() != null && !miniStep.getMetadataJson().isBlank()) {
+          Map<String, Object> miniMeta = parseJson(miniStep.getMetadataJson());
+          miniTotal = readInt(miniMeta, "total");
+          miniCorrect = readInt(miniMeta, "correct");
+          miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+        }
+        
+        if (mcqStep.getMetadataJson() != null && !mcqStep.getMetadataJson().isBlank()) {
+          Map<String, Object> mcqMeta = parseJson(mcqStep.getMetadataJson());
+          mcqTotal = readInt(mcqMeta, "total");
+          mcqCorrect = readInt(mcqMeta, "correct");
+          mcqCompleted = Boolean.TRUE.equals(mcqMeta.get("completed"));
+        }
+      } catch (Exception e) {
+        // LearningStep이 없거나 파싱 실패 시 기존 방식으로 fallback
+        if (session != null) {
+          Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
+          Map<String, Object> mcqMeta = sessionManager.loadStepMeta(session, "mcq");
+          
+          miniTotal = readInt(miniMeta, "total");
+          miniCorrect = readInt(miniMeta, "correct");
+          miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+          
+          mcqTotal = readInt(mcqMeta, "total");
+          mcqCorrect = readInt(mcqMeta, "correct");
+          mcqCompleted = Boolean.TRUE.equals(mcqMeta.get("completed"));
+        }
+      }
+      
+      // StudySession이 있으면 sessionId 사용
+      if (session != null) {
+        sessionId = session.getId();
+        meta = sessionManager.loadMeta(session);
+
+        List<UserAnswer> sessionAnswers = userAnswerRepository.findByUserIdAndSessionId(userId, sessionId).stream()
+            .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
+            .toList();
+        Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
+        Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
+            .filter(q -> Objects.equals(q.getTopicId(), topicId))
+            .collect(Collectors.toMap(Question::getId, q -> q));
+        List<UserAnswer> answers = sessionAnswers.stream()
+            .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
+            .toList();
+        weakTags = computeWeakTags(answers, questionCache);
+      }
+    } else if (session != null) {
+      // LearningSession이 없지만 StudySession이 있는 경우 (기존 데이터)
       sessionId = session.getId();
       Map<String, Object> miniMeta = sessionManager.loadStepMeta(session, "mini");
       Map<String, Object> mcqMeta = sessionManager.loadStepMeta(session, "mcq");
-
+      
       miniTotal = readInt(miniMeta, "total");
       miniCorrect = readInt(miniMeta, "correct");
       miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
-
+      
       mcqTotal = readInt(mcqMeta, "total");
       mcqCorrect = readInt(mcqMeta, "correct");
       mcqCompleted = Boolean.TRUE.equals(mcqMeta.get("completed"));
-
+      
       meta = sessionManager.loadMeta(session);
-
-      List<UserAnswer> sessionAnswers = userAnswerRepository.findByUserIdAndSessionId(userId, sessionId).stream()
-          .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
-          .toList();
-      Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
-      Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
-          .filter(q -> Objects.equals(q.getTopicId(), topicId))
-          .collect(Collectors.toMap(Question::getId, q -> q));
-      List<UserAnswer> answers = sessionAnswers.stream()
-          .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
-          .toList();
-      weakTags = computeWeakTags(answers, questionCache);
     }
 
     int totalSolved = miniTotal + mcqTotal;
@@ -533,13 +692,16 @@ public class WrittenService {
     );
 
     String status;
-    if (session == null) {
+    if (learningSession == null) {
       status = "NOT_STARTED";
     } else {
       status = completed ? "COMPLETE" : "IN_PROGRESS";
     }
 
-    if (completed && sessionId != null && session != null) {
+    // 진정한 완료(MCQ 완료)일 때만 XP 지급
+    boolean trulyCompleted = learningSession != null && Boolean.TRUE.equals(learningSession.getTrulyCompleted());
+    
+    if (trulyCompleted && sessionId != null && session != null) {
       if (!Boolean.TRUE.equals(session.getXpGranted())) {
         try {
           progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
@@ -558,6 +720,8 @@ public class WrittenService {
       }
     }
 
+    Long learningSessionId = learningSession != null ? learningSession.getId() : null;
+    
     return new FlowDtos.StepEnvelope<>(
         sessionId,
         "MICRO",
@@ -565,11 +729,32 @@ public class WrittenService {
         status,
         null,
         meta,
-        payload
+        payload,
+        learningSessionId
     );
   }
 
   /* ========================= Wrong Recap (세션 기준) ========================= */
+
+  @Transactional(readOnly = true)
+  public WrongRecapDtos.WrongRecapSet wrongRecapByLearningSession(Long learningSessionId) {
+    String userId = AuthUserUtil.getCurrentUserId();
+    
+    // LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    
+    // MCQ 단계의 LearningStep 조회
+    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+    
+    // StudySession 조회
+    StudySession session = mcqStep.getStudySession();
+    if (session == null) {
+      return new WrongRecapDtos.WrongRecapSet(List.of());
+    }
+    
+    // 기존 wrongRecapBySession 로직 재사용
+    return wrongRecapBySession(session.getId(), "MICRO_MCQ");
+  }
 
   @Transactional(readOnly = true)
   public WrongRecapDtos.WrongRecapSet wrongRecapBySession(Long sessionId, String stepCode) {
@@ -900,6 +1085,17 @@ public class WrittenService {
       return objectMapper.writeValueAsString(payload);
     } catch (JsonProcessingException e) {
       return "{}";
+    }
+  }
+
+  private Map<String, Object> parseJson(String json) {
+    if (json == null || json.isBlank()) {
+      return new HashMap<>();
+    }
+    try {
+      return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+    } catch (JsonProcessingException e) {
+      return new HashMap<>();
     }
   }
 

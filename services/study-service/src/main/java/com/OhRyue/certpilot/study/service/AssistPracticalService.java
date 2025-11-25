@@ -152,7 +152,8 @@ public class AssistPracticalService {
           "COMPLETE",
           null,
           fetchStats(userId),
-          new AssistDtos.PracticalSubmitResp(0, 0, List.of())
+          new AssistDtos.PracticalSubmitResp(0, 0, List.of()),
+          null  // ASSIST는 LearningSession을 사용하지 않음
       );
     }
 
@@ -206,7 +207,8 @@ public class AssistPracticalService {
         "COMPLETE",
         null,
         fetchStats(userId),
-        payload
+        payload,
+        null  // ASSIST는 LearningSession을 사용하지 않음
     );
   }
 
@@ -260,7 +262,8 @@ public class AssistPracticalService {
         "IN_PROGRESS",
         null,
         meta,
-        payload
+        payload,
+        null  // ASSIST는 LearningSession을 사용하지 않음
     );
   }
 
