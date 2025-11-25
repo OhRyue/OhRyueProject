@@ -15,3 +15,4 @@ SET completed = 1
 WHERE status = 'CLOSED';
 
 
+

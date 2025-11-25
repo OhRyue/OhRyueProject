@@ -96,7 +96,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         return path.startsWith("/actuator")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-ui")
-                || path.startsWith("/swagger-ui.html");
-        // 필요하면 /api/certs/public/** 이런 식으로 공개 API 추가 가능
+                || path.startsWith("/swagger-ui.html")
+                || path.startsWith("/api/cert/external");  // Q-Net External API는 공개 경로
     }
 }

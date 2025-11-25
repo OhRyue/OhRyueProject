@@ -36,4 +36,12 @@ public interface DataFeignClient {
      */
     @GetMapping(value = "/openQst/getOpenQstList", produces = MediaType.APPLICATION_JSON_VALUE)
     String getOpenQuestions(@RequestParam Map<String, String> params);
+
+    /**
+     * 공개문제 상세 조회
+     * 예시:
+     *   /openQst/getOpenQstDetail?serviceKey=...&artlSeq=5201727&dataFormat=json
+     */
+    @GetMapping(value = "/openQst/getOpenQstDetail", produces = MediaType.APPLICATION_JSON_VALUE)
+    String getOpenQuestionDetail(@RequestParam Map<String, String> params);
 }

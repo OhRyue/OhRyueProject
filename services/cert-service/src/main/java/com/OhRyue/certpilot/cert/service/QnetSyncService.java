@@ -19,8 +19,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -29,11 +29,11 @@ import java.util.*;
 import java.util.function.Function;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class QnetSyncService {
 
-    private static final int DEFAULT_PAGE_SIZE = 100;
+    // 공공데이터포털 API는 한 페이지당 최대 50개까지만 조회 가능
+    private static final int DEFAULT_PAGE_SIZE = 50;
 
     private final QnetFeignClient qnetFeignClient;
     private final DataFeignClient dataGoFeignClient;
@@ -45,14 +45,36 @@ public class QnetSyncService {
     private final ObjectMapper objectMapper;
     private final XmlMapper xmlMapper;
 
+    public QnetSyncService(QnetFeignClient qnetFeignClient,
+                           DataFeignClient dataGoFeignClient,
+                           QnetProperties properties,
+                           QualificationRepository qualificationRepository,
+                           ExamScheduleRepository examScheduleRepository,
+                           OpenQuestionRepository openQuestionRepository,
+                           QnetMapper mapper,
+                           @Qualifier("jacksonObjectMapper") ObjectMapper objectMapper,
+                           XmlMapper xmlMapper) {
+        this.qnetFeignClient = qnetFeignClient;
+        this.dataGoFeignClient = dataGoFeignClient;
+        this.properties = properties;
+        this.qualificationRepository = qualificationRepository;
+        this.examScheduleRepository = examScheduleRepository;
+        this.openQuestionRepository = openQuestionRepository;
+        this.mapper = mapper;
+        this.objectMapper = objectMapper;
+        this.xmlMapper = xmlMapper;
+    }
+
     /**
      * 자격(종목) 기본 정보 동기화
      * - Q-Net(openapi.q-net.or.kr) InquiryQualInfo/getList 사용
+     * 
+     * @param seriesCd 계열코드 (01:기술사, 02:기능장, 03:기사, 04:기능사). null이면 모든 계열 조회
      */
     @Retry(name = "qnetClient")
-    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackSync")
+    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackSyncQualification")
     @CacheEvict(value = {"cert-current", "cert-tips"}, allEntries = true)
-    public SyncResult syncQualifications() {
+    public SyncResult syncQualifications(String seriesCd) {
         return fetchPaged(
                 "qualification",
                 params -> qnetFeignClient.getQualificationInfo(params),
@@ -69,8 +91,19 @@ public class QnetSyncService {
                 extraParams -> {
                     // Q-Net JSON 응답을 받기 위한 파라미터
                     extraParams.put("_type", "json");
+                    // seriesCd가 있으면 추가 (없으면 모든 계열 조회)
+                    if (StringUtils.hasText(seriesCd)) {
+                        extraParams.put("seriesCd", seriesCd);
+                    }
                 }
         );
+    }
+    
+    /**
+     * 자격(종목) 기본 정보 동기화 (모든 계열)
+     */
+    public SyncResult syncQualifications() {
+        return syncQualifications(null);
     }
 
     /**
@@ -79,7 +112,7 @@ public class QnetSyncService {
      * - jmCds 가 여러 개면 내부에서 순차 호출하여 aggregate
      */
     @Retry(name = "datagoClient")
-    @CircuitBreaker(name = "datagoClient", fallbackMethod = "fallbackSync")
+    @CircuitBreaker(name = "datagoClient", fallbackMethod = "fallbackSyncExamSchedule")
     @CacheEvict(value = {"cert-current", "cert-tips"}, allEntries = true)
     public SyncResult syncExamSchedules(Set<String> jmCds, String qualgbCd, String implYy) {
         if (jmCds != null && jmCds.size() > 1) {
@@ -131,7 +164,7 @@ public class QnetSyncService {
      * - data.go.kr(B490007) /openQst/getOpenQstList 사용
      */
     @Retry(name = "datagoClient")
-    @CircuitBreaker(name = "datagoClient", fallbackMethod = "fallbackSync")
+    @CircuitBreaker(name = "datagoClient", fallbackMethod = "fallbackSyncOpenQuestion")
     @CacheEvict(value = {"cert-current", "cert-tips"}, allEntries = true)
     public SyncResult syncOpenQuestions(String jmCd) {
         return fetchPaged(
@@ -161,18 +194,140 @@ public class QnetSyncService {
         );
     }
 
+    /**
+     * (1) 국가전문자격 시험 시행일정 정보 조회
+     * - Q-Net(openapi.q-net.or.kr) InquiryTestDatesNationalProfessionalQualificationSVC/getList 사용
+     */
+    @Retry(name = "qnetClient")
+    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackSync")
+    public SyncResult getNationalProfessionalQualificationSchedule(String seriesCd) {
+        Map<String, String> params = baseParams();
+        params.put("seriesCd", StringUtils.hasText(seriesCd) ? seriesCd : "21");
+        params.put("_type", "json");
+
+        String raw = qnetFeignClient.getNationalProfessionalQualificationSchedule(params);
+        return parseAndLog("national_professional_qualification_schedule", raw);
+    }
+
+    /**
+     * (2) 국가기술자격 종목별 시험정보 조회
+     * - Q-Net(openapi.q-net.or.kr) InquiryTestInformationNTQSVC/getPEList 사용
+     */
+    @Retry(name = "qnetClient")
+    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackSync")
+    public SyncResult getTechnicalQualificationInfo() {
+        Map<String, String> params = baseParams();
+        params.put("_type", "json");
+
+        String raw = qnetFeignClient.getTechnicalQualificationInfo(params);
+        return parseAndLog("technical_qualification_info", raw);
+    }
+
+    /**
+     * (4) 국가자격 공개문제 상세 조회
+     * - data.go.kr(B490007) /openQst/getOpenQstDetail 사용
+     */
+    @Retry(name = "datagoClient")
+    @CircuitBreaker(name = "datagoClient", fallbackMethod = "fallbackSync")
+    public String getOpenQuestionDetail(String artlSeq) {
+        Map<String, String> params = baseParams();
+        params.put("artlSeq", artlSeq);
+        params.put("dataFormat", "json");
+
+        return dataGoFeignClient.getOpenQuestionDetail(params);
+    }
+
+    /**
+     * (6) 자격정보 교과과정 정보 조회
+     * - Q-Net(openapi.q-net.or.kr) InquiryCurriCulumSVC/getList 사용
+     */
+    @Retry(name = "qnetClient")
+    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackSync")
+    public SyncResult getCurriculumInfo() {
+        return fetchPaged(
+                "curriculum",
+                params -> qnetFeignClient.getCurriculumInfo(params),
+                com.OhRyue.certpilot.cert.dto.external.CurriculumItem.class,
+                item -> {
+                    // 교과과정 정보는 로깅만 하고 저장하지 않음 (필요시 Entity 추가)
+                    log.debug("Curriculum: {} - {}", item.getUnivNm(), item.getAtchFileNm());
+                    return SyncAction.SKIPPED;
+                },
+                extraParams -> {
+                    extraParams.put("_type", "json");
+                }
+        );
+    }
+
+    /**
+     * (7) Q-net 컨텐츠 관련 정보 조회
+     * - Q-Net(openapi.q-net.or.kr) InquiryContentsSVC/getList 사용
+     */
+    @Retry(name = "qnetClient")
+    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackSync")
+    public SyncResult getContentsInfo() {
+        return fetchPaged(
+                "contents",
+                params -> qnetFeignClient.getContentsInfo(params),
+                com.OhRyue.certpilot.cert.dto.external.ContentsItem.class,
+                item -> {
+                    // 컨텐츠 정보는 로깅만 하고 저장하지 않음 (필요시 Entity 추가)
+                    log.debug("Contents: {} - {}", item.getCtsNm(), item.getTitle());
+                    return SyncAction.SKIPPED;
+                },
+                extraParams -> {
+                    extraParams.put("_type", "json");
+                }
+        );
+    }
+
+    /**
+     * 단순 조회용 파싱 및 로깅 (저장하지 않음)
+     */
+    private SyncResult parseAndLog(String name, String raw) {
+        Optional<QnetApiResponse> optional = parseResponse(raw);
+        if (optional.isEmpty()) {
+            log.warn("[{}] Unable to parse response", name);
+            return SyncResult.failed("Failed to parse response");
+        }
+
+        QnetApiResponse response = optional.get();
+        if (response.getResponse() == null || response.getResponse().getHeader() == null) {
+            log.warn("[{}] Missing header", name);
+            return SyncResult.failed("Missing header");
+        }
+
+        String resultCode = response.getResponse().getHeader().getResultCode();
+        if (!"00".equals(resultCode)) {
+            log.warn("[{}] API returned non-success code {} ({})",
+                    name,
+                    resultCode,
+                    response.getResponse().getHeader().getResultMsg());
+            return SyncResult.failed(response.getResponse().getHeader().getResultMsg());
+        }
+
+        log.info("[{}] Successfully fetched data", name);
+        return new SyncResult(name, 0, 0, 0, 0, false, null);
+    }
+
     /* ==================== Resilience4j Fallback ==================== */
 
+    // 기본 fallback 메서드
     public SyncResult fallbackSync(Throwable throwable) {
         log.warn("Q-Net sync fallback triggered: {}", throwable.getMessage());
         return SyncResult.failed(throwable.getMessage());
     }
 
-    public SyncResult fallbackSync(Set<String> jmCds, String qualgbCd, String implYy, Throwable throwable) {
+    // 각 메서드별 전용 fallback (Resilience4j가 정확히 매칭할 수 있도록)
+    public SyncResult fallbackSyncExamSchedule(Set<String> jmCds, String qualgbCd, String implYy, Throwable throwable) {
         return fallbackSync(throwable);
     }
 
-    public SyncResult fallbackSync(String jmCd, Throwable throwable) {
+    public SyncResult fallbackSyncOpenQuestion(String jmCd, Throwable throwable) {
+        return fallbackSync(throwable);
+    }
+
+    public SyncResult fallbackSyncQualification(String seriesCd, Throwable throwable) {
         return fallbackSync(throwable);
     }
 
@@ -204,36 +359,49 @@ public class QnetSyncService {
             extraParamConsumer.accept(params);
 
             String raw = caller.apply(params);
+            log.debug("[{}] API raw response (page {}): {}", name, pageNo, raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw);
+            
             Optional<QnetApiResponse> optional = parseResponse(raw);
             if (optional.isEmpty()) {
-                log.warn("[{}] Unable to parse response for page {}", name, pageNo);
+                log.warn("[{}] Unable to parse response for page {}. Raw response: {}", name, pageNo, raw != null && raw.length() > 1000 ? raw.substring(0, 1000) + "..." : raw);
                 break;
             }
 
             QnetApiResponse response = optional.get();
-            if (response.getResponse() == null || response.getResponse().getHeader() == null) {
-                log.warn("[{}] Missing header for page {}", name, pageNo);
+            QnetApiResponse.Response resolvedResponse = response.resolveResponse();
+            if (resolvedResponse == null || resolvedResponse.getHeader() == null) {
+                log.warn("[{}] Missing header for page {}. Response structure: {}", name, pageNo, raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw);
                 break;
             }
 
-            String resultCode = response.getResponse().getHeader().getResultCode();
+            String resultCode = resolvedResponse.getHeader().getResultCode();
+            String resultMsg = resolvedResponse.getHeader().getResultMsg();
+            log.info("[{}] API response code: {}, message: {} (page {})", name, resultCode, resultMsg, pageNo);
+            
             if (!"00".equals(resultCode)) {
-                log.warn("[{}] API returned non-success code {} ({}) on page {}",
+                log.error("[{}] API returned non-success code {} ({}) on page {}. Full response: {}",
                         name,
                         resultCode,
-                        response.getResponse().getHeader().getResultMsg(),
-                        pageNo);
-                break;
+                        resultMsg,
+                        pageNo,
+                        raw != null && raw.length() > 1000 ? raw.substring(0, 1000) + "..." : raw);
+                // resultCode가 "00"이 아니면 실패로 처리하고 중단
+                return SyncResult.failed(String.format("API error [%s]: %s", resultCode, resultMsg));
             }
 
-            QnetApiResponse.Body body = response.getResponse().getBody();
+            QnetApiResponse.Body body = resolvedResponse.getBody();
             if (body == null) {
                 break;
             }
 
             totalCount = Optional.ofNullable(body.getTotalCount()).orElse(0);
+            log.info("[{}] Total count: {}, page: {}, numOfRows: {}", name, totalCount, pageNo, body.getNumOfRows());
+            
             List<T> items = convertItems(body.getItems(), itemClass);
+            log.info("[{}] Converted {} items from page {}", name, items.size(), pageNo);
+            
             if (items.isEmpty()) {
+                log.info("[{}] No items found on page {}, stopping pagination", name, pageNo);
                 break;
             }
 
@@ -283,16 +451,66 @@ public class QnetSyncService {
             return Optional.empty();
         }
         try {
-            // JSON 응답
-            return Optional.of(objectMapper.readValue(raw, QnetApiResponse.class));
-        } catch (JsonProcessingException e) {
-            try {
-                // XML 응답 (혹시 설정이 잘못될 경우)
-                return Optional.of(xmlMapper.readValue(raw, QnetApiResponse.class));
-            } catch (Exception xmlEx) {
-                log.debug("Failed to parse response as XML: {}", xmlEx.getMessage());
-                return Optional.empty();
+            JsonNode root = objectMapper.readTree(raw);
+            QnetApiResponse apiResponse = new QnetApiResponse();
+            JsonNode responseNode = root.has("response") ? root.get("response") : null;
+            JsonNode headerNode = responseNode != null && responseNode.has("header")
+                    ? responseNode.get("header")
+                    : root.get("header");
+            JsonNode bodyNode = responseNode != null && responseNode.has("body")
+                    ? responseNode.get("body")
+                    : root.get("body");
+            boolean hasResponseNode = responseNode != null && !responseNode.isMissingNode();
+            boolean hasHeaderNode = headerNode != null && !headerNode.isMissingNode();
+            boolean hasBodyNode = bodyNode != null && !bodyNode.isMissingNode();
+            log.debug("Parsed API response nodes - response:{}, header:{}, body:{}", hasResponseNode, hasHeaderNode, hasBodyNode);
+
+            if (responseNode != null) {
+                apiResponse.setResponse(objectMapper.treeToValue(responseNode, QnetApiResponse.Response.class));
+            } else {
+                QnetApiResponse.Response fallback = new QnetApiResponse.Response();
+                if (headerNode != null && !headerNode.isMissingNode()) {
+                    QnetApiResponse.Header header = new QnetApiResponse.Header();
+                    header.setResultCode(headerNode.path("resultCode").asText(null));
+                    header.setResultMsg(headerNode.path("resultMsg").asText(null));
+                    fallback.setHeader(header);
+                    apiResponse.setRootHeader(fallback.getHeader());
+                }
+                if (bodyNode != null && !bodyNode.isMissingNode()) {
+                    QnetApiResponse.Body body = new QnetApiResponse.Body();
+                    body.setItems(bodyNode.get("items"));
+                    if (bodyNode.hasNonNull("numOfRows")) {
+                        body.setNumOfRows(bodyNode.get("numOfRows").asInt());
+                    }
+                    if (bodyNode.hasNonNull("pageNo")) {
+                        body.setPageNo(bodyNode.get("pageNo").asInt());
+                    }
+                    if (bodyNode.hasNonNull("totalCount")) {
+                        body.setTotalCount(bodyNode.get("totalCount").asInt());
+                    }
+                    fallback.setBody(body);
+                    apiResponse.setRootBody(fallback.getBody());
+                }
+                if (fallback.getHeader() != null || fallback.getBody() != null) {
+                    apiResponse.setResponse(fallback);
+                }
             }
+
+            if (apiResponse.resolveResponse() != null) {
+                return Optional.of(apiResponse);
+            }
+            log.warn("Unable to resolve API response structure - responseNode:{}, headerNode:{}, bodyNode:{}",
+                    hasResponseNode, hasHeaderNode, hasBodyNode);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to parse response as JSON: {}", e.getOriginalMessage());
+        }
+
+        try {
+            // XML 응답 (혹시 설정이 잘못될 경우)
+            return Optional.of(xmlMapper.readValue(raw, QnetApiResponse.class));
+        } catch (Exception xmlEx) {
+            log.debug("Failed to parse response as XML: {}", xmlEx.getMessage());
+            return Optional.empty();
         }
     }
 
@@ -329,10 +547,11 @@ public class QnetSyncService {
 
     @CacheEvict(value = {"cert-current", "cert-tips"}, allEntries = true)
     public SyncResult syncAll() {
-        SyncResult qualifications = syncQualifications();
+        // 공공데이터포털 API만 사용: qualification 제외
+        log.info("전체 동기화 실행 (공공데이터포털 API만 사용 - exam + open)");
         SyncResult schedules = syncExamSchedules(null, null, null);
         SyncResult questions = syncOpenQuestions(null);
-        return SyncResult.aggregate("all", List.of(qualifications, schedules, questions));
+        return SyncResult.aggregate("all", List.of(schedules, questions));
     }
 
     public record SyncResult(

@@ -30,6 +30,10 @@ public class SecurityConfig {
       "/actuator/info"
   };
 
+  private static final String[] EXTERNAL_API_WHITELIST = {
+      "/api/cert/external/**"  // Q-Net API 테스트용
+  };
+
   private final JwtAuthFilter jwtAuthFilter;
 
   @Bean
@@ -53,14 +57,17 @@ public class SecurityConfig {
             })
         )
 
-        // 요청별 인가 규칙
+        // 요청별 인가 규칙 (순서 중요: 더 구체적인 패턴이 먼저)
         .authorizeHttpRequests(auth -> auth
             // Swagger 문서
             .requestMatchers(SWAGGER_WHITELIST).permitAll()
             // health/info
             .requestMatchers(ACTUATOR_WHITELIST).permitAll()
+            // External Q-Net API (테스트용) - /api/cert/** 보다 먼저 체크
+            .requestMatchers(EXTERNAL_API_WHITELIST).permitAll()
 
             // 실제 Cert API (자격증 정보/토픽 등)는 JWT 필요
+            // 주의: /api/cert/external/**는 위에서 이미 permitAll로 처리됨
             .requestMatchers("/api/cert/**").authenticated()
 
             // 그 외 요청은 일단 허용

@@ -25,11 +25,11 @@ spring:
       client:
         config:
           qnetClient:
-            connectTimeout: 3000      # ms
-            readTimeout: 5000         # ms
+            connectTimeout: 10000     # 10초로 증가
+            readTimeout: 30000         # 30초로 증가
           datagoClient:
-            connectTimeout: 3000      # ms
-            readTimeout: 5000         # ms
+            connectTimeout: 10000      # 10초로 증가
+            readTimeout: 30000         # 30초로 증가
 
 eureka:
   client:
@@ -73,7 +73,9 @@ springdoc:
 cert:
   qnet:
     # 공공데이터 포털 "디코딩(복호화) 서비스키"
-    key: ${QNET_SERVICE_KEY:}
+    # Encoding: k1GJ%2FDtJfl8rlKVpZzcqeunjXV8uloebdv0ZViQf%2B0NKUoTcZMNndn%2Be3nYjkIV2TG6iK%2BhjFsz67b1rfv%2BPBQ%3D%3D
+    # Decoding: k1GJ/DtJfl8rlKVpZzcqeunjXV8uloebdv0ZViQf+0NKUoTcZMNndn+e3nYjkIV2TG6iK+hjFsz67b1rfv+PBQ==
+    key: ${QNET_SERVICE_KEY:k1GJ/DtJfl8rlKVpZzcqeunjXV8uloebdv0ZViQf+0NKUoTcZMNndn+e3nYjkIV2TG6iK+hjFsz67b1rfv+PBQ==}
     # Q-Net(OpenAPI) 기본 URL (자격/종목 정보)
     base-url: https://openapi.q-net.or.kr/api/service/rest
     # data.go.kr B490007 기반 URL (시험 일정, 공개 문제)
