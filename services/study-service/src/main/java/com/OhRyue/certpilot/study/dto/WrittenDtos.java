@@ -170,8 +170,9 @@ public class WrittenDtos {
   // OX 단건 즉시 채점 응답
   @Schema(name = "MiniGradeOneResp")
   public record MiniGradeOneResp(
-      boolean correct,  // 정오
-      String explanation// DB 기본 해설
+      boolean correct,        // 정오
+      String explanation,     // DB 기본 해설
+      Long learningSessionId // LearningSession ID (오답 조회용)
   ) {}
 
   /* ===================== 즉시 채점 - MCQ ===================== */
@@ -191,5 +192,24 @@ public class WrittenDtos {
       String correctLabel, // 정답 라벨
       String explanation,  // DB 기본 해설
       String aiExplanation // 오답 시 AI 해설
+  ) {}
+
+  /* ===================== 문제 상세 조회 ===================== */
+
+  // 필기 문제 상세 조회 응답
+  @Schema(name = "QuestionDetailResp")
+  public record QuestionDetailResp(
+      Long questionId,        // 문제 ID
+      String type,            // 문제 타입 (OX, MCQ)
+      String stem,            // 문제 본문
+      List<McqChoice> choices,// 선택지 (MCQ만, OX는 빈 배열)
+      String correctAnswer,   // 정답 (OX: "O"/"X", MCQ: "A"/"B"/"C"/"D")
+      String explanation      // 해설 (DB 기본 해설)
+  ) {}
+
+  // 여러 필기 문제 상세 조회 응답
+  @Schema(name = "QuestionDetailListResp")
+  public record QuestionDetailListResp(
+      List<QuestionDetailResp> questions  // 문제 상세 정보 목록
   ) {}
 }

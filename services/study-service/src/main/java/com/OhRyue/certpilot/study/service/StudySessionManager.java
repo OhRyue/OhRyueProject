@@ -1,20 +1,25 @@
 package com.OhRyue.certpilot.study.service;
 
 import com.OhRyue.certpilot.study.domain.LearningStep;
+import com.OhRyue.certpilot.study.domain.Question;
 import com.OhRyue.certpilot.study.domain.StudySession;
 import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
+import com.OhRyue.certpilot.study.domain.enums.QuestionType;
+import com.OhRyue.certpilot.study.repository.QuestionRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.NoSuchElementException;
 
 @Component
 @RequiredArgsConstructor
@@ -22,6 +27,7 @@ public class StudySessionManager {
 
     private final StudySessionRepository sessionRepository;
     private final StudySessionItemRepository itemRepository;
+    private final QuestionRepository questionRepository;
     private final ObjectMapper objectMapper;
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
@@ -116,6 +122,85 @@ public class StudySessionManager {
                                                  String mode) {
         String scopeJson = stringify(scope);
         return sessionRepository.findFirstByUserIdAndTopicScopeJsonAndModeOrderByStartedAtDesc(userId, scopeJson, mode);
+    }
+
+    /* ===================== 세션 문제 할당 (쓰기) ===================== */
+
+    /**
+     * 세션에 문제 사전 할당 (세션 시작 시점에 호출)
+     * @param session StudySession
+     * @param questionIds 할당할 문제 ID 목록
+     */
+    @Transactional
+    public void allocateQuestions(StudySession session, List<Long> questionIds) {
+        // 이미 할당된 문제가 있으면 스킵
+        List<StudySessionItem> existingItems = itemRepository.findBySessionIdOrderByOrderNoAsc(session.getId());
+        if (!existingItems.isEmpty()) {
+            return; // 이미 할당됨
+        }
+
+        // 문제 할당
+        for (int i = 0; i < questionIds.size(); i++) {
+            Long questionId = questionIds.get(i);
+            itemRepository.save(StudySessionItem.builder()
+                    .sessionId(session.getId())
+                    .questionId(questionId)
+                    .orderNo(i + 1)
+                    .userAnswerJson(null)  // 아직 답변 안함
+                    .correct(null)
+                    .score(null)
+                    .createdAt(Instant.now())
+                    .build());
+        }
+    }
+
+    /**
+     * LearningStep에 연결된 StudySession 생성 및 문제 할당
+     */
+    @Transactional
+    public StudySession createAndAllocateSessionForStep(
+            LearningStep learningStep,
+            String userId,
+            Long topicId,
+            ExamMode examMode,
+            QuestionType questionType,
+            int questionCount) {
+        // 이미 연결된 StudySession이 있으면 반환
+        if (learningStep.getStudySession() != null) {
+            return learningStep.getStudySession();
+        }
+
+        // 문제 랜덤 선택 (세션 시작 시점에 고정)
+        List<Question> questions = questionRepository.pickRandomByTopic(
+                topicId, examMode, questionType, PageRequest.of(0, questionCount));
+
+        if (questions.isEmpty()) {
+            throw new IllegalStateException("문제가 부족합니다. topicId: " + topicId + ", type: " + questionType);
+        }
+
+        // StudySession 생성
+        String scopeJson = stringify(Map.of("topicId", topicId));
+        StudySession session = StudySession.builder()
+                .userId(userId)
+                .mode("MICRO")  // MINI, MCQ 단계는 MICRO 모드
+                .examMode(examMode)
+                .topicScopeJson(scopeJson)
+                .questionCount(questionCount)
+                .status("OPEN")
+                .startedAt(Instant.now())
+                .learningStep(learningStep)
+                .build();
+
+        session = sessionRepository.save(session);
+
+        // LearningStep에 연결
+        learningStep.setStudySession(session);
+
+        // 문제 할당
+        List<Long> questionIds = questions.stream().map(Question::getId).toList();
+        allocateQuestions(session, questionIds);
+
+        return session;
     }
 
     /* ===================== 세션 Item upsert (쓰기) ===================== */

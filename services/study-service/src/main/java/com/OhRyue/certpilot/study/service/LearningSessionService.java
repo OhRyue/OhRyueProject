@@ -4,6 +4,7 @@ import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.domain.LearningSession;
 import com.OhRyue.certpilot.study.domain.LearningStep;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
+import com.OhRyue.certpilot.study.domain.enums.QuestionType;
 import com.OhRyue.certpilot.study.dto.SessionDtos.*;
 import com.OhRyue.certpilot.study.repository.LearningSessionRepository;
 import com.OhRyue.certpilot.study.repository.LearningStepRepository;
@@ -23,14 +24,15 @@ public class LearningSessionService {
 
   private final LearningSessionRepository sessionRepo;
   private final LearningStepRepository stepRepo;
+  private final StudySessionManager sessionManager;
 
-  /** 필기(WRITTEN) 단계 순서 (CONCEPT 제외 - 개념 보기는 세션과 무관) */
+  /** 필기(WRITTEN) 단계 순서 */
   private static final List<String> ORDER_WRITTEN = List.of(
-      "MINI", "REVIEW_WRONG", "MCQ", "REVIEW_WRONG2", "SUMMARY"
+      "CONCEPT", "MINI", "REVIEW_WRONG", "MCQ", "REVIEW_WRONG2", "SUMMARY"
   );
-  /** 실기(PRACTICAL) 단계 순서 (CONCEPT 제외 - 개념 보기는 세션과 무관) */
+  /** 실기(PRACTICAL) 단계 순서 */
   private static final List<String> ORDER_PRACTICAL = List.of(
-      "MINI", "REVIEW_WRONG", "PRACTICAL", "REVIEW_WRONG2", "SUMMARY"
+      "CONCEPT", "MINI", "REVIEW_WRONG", "PRACTICAL", "REVIEW_WRONG2", "SUMMARY"
   );
 
   /** 모드에 따른 단계 순서 (ExamMode 버전) */
@@ -84,9 +86,11 @@ public class LearningSessionService {
         .updatedAt(Instant.now())
         .build());
 
-    // 요청 모드에 맞춰 단계 초기화
+    ExamMode examMode = parseMode(modeStr);
+    
+    // 요청 모드에 맞춰 단계 초기화 및 문제 사전 할당
     for (String stepCode : orderOf(modeStr)) {
-      stepRepo.save(LearningStep.builder()
+      LearningStep step = stepRepo.save(LearningStep.builder()
           .learningSession(s)
           .stepCode(stepCode)
           .status("READY")
@@ -95,7 +99,26 @@ public class LearningSessionService {
           .createdAt(Instant.now())
           .updatedAt(Instant.now())
           .build());
+      
+      // MINI, MCQ 단계의 경우 문제 사전 할당
+      if ("MINI".equals(stepCode)) {
+        sessionManager.createAndAllocateSessionForStep(
+            step, userId, req.topicId(), examMode, QuestionType.OX, 4);
+      } else if ("MCQ".equals(stepCode)) {
+        sessionManager.createAndAllocateSessionForStep(
+            step, userId, req.topicId(), examMode, QuestionType.MCQ, 5);
+      }
+      // CONCEPT, REVIEW_WRONG, SUMMARY 등은 문제 할당 없음
     }
+    
+    // CONCEPT 단계를 첫 단계로 설정
+    LearningStep conceptStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), "CONCEPT")
+        .orElse(null);
+    if (conceptStep != null) {
+      conceptStep.setStatus("IN_PROGRESS");
+      stepRepo.save(conceptStep);
+    }
+    
     return new StartResp(s.getId(), s.getStatus());
   }
 
@@ -118,8 +141,27 @@ public class LearningSessionService {
             x.getScorePct(),
             x.getMetadataJson()))
         .toList();
+    
+    // 현재 진행 단계 찾기 (IN_PROGRESS 또는 첫 번째 READY 단계)
+    String currentStep = null;
+    for (SessionResp.StepItem step : steps) {
+      if ("IN_PROGRESS".equals(step.state())) {
+        currentStep = step.step();
+        break;
+      }
+    }
+    if (currentStep == null) {
+      // IN_PROGRESS가 없으면 첫 번째 READY 단계
+      for (SessionResp.StepItem step : steps) {
+        if ("READY".equals(step.state())) {
+          currentStep = step.step();
+          break;
+        }
+      }
+    }
+    
     return new SessionResp(s.getId(), s.getTopicId(), s.getMode(),
-        s.getStatus(), null, steps);
+        s.getStatus(), currentStep, steps);
   }
 
   /**
@@ -231,16 +273,34 @@ public class LearningSessionService {
         .updatedAt(Instant.now())
         .build());
 
-    // 단계 초기화
+    // 단계 초기화 및 문제 사전 할당
     for (String stepCode : orderOf(examMode)) {
-      stepRepo.save(LearningStep.builder()
+      LearningStep step = stepRepo.save(LearningStep.builder()
           .learningSession(session)
           .stepCode(stepCode)
           .status("READY")
           .createdAt(Instant.now())
           .updatedAt(Instant.now())
           .build());
+      
+      // MINI, MCQ 단계의 경우 문제 사전 할당
+      if ("MINI".equals(stepCode)) {
+        sessionManager.createAndAllocateSessionForStep(
+            step, userId, topicId, examMode, QuestionType.OX, 4);
+      } else if ("MCQ".equals(stepCode)) {
+        sessionManager.createAndAllocateSessionForStep(
+            step, userId, topicId, examMode, QuestionType.MCQ, 5);
+      }
     }
+    
+    // CONCEPT 단계를 첫 단계로 설정
+    LearningStep conceptStep = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "CONCEPT")
+        .orElse(null);
+    if (conceptStep != null) {
+      conceptStep.setStatus("IN_PROGRESS");
+      stepRepo.save(conceptStep);
+    }
+    
     return session;
   }
 

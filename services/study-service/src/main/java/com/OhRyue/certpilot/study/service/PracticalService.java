@@ -204,7 +204,11 @@ public class PracticalService {
         ? new WrittenDtos.MiniSubmitItem(req.questionId(), false, "", "")
         : resp.items().get(0);
 
-    return new WrittenDtos.MiniGradeOneResp(item.correct(), item.explanation());
+    return new WrittenDtos.MiniGradeOneResp(
+        item.correct(), 
+        item.explanation(),
+        envelope.learningSessionId()  // PRACTICAL은 LearningSession을 사용하지 않으므로 null
+    );
   }
 
   /* ========================= 실기 세트 (Micro) ========================= */

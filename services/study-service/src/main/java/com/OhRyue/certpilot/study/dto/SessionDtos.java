@@ -21,7 +21,7 @@ public class SessionDtos {
       Long topicId,
       String mode,
       String status,
-      String progressJson,
+      String currentStep,  // 현재 진행 중인 단계
       List<StepItem> steps
   ) {
     public record StepItem(Long id, String step, String state, Integer score, String detailsJson) {}

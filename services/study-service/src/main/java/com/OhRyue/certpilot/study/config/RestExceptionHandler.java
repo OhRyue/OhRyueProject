@@ -45,4 +45,14 @@ public class RestExceptionHandler {
   public ResponseEntity<?> handleNotFound(NoSuchElementException ex) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", ex.getMessage()));
   }
+
+  @ExceptionHandler(IllegalStateException.class)
+  public ResponseEntity<?> handleIllegalState(IllegalStateException ex) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+  }
+
+  @ExceptionHandler(com.OhRyue.certpilot.study.client.CurriculumGateway.ExternalCurriculumException.class)
+  public ResponseEntity<?> handleExternalCurriculum(com.OhRyue.certpilot.study.client.CurriculumGateway.ExternalCurriculumException ex) {
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("message", ex.getMessage()));
+  }
 }
