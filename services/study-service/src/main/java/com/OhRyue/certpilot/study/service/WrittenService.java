@@ -40,6 +40,7 @@ public class WrittenService {
   private final UserProgressRepository userProgressRepository;
   private final StudySessionManager sessionManager;
   private final LearningSessionService learningSessionService;
+  private final LearningStepRepository learningStepRepository;
   private final AIExplanationService aiExplanationService;
   private final TopicTreeService topicTreeService;
   private final ProgressHookClient progressHookClient;
@@ -707,7 +708,7 @@ public class WrittenService {
 
   /* ========================= 요약 ========================= */
 
-  @Transactional(readOnly = true)
+  @Transactional
   public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(Long topicId, Long learningSessionId) {
     String userId = AuthUserUtil.getCurrentUserId();
 
@@ -821,6 +822,17 @@ public class WrittenService {
     LearningStep summaryStep = learningSessionService.getStep(learningSession, "SUMMARY");
     if (!"COMPLETE".equals(summaryStep.getStatus())) {
       learningSessionService.updateStepStatus(summaryStep, "COMPLETE", null, null);
+    }
+    
+    // 모든 단계가 완료되었는지 확인하고, 완료되었으면 LearningSession의 status를 DONE으로 변경
+    List<LearningStep> allSteps = learningStepRepository.findByLearningSessionIdOrderByIdAsc(learningSession.getId());
+    boolean hasReadyStep = allSteps.stream()
+        .anyMatch(step -> "READY".equals(step.getStatus()));
+    
+    if (!hasReadyStep && !"DONE".equals(learningSession.getStatus())) {
+      learningSession.setStatus("DONE");
+      learningSession.setUpdatedAt(Instant.now());
+      learningSessionService.saveLearningSession(learningSession);
     }
     
     return new FlowDtos.StepEnvelope<>(
