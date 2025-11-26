@@ -66,7 +66,8 @@ public final class HomeDtos {
       @Schema(description = "오늘 학습 시간(분)") int minutesToday,
       @Schema(description = "오늘 평균 정답률(%)") double accuracyToday,
       @Schema(description = "오늘 획득 XP") int xpToday,
-      @Schema(description = "정답률 전일 대비 증감(%)") double accuracyDelta
+      @Schema(description = "정답률 전일 대비 증감(%)") double accuracyDelta,
+      @Schema(description = "현재 보유 포인트") long pointBalance
   ) {}
 
   @Schema(description = "홈 빠른 메뉴 항목")
@@ -81,4 +82,3 @@ public final class HomeDtos {
       @Schema(description = "빠른 메뉴 항목들") List<HomeQuickMenuItem> items
   ) {}
 }
-

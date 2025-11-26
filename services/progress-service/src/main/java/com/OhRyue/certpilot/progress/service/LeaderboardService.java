@@ -42,15 +42,26 @@ public class LeaderboardService {
   @Transactional(readOnly = true)
   public RankDtos.LeaderboardResponse leaderboard(RankScope scope,
                                                   String userId,
-                                                  String reference) {
+                                                  String reference,
+                                                  Integer page,
+                                                  Integer size) {
+    int pageSafe = (page == null || page < 0) ? 0 : page;
+    int sizeSafe;
+    if (size == null || size <= 0) {
+      sizeSafe = DEFAULT_LEADERBOARD_LIMIT;
+    } else {
+      sizeSafe = Math.min(size, 100); // 상한선 방어
+    }
+
     if (userId != null && (scope == RankScope.OVERALL || scope == RankScope.FRIENDS)) {
       rankService.recomputeForUser(userId);
     }
+
     return switch (scope) {
-      case OVERALL -> overallLeaderboard(userId);
-      case WEEKLY -> weeklyLeaderboard(userId, reference);
-      case HALL_OF_FAME -> hallOfFameLeaderboard(userId, reference);
-      case FRIENDS -> friendsLeaderboard(userId);
+      case OVERALL -> overallLeaderboard(userId, pageSafe, sizeSafe);
+      case WEEKLY -> weeklyLeaderboard(userId, reference, pageSafe, sizeSafe);
+      case HALL_OF_FAME -> hallOfFameLeaderboard(userId, reference, pageSafe, sizeSafe);
+      case FRIENDS -> friendsLeaderboard(userId, pageSafe, sizeSafe);
     };
   }
 
@@ -89,18 +100,38 @@ public class LeaderboardService {
     }
   }
 
-  private RankDtos.LeaderboardResponse overallLeaderboard(String userId) {
-    List<UserRankScore> top = rankService.topN(DEFAULT_LEADERBOARD_LIMIT);
-    List<RankDtos.LeaderboardEntry> entries = enrichOverallEntries(top);
+  /* =========================
+   *  각 Scope별 Leaderboard
+   * ========================= */
+
+  private RankDtos.LeaderboardResponse overallLeaderboard(String userId, int page, int size) {
+    Pageable pageable = PageRequest.of(page, size);
+    List<UserRankScore> scores = rankScoreRepository.findAllByOrderByScoreDesc(pageable);
+
+    long totalElements = rankScoreRepository.count();
+    int totalPages = totalElements == 0 ? 0 : (int) ((totalElements + size - 1) / size);
+
+    int rankOffset = page * size;
+    List<RankDtos.LeaderboardEntry> entries = enrichOverallEntries(scores, rankOffset);
 
     RankDtos.LeaderboardEntry meEntry = computeOverallEntry(userId);
     String reference = formatReference(RankScope.OVERALL, LocalDate.now());
     Instant generatedAt = Instant.now();
 
-    return new RankDtos.LeaderboardResponse(RankScope.OVERALL, reference, generatedAt, entries, meEntry);
+    return new RankDtos.LeaderboardResponse(
+        RankScope.OVERALL,
+        reference,
+        generatedAt,
+        entries,
+        meEntry,
+        page,
+        size,
+        totalElements,
+        totalPages
+    );
   }
 
-  private List<RankDtos.LeaderboardEntry> enrichOverallEntries(List<UserRankScore> scores) {
+  private List<RankDtos.LeaderboardEntry> enrichOverallEntries(List<UserRankScore> scores, int rankOffset) {
     List<String> userIds = scores.stream().map(UserRankScore::getUserId).toList();
 
     Map<String, UserXpWallet> wallets = xpWalletRepository.findAllById(userIds).stream()
@@ -108,7 +139,7 @@ public class LeaderboardService {
     Map<String, UserStreak> streaks = userStreakRepository.findAllById(userIds).stream()
         .collect(Collectors.toMap(UserStreak::getUserId, s -> s));
 
-    int rank = 1;
+    int rank = rankOffset + 1;
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     for (UserRankScore score : scores) {
       UserXpWallet wallet = wallets.get(score.getUserId());
@@ -126,6 +157,9 @@ public class LeaderboardService {
   }
 
   private RankDtos.LeaderboardEntry computeOverallEntry(String userId) {
+    if (userId == null) {
+      return null;
+    }
     return rankScoreRepository.findById(userId)
         .map(score -> {
           long higher = rankScoreRepository.countByScoreGreaterThan(score.getScore());
@@ -143,7 +177,7 @@ public class LeaderboardService {
         .orElse(null);
   }
 
-  private RankDtos.LeaderboardResponse weeklyLeaderboard(String userId, String reference) {
+  private RankDtos.LeaderboardResponse weeklyLeaderboard(String userId, String reference, int page, int size) {
     LocalDate refDate = resolveReferenceDate(RankScope.WEEKLY, reference);
     String weekIso = weekKey(refDate);
     List<RankDtos.LeaderboardEntry> entries = weeklyEntries(weekIso, DEFAULT_LEADERBOARD_LIMIT);
@@ -152,7 +186,8 @@ public class LeaderboardService {
     if (userId != null) {
       meEntry = reportWeeklyRepository.findByUserIdAndWeekIso(userId, weekIso)
           .map(report -> {
-            long higher = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, Pageable.unpaged()).stream()
+            long higher = reportWeeklyRepository
+                .findByWeekIsoOrderByXpGainedDesc(weekIso, Pageable.unpaged()).stream()
                 .filter(r -> r.getXpGained() > report.getXpGained())
                 .count();
             return new RankDtos.LeaderboardEntry(
@@ -167,10 +202,24 @@ public class LeaderboardService {
           .orElse(null);
     }
 
-    return new RankDtos.LeaderboardResponse(RankScope.WEEKLY, weekIso, Instant.now(), entries, meEntry);
+    int effectiveSize = entries.size();
+    long totalElements = effectiveSize;
+    int totalPages = effectiveSize == 0 ? 0 : 1;
+
+    return new RankDtos.LeaderboardResponse(
+        RankScope.WEEKLY,
+        weekIso,
+        Instant.now(),
+        entries,
+        meEntry,
+        0,
+        effectiveSize,
+        totalElements,
+        totalPages
+    );
   }
 
-  private RankDtos.LeaderboardResponse hallOfFameLeaderboard(String userId, String reference) {
+  private RankDtos.LeaderboardResponse hallOfFameLeaderboard(String userId, String reference, int page, int size) {
     List<RankDtos.LeaderboardEntry> entries = hallEntries(3);
 
     RankDtos.LeaderboardEntry meEntry = null;
@@ -192,10 +241,24 @@ public class LeaderboardService {
           .orElse(null);
     }
 
-    return new RankDtos.LeaderboardResponse(RankScope.HALL_OF_FAME, formatReference(RankScope.HALL_OF_FAME, LocalDate.now()), Instant.now(), entries, meEntry);
+    int effectiveSize = entries.size();
+    long totalElements = effectiveSize;
+    int totalPages = effectiveSize == 0 ? 0 : 1;
+
+    return new RankDtos.LeaderboardResponse(
+        RankScope.HALL_OF_FAME,
+        formatReference(RankScope.HALL_OF_FAME, LocalDate.now()),
+        Instant.now(),
+        entries,
+        meEntry,
+        0,
+        effectiveSize,
+        totalElements,
+        totalPages
+    );
   }
 
-  private RankDtos.LeaderboardResponse friendsLeaderboard(String userId) {
+  private RankDtos.LeaderboardResponse friendsLeaderboard(String userId, int page, int size) {
     List<UserFriend> friends = userFriendRepository.findByUserIdAndStatus(userId, FRIEND_ACCEPTED);
     List<String> candidateIds = new ArrayList<>();
     candidateIds.add(userId);
@@ -204,18 +267,39 @@ public class LeaderboardService {
     candidateIds.forEach(rankService::recomputeForUser);
 
     List<UserRankScore> scores = rankScoreRepository.findByUserIdInOrderByScoreDesc(candidateIds);
-    List<RankDtos.LeaderboardEntry> entries = enrichOverallEntries(scores);
+    List<RankDtos.LeaderboardEntry> entries = enrichOverallEntries(scores, 0);
     RankDtos.LeaderboardEntry meEntry = entries.stream()
         .filter(entry -> entry.userId().equals(userId))
         .findFirst()
         .orElse(null);
 
-    return new RankDtos.LeaderboardResponse(RankScope.FRIENDS, formatReference(RankScope.FRIENDS, LocalDate.now()), Instant.now(), entries, meEntry);
+    int effectiveSize = entries.size();
+    long totalElements = effectiveSize;
+    int totalPages = effectiveSize == 0 ? 0 : 1;
+
+    return new RankDtos.LeaderboardResponse(
+        RankScope.FRIENDS,
+        formatReference(RankScope.FRIENDS, LocalDate.now()),
+        Instant.now(),
+        entries,
+        meEntry,
+        0,
+        effectiveSize,
+        totalElements,
+        totalPages
+    );
   }
+
+  /* =========================
+   *  Snapshot / 공통 유틸
+   * ========================= */
 
   private List<RankDtos.LeaderboardEntry> generateSnapshot(RankScope scope, LocalDate refDate) {
     return switch (scope) {
-      case OVERALL -> enrichOverallEntries(rankScoreRepository.findAllByOrderByScoreDesc(PageRequest.of(0, DEFAULT_LEADERBOARD_LIMIT)));
+      case OVERALL -> enrichOverallEntries(
+          rankScoreRepository.findAllByOrderByScoreDesc(PageRequest.of(0, DEFAULT_LEADERBOARD_LIMIT)),
+          0
+      );
       case WEEKLY -> weeklyEntries(weekKey(refDate), DEFAULT_LEADERBOARD_LIMIT);
       case HALL_OF_FAME -> hallEntries(3);
       case FRIENDS -> List.of();
@@ -305,4 +389,3 @@ public class LeaderboardService {
         .with(weekFields.dayOfWeek(), 1);
   }
 }
-

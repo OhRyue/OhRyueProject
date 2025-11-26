@@ -21,14 +21,17 @@ public class ReportController {
 
   private final ReportService report;
 
-  @Operation(summary = "리포트 개요", description = "총 학습시간/문항수/정답률, 주간 변화, 연속학습일 계산")
+  @Operation(
+      summary = "리포트 개요",
+      description = "필기/실기를 합산한 총 학습시간/문항수/정답률, 주간 변화, 연속학습일 계산"
+  )
   @GetMapping("/overview")
-  public Overview overview(@RequestParam(defaultValue = "WRITTEN") String mode) {
+  public Overview overview() {
     String userId = getCurrentUserId();
-    return report.overview(userId, mode);
+    return report.overview(userId);
   }
 
-  @Operation(summary = "태그별 능력지수", description = "태그별 정답/전체/정답률 Top-N")
+  @Operation(summary = "태그별 능력지수", description = "태그별 정답/전체/정답률 Top-N (mode: WRITTEN / PRACTICAL)")
   @GetMapping("/ability-by-tag")
   public TagAbilityResp abilityByTag(@RequestParam(defaultValue = "WRITTEN") String mode,
                                      @RequestParam(defaultValue = "20") int limit) {

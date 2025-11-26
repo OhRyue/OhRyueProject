@@ -23,7 +23,11 @@ public class RankDtos {
       String reference,
       Instant generatedAt,
       List<LeaderboardEntry> top,
-      LeaderboardEntry me
+      LeaderboardEntry me,
+      int page,
+      int size,
+      long totalElements,
+      int totalPages
   ) {}
 
   public record LeaderboardHistoryResponse(
@@ -74,4 +78,3 @@ public class RankDtos {
       int total
   ) {}
 }
-

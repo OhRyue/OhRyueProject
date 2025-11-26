@@ -13,7 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.*;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 
 @Service
@@ -28,7 +29,10 @@ public class ReportService {
   private final StudyReportClient studyReportClient;
   private final StreakService streakService;
 
-  public Overview overview(String userId, String mode) {
+  /**
+   * 필기/실기 합산 리포트 개요
+   */
+  public Overview overview(String userId) {
     List<ReportDaily> daily = dailyRepository.findByUserId(userId);
     if (daily.isEmpty()) {
       int streak = streakService.get(userId).getCurrentDays();

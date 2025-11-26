@@ -1,6 +1,7 @@
 package com.OhRyue.certpilot.progress.service;
 
 import com.OhRyue.certpilot.progress.domain.ReportDaily;
+import com.OhRyue.certpilot.progress.domain.UserPointWallet;
 import com.OhRyue.certpilot.progress.domain.UserRankScore;
 import com.OhRyue.certpilot.progress.domain.UserStreak;
 import com.OhRyue.certpilot.progress.domain.UserXpWallet;
@@ -18,6 +19,7 @@ import com.OhRyue.certpilot.progress.feign.StudyReportClient;
 import com.OhRyue.certpilot.progress.feign.dto.AccountMeResponse;
 import com.OhRyue.certpilot.progress.feign.dto.ProfileSummaryResponse;
 import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
+import com.OhRyue.certpilot.progress.repository.UserPointWalletRepository;
 import com.OhRyue.certpilot.progress.repository.UserXpWalletRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -44,6 +46,7 @@ public class HomeDashboardService {
   private final RankService rankService;
   private final ReportDailyRepository reportDailyRepository;
   private final UserXpWalletRepository userXpWalletRepository;
+  private final UserPointWalletRepository userPointWalletRepository;
 
   public HomeOverview overview(String userId) {
     // JWT 기반 Feign Interceptor가 Authorization 헤더를 자동으로 붙인다고 가정
@@ -79,7 +82,7 @@ public class HomeDashboardService {
     if (me.goal() == null || me.goal().certId() == null) {
       return new HomeProgressCard(0, 0, 0, 0.0, null);
     }
-    // StudyReportClient 쪽은 원래대로 userId + certId 조합 유지
+    // StudyReportClient 쪽은 JWT 기반으로 현재 사용자 기준 집계한다고 가정
     return studyReportClient.progressCard(me.goal().certId());
   }
 
@@ -163,14 +166,19 @@ public class HomeDashboardService {
     int xp = todayReport == null ? 0 : todayReport.getXpGained();
 
     double yesterdayAccuracy = yesterdayReport == null ? 0.0 : toDoublePercent(yesterdayReport.getAccuracy());
-    double delta = Math.round((accuracy - yesterdayAccuracy) * 10.0) / 10.0;
+    double deltaRaw = accuracy - yesterdayAccuracy;
+    double delta = Math.round(deltaRaw * 10.0) / 10.0;
+
+    UserPointWallet pointWallet = userPointWalletRepository.findById(userId).orElse(null);
+    long pointBalance = pointWallet == null ? 0L : pointWallet.getPointTotal();
 
     return new HomeQuickStats(
         solved,
         minutes,
         Math.round(accuracy * 10.0) / 10.0,
         xp,
-        delta
+        delta,
+        pointBalance
     );
   }
 

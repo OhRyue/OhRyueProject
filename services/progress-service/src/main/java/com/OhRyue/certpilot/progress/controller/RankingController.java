@@ -27,9 +27,11 @@ public class RankingController {
   @Operation(summary = "랭킹 조회", description = "scope: OVERALL/WEEKLY/HALL_OF_FAME/FRIENDS")
   @GetMapping("/rankings/{scope}")
   public RankDtos.LeaderboardResponse leaderboard(@PathVariable RankScope scope,
-                                                  @RequestParam(required = false) String reference) {
+                                                  @RequestParam(required = false) String reference,
+                                                  @RequestParam(required = false, defaultValue = "0") Integer page,
+                                                  @RequestParam(required = false, defaultValue = "20") Integer size) {
     String userId = getCurrentUserId();
-    return leaderboardService.leaderboard(scope, userId, reference);
+    return leaderboardService.leaderboard(scope, userId, reference, page, size);
   }
 
   @Operation(summary = "랭킹 히스토리 조회", description = "저장된 스냅샷이 없으면 즉시 재계산한 값을 반환합니다.")
