@@ -25,11 +25,11 @@ public class StudySessionService {
 
   /** 필기(WRITTEN) 단계 순서 */
   private static final List<String> ORDER_WRITTEN = List.of(
-      "CONCEPT", "MINI", "REVIEW_WRONG", "MCQ", "REVIEW_WRONG2", "SUMMARY"
+      "CONCEPT", "MINI", "REVIEW_WRONG", "MCQ", "SUMMARY"
   );
   /** 실기(PRACTICAL) 단계 순서 */
   private static final List<String> ORDER_PRACTICAL = List.of(
-      "CONCEPT", "MINI", "REVIEW_WRONG", "PRACTICAL", "REVIEW_WRONG2", "SUMMARY"
+      "CONCEPT", "MINI", "PRACTICAL", "REVIEW_WRONG", "SUMMARY"
   );
 
   /** 모드에 따른 단계 순서 (ExamMode 버전) */

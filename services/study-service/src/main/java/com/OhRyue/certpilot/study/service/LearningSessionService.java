@@ -28,11 +28,11 @@ public class LearningSessionService {
 
   /** 필기(WRITTEN) 단계 순서 */
   private static final List<String> ORDER_WRITTEN = List.of(
-      "CONCEPT", "MINI", "REVIEW_WRONG", "MCQ", "REVIEW_WRONG2", "SUMMARY"
+      "CONCEPT", "MINI", "REVIEW_WRONG", "MCQ", "SUMMARY"
   );
   /** 실기(PRACTICAL) 단계 순서 */
   private static final List<String> ORDER_PRACTICAL = List.of(
-      "CONCEPT", "MINI", "REVIEW_WRONG", "PRACTICAL", "REVIEW_WRONG2", "SUMMARY"
+      "CONCEPT", "MINI", "PRACTICAL", "REVIEW_WRONG", "SUMMARY"
   );
 
   /** 모드에 따른 단계 순서 (ExamMode 버전) */
@@ -144,14 +144,30 @@ public class LearningSessionService {
     
     // 현재 진행 단계 찾기 (IN_PROGRESS 또는 첫 번째 READY 단계)
     String currentStep = null;
+    
+    // 1. 먼저 IN_PROGRESS 상태인 단계 찾기
     for (SessionResp.StepItem step : steps) {
       if ("IN_PROGRESS".equals(step.state())) {
         currentStep = step.step();
         break;
       }
     }
+    
+    // 2. IN_PROGRESS가 없으면, COMPLETE된 단계 다음의 첫 번째 READY 단계 찾기
     if (currentStep == null) {
-      // IN_PROGRESS가 없으면 첫 번째 READY 단계
+      boolean foundComplete = false;
+      for (SessionResp.StepItem step : steps) {
+        if ("COMPLETE".equals(step.state())) {
+          foundComplete = true;
+        } else if (foundComplete && "READY".equals(step.state())) {
+          currentStep = step.step();
+          break;
+        }
+      }
+    }
+    
+    // 3. 여전히 없으면 첫 번째 READY 단계
+    if (currentStep == null) {
       for (SessionResp.StepItem step : steps) {
         if ("READY".equals(step.state())) {
           currentStep = step.step();

@@ -1508,7 +1508,8 @@ public class WrittenService {
         userAnswerJson,
         correctAnswer,
         solution,
-        question.getImageUrl()
+        question.getImageUrl(),
+        null  // 필기는 AI 해설 미사용
     );
   }
 

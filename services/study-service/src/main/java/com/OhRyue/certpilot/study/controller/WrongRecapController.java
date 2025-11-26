@@ -56,4 +56,12 @@ public class WrongRecapController {
     String userId = AuthUserUtil.getCurrentUserId();
     return practical.wrongRecapBySession(sessionId, step);
   }
+
+  @Operation(summary = "LearningSession 기반 틀린 문제 다시보기(실기)", 
+             description = "LearningSession의 PRACTICAL 단계에서 틀린 문제만 조회")
+  @GetMapping("/practical/learning-session")
+  public WrongRecapSet recapPracticalLearningSession(@RequestParam Long learningSessionId) {
+    String userId = AuthUserUtil.getCurrentUserId();
+    return practical.wrongRecapByLearningSession(learningSessionId);
+  }
 }
