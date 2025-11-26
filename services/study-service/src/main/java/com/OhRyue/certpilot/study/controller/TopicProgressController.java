@@ -2,6 +2,7 @@ package com.OhRyue.certpilot.study.controller;
 
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.dto.TopicProgressDtos.BatchTopicStatusResp;
+import com.OhRyue.certpilot.study.dto.TopicProgressDtos.MicroLearningStatsResp;
 import com.OhRyue.certpilot.study.service.TopicProgressService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,6 +37,21 @@ public class TopicProgressController {
       @RequestParam List<Long> topicIds,
       @RequestParam ExamMode mode) {
     return topicProgressService.getBatchTopicMicroStatus(topicIds, mode);
+  }
+
+  @Operation(
+      summary = "Micro 학습 통계 조회",
+      description = """
+          모든 micro 학습에 대한 통계를 조회합니다.
+          - mode: WRITTEN(필기) 또는 PRACTICAL(실기) - 필수
+          - totalCount: 전체 micro 학습 개수 (code에 점이 2개인 topic 개수)
+          - completedCount: 진정한 완료(trulyCompleted=true)한 micro 학습 개수
+          - completionRate: 완료 비율(%)
+          """
+  )
+  @GetMapping("/micro-stats")
+  public MicroLearningStatsResp getMicroStats(@RequestParam ExamMode mode) {
+    return topicProgressService.getMicroLearningStats(mode);
   }
 }
 
