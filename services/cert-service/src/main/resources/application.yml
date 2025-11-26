@@ -27,8 +27,11 @@ management:
 
 eureka:
   client:
+    enabled: ${EUREKA_CLIENT_ENABLED:true}  # 환경변수로 비활성화 가능
     service-url:
       defaultZone: http://discovery:8761/eureka
+    fetch-registry: ${EUREKA_FETCH_REGISTRY:true}
+    register-with-eureka: ${EUREKA_REGISTER:true}
 
 cert:
   qnet:
@@ -36,7 +39,7 @@ cert:
     # Encoding: k1GJ%2FDtJfl8rlKVpZzcqeunjXV8uloebdv0ZViQf%2B0NKUoTcZMNndn%2Be3nYjkIV2TG6iK%2BhjFsz67b1rfv%2BPBQ%3D%3D
     # Decoding: k1GJ/DtJfl8rlKVpZzcqeunjXV8uloebdv0ZViQf+0NKUoTcZMNndn+e3nYjkIV2TG6iK+hjFsz67b1rfv+PBQ==
     key: ${CERT_QNET_SERVICE_KEY:k1GJ/DtJfl8rlKVpZzcqeunjXV8uloebdv0ZViQf+0NKUoTcZMNndn+e3nYjkIV2TG6iK+hjFsz67b1rfv+PBQ==}
-    base-url: https://openapi.q-net.or.kr/api/service/rest
+    base-url: http://openapi.q-net.or.kr/api/service/rest  # HTTP로 변경 (HTTPS는 연결 불가)
     data-url: https://apis.data.go.kr/B490007
     timeout: 5000
 

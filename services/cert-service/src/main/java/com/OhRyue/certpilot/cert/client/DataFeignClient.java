@@ -39,9 +39,20 @@ public interface DataFeignClient {
 
     /**
      * 공개문제 상세 조회
+     * - data.go.kr(B490007) /openQst/getOpenQst 사용
+     * - artlSeq, qualgbCd 파라미터로 상세 정보 조회 (contents, fileList 포함)
      * 예시:
-     *   /openQst/getOpenQstDetail?serviceKey=...&artlSeq=5201727&dataFormat=json
+     *   /openQst/getOpenQst?serviceKey=...&dataFormat=xml&qualgbCd=T&artlSeq=5011000
      */
-    @GetMapping(value = "/openQst/getOpenQstDetail", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/openQst/getOpenQst", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
     String getOpenQuestionDetail(@RequestParam Map<String, String> params);
+
+    /**
+     * 종목 정보 조회 (출제경향, 출제기준, 취득방법 등)
+     * - data.go.kr(B490007) /qualInfo/getQualInfoList 사용
+     * 예시:
+     *   /qualInfo/getQualInfoList?serviceKey=...&jmCd=1320
+     */
+    @GetMapping(value = "/qualInfo/getQualInfoList", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
+    String getQualificationInfo(@RequestParam Map<String, String> params);
 }

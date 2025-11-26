@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +40,10 @@ public class CertificationQueryService {
       return openQuestionRepository.findByJmCd(jmCd, pageable);
     }
     return openQuestionRepository.findAll(pageable);
+  }
+
+  public Optional<QualificationEntity> findQualificationByJmCd(String jmCd) {
+    return qualificationRepository.findByJmCd(jmCd);
   }
 }
 

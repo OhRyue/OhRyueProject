@@ -77,7 +77,7 @@ cert:
     # Decoding: k1GJ/DtJfl8rlKVpZzcqeunjXV8uloebdv0ZViQf+0NKUoTcZMNndn+e3nYjkIV2TG6iK+hjFsz67b1rfv+PBQ==
     key: ${QNET_SERVICE_KEY:k1GJ/DtJfl8rlKVpZzcqeunjXV8uloebdv0ZViQf+0NKUoTcZMNndn+e3nYjkIV2TG6iK+hjFsz67b1rfv+PBQ==}
     # Q-Net(OpenAPI) 기본 URL (자격/종목 정보)
-    base-url: https://openapi.q-net.or.kr/api/service/rest
+    base-url: http://openapi.q-net.or.kr/api/service/rest  # HTTP로 변경 (HTTPS는 연결 불가)
     # data.go.kr B490007 기반 URL (시험 일정, 공개 문제)
     data-url: https://apis.data.go.kr/B490007
     # 타임아웃(ms) – 필요하면 QnetProperties에서 사용

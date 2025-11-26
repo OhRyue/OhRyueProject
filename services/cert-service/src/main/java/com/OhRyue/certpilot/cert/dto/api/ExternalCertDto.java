@@ -66,5 +66,18 @@ public final class ExternalCertDto {
       int total,
       boolean failed,
       String message) {}
+
+  public record ContentsItem(
+      String ctsId,
+      String ctsNm,
+      String deptNm,
+      String pubYnCcd,
+      String title) {}
+
+  public record ContentsListResponse(
+      List<ContentsItem> items,
+      int totalCount,
+      int pageNo,
+      int numOfRows) {}
 }
 

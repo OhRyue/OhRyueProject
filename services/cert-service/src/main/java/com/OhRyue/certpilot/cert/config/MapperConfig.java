@@ -18,8 +18,10 @@ public class MapperConfig {
 
     @Bean
     public XmlMapper xmlMapper() {
-        return XmlMapper.builder()
+        XmlMapper mapper = XmlMapper.builder()
                 .defaultUseWrapper(false)
                 .build();
+        mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        return mapper;
     }
 }

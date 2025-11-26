@@ -1,11 +1,27 @@
 package com.OhRyue.certpilot.cert.service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
 import com.OhRyue.certpilot.cert.client.DataFeignClient;
 import com.OhRyue.certpilot.cert.client.QnetFeignClient;
 import com.OhRyue.certpilot.cert.config.QnetProperties;
 import com.OhRyue.certpilot.cert.domain.ExamScheduleEntity;
 import com.OhRyue.certpilot.cert.domain.OpenQuestionEntity;
 import com.OhRyue.certpilot.cert.domain.QualificationEntity;
+import com.OhRyue.certpilot.cert.dto.api.ExternalCertDto;
+import com.OhRyue.certpilot.cert.dto.external.ContentsItem;
+import com.OhRyue.certpilot.cert.dto.external.CurriculumItem;
 import com.OhRyue.certpilot.cert.dto.external.ExamScheduleItem;
 import com.OhRyue.certpilot.cert.dto.external.OpenQuestionItem;
 import com.OhRyue.certpilot.cert.dto.external.QnetApiResponse;
@@ -17,16 +33,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-
-import java.util.*;
-import java.util.function.Function;
 
 @Service
 @Slf4j
@@ -128,14 +138,35 @@ public class QnetSyncService {
                 params -> dataGoFeignClient.getExamSchedules(params),
                 ExamScheduleItem.class,
                 item -> {
-                    if (!StringUtils.hasText(item.getJmCd())) {
+                    // API 응답에 jmCd가 없으므로 파라미터로 전달받은 jmCd 사용
+                    String actualJmCd = null;
+                    if (jmCds != null && !jmCds.isEmpty()) {
+                        actualJmCd = jmCds.iterator().next();
+                    } else if (StringUtils.hasText(item.getJmCd())) {
+                        actualJmCd = item.getJmCd();
+                    }
+                    
+                    if (!StringUtils.hasText(actualJmCd)) {
+                        log.warn("[exam_schedule] Skipping item with empty jmCd: implYy={}, implSeq={}", 
+                                item.getImplYy(), item.getImplSeq());
                         return SyncAction.SKIPPED;
                     }
+                    
                     ExamScheduleEntity existing =
                             examScheduleRepository.findFirstBySourceAndImplYyAndImplSeqAndJmCd(
-                                    "QNET", item.getImplYy(), item.getImplSeq(), item.getJmCd());
+                                    "QNET", item.getImplYy(), item.getImplSeq(), actualJmCd);
+                    log.debug("[exam_schedule] Processing item: jmCd={}, implYy={}, implSeq={}, existing={}", 
+                            actualJmCd, item.getImplYy(), item.getImplSeq(), existing != null ? "found" : "not found");
+                    
+                    // jmCd를 설정 (API 응답에 없을 수 있으므로)
+                    if (!StringUtils.hasText(item.getJmCd())) {
+                        item.setJmCd(actualJmCd);
+                    }
+                    
                     ExamScheduleEntity entity = mapper.toExamSchedule("QNET", item, existing);
-                    examScheduleRepository.save(entity);
+                    ExamScheduleEntity saved = examScheduleRepository.save(entity);
+                    log.debug("[exam_schedule] Saved entity: id={}, jmCd={}, implYy={}, implSeq={}", 
+                            saved.getId(), saved.getJmCd(), saved.getImplYy(), saved.getImplSeq());
                     return existing == null ? SyncAction.INSERTED : SyncAction.UPDATED;
                 },
                 extraParams -> {
@@ -152,10 +183,17 @@ public class QnetSyncService {
                     if (jmCds != null && !jmCds.isEmpty()) {
                         extraParams.put("jmCd", jmCds.iterator().next());
                     }
+                    
+                    // implYy는 필수 파라미터이므로 기본값 설정
                     if (StringUtils.hasText(implYy)) {
                         extraParams.put("implYy", implYy);
+                    } else {
+                        // 현재 년도를 기본값으로 사용
+                        String currentYear = String.valueOf(java.time.Year.now().getValue());
+                        extraParams.put("implYy", currentYear);
                     }
-                }
+                },
+                true  // 공공데이터포털 API 사용
         );
     }
 
@@ -190,7 +228,8 @@ public class QnetSyncService {
                     if (StringUtils.hasText(jmCd)) {
                         extraParams.put("jmCd", jmCd);
                     }
-                }
+                },
+                true  // 공공데이터포털 API 사용
         );
     }
 
@@ -225,60 +264,344 @@ public class QnetSyncService {
 
     /**
      * (4) 국가자격 공개문제 상세 조회
-     * - data.go.kr(B490007) /openQst/getOpenQstDetail 사용
+     * - data.go.kr(B490007) /openQst/getOpenQst 사용
+     * - artlSeq, qualgbCd 파라미터로 상세 정보 조회 (contents, fileList 포함)
+     * 
+     * @param artlSeq 게시물 일련번호
+     * @param qualgbCd 자격구분코드 (T: 국가기술자격, P: 국가전문자격 등)
      */
     @Retry(name = "datagoClient")
-    @CircuitBreaker(name = "datagoClient", fallbackMethod = "fallbackSync")
-    public String getOpenQuestionDetail(String artlSeq) {
-        Map<String, String> params = baseParams();
+    @CircuitBreaker(name = "datagoClient", fallbackMethod = "fallbackGetOpenQuestionDetail")
+    public String getOpenQuestionDetail(String artlSeq, String qualgbCd) {
+        Map<String, String> params = baseParamsForDataGo();  // 공공데이터포털은 serviceKey만 사용
         params.put("artlSeq", artlSeq);
-        params.put("dataFormat", "json");
+        params.put("dataFormat", "xml");  // XML 형식 (공공데이터포털 기본 형식)
+        
+        // qualgbCd가 제공되지 않으면 기본값 T (국가기술자격) 사용
+        if (StringUtils.hasText(qualgbCd)) {
+            params.put("qualgbCd", qualgbCd);
+        } else {
+            params.put("qualgbCd", "T");  // 기본값: 국가기술자격
+        }
+        
+        log.info("[open-question-detail] 공개문제 상세 조회 시작 - artlSeq: {}, qualgbCd: {}", artlSeq, params.get("qualgbCd"));
+        String raw = dataGoFeignClient.getOpenQuestionDetail(params);
+        
+        // 첫 500자 로깅
+        String rawPreview = raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw;
+        log.info("[open-question-detail] API raw response (처음 500자): {}", rawPreview);
+        
+        return raw;
+    }
 
-        return dataGoFeignClient.getOpenQuestionDetail(params);
+    /**
+     * (4) 국가자격 공개문제 상세 조회 (qualgbCd 없이 호출)
+     * - 기본값 T (국가기술자격) 사용
+     */
+    public String getOpenQuestionDetail(String artlSeq) {
+        return getOpenQuestionDetail(artlSeq, null);
+    }
+
+    public String fallbackGetOpenQuestionDetail(String artlSeq, String qualgbCd, Throwable throwable) {
+        log.warn("공개문제 상세 조회 fallback triggered - artlSeq: {}, qualgbCd: {}, error: {}", artlSeq, qualgbCd, throwable.getMessage());
+        throw new RuntimeException("공개문제 상세 조회 실패: " + throwable.getMessage(), throwable);
+    }
+
+    /**
+     * 종목 정보 조회 (출제경향, 출제기준, 취득방법 등)
+     * - data.go.kr(B490007) /qualInfo/getQualInfoList 사용
+     * - 정보처리기사(jmCd=1320) 데이터 포함
+     */
+    @Retry(name = "datagoClient")
+    @CircuitBreaker(name = "datagoClient", fallbackMethod = "fallbackGetQualificationInfo")
+    public String getQualificationInfo(String jmCd) {
+        Map<String, String> params = baseParamsForDataGo();  // 공공데이터포털은 serviceKey만 사용
+        params.put("jmCd", jmCd);
+        params.put("dataFormat", "json");  // JSON 형식 명시
+        params.put("pageNo", "1");
+        params.put("numOfRows", "10");
+        
+        log.info("[qualification-info] 종목 정보 조회 시작 - jmCd: {}, params: {}", jmCd, params);
+        String raw = dataGoFeignClient.getQualificationInfo(params);
+        
+        // 첫 500자 로깅
+        String rawPreview = raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw;
+        log.info("[qualification-info] API raw response (처음 500자): {}", rawPreview);
+        
+        return raw;
+    }
+
+    public String fallbackGetQualificationInfo(String jmCd, Throwable throwable) {
+        log.warn("종목 정보 조회 fallback triggered - jmCd: {}, error: {}", jmCd, throwable.getMessage());
+        throw new RuntimeException("종목 정보 조회 실패: " + throwable.getMessage(), throwable);
+    }
+
+    /**
+     * 종목별 자격정보 조회 (Q-Net API)
+     * - Q-Net(openapi.q-net.or.kr) InquiryInformationTradeNTQSVC/getList 사용
+     * - HTTP (포트 80) 연결 가능 (HTTPS는 연결 불가)
+     * - 정보처리기사(jmCd=1320)의 출제경향, 출제기준, 취득방법 등의 정보 제공
+     * 
+     * @param jmCd 종목코드 (예: 1320 - 정보처리기사)
+     * @return JSON 형식의 구조화된 응답
+     */
+    @Retry(name = "qnetClient")
+    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackGetInformationTradeNTQ")
+    public String getInformationTradeNTQ(String jmCd) {
+        Map<String, String> params = baseParams();
+        params.put("jmCd", jmCd);
+        params.put("_type", "xml");  // XML 형식 (Q-Net 기본 형식)
+        
+        log.info("[information-trade-ntq] 종목별 자격정보 조회 시작 - jmCd: {}", jmCd);
+        String raw = qnetFeignClient.getInformationTradeNTQ(params);
+        
+        // 첫 500자 로깅
+        String rawPreview = raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw;
+        log.info("[information-trade-ntq] API raw response (처음 500자): {}", rawPreview);
+        
+        // XML을 파싱해서 JSON으로 변환 (UTF-8 인코딩 명시)
+        try {
+            // XML 응답을 UTF-8 바이트로 읽어서 UTF-8 문자열로 변환 (Feign이 잘못된 인코딩으로 읽을 수 있음)
+            byte[] bytes = raw.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+            String utf8Raw = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            
+            // XML을 QnetApiResponse로 파싱
+            QnetApiResponse response = xmlMapper.readValue(utf8Raw, QnetApiResponse.class);
+            QnetApiResponse.Response resolvedResponse = response.resolveResponse();
+            if (resolvedResponse == null || resolvedResponse.getHeader() == null) {
+                log.warn("[information-trade-ntq] 응답 구조가 올바르지 않음, 원본 반환");
+                return raw;
+            }
+            
+            // JSON으로 변환 (UTF-8 인코딩)
+            String json = objectMapper.writer().withDefaultPrettyPrinter()
+                    .writeValueAsString(response);
+            log.info("[information-trade-ntq] XML을 JSON으로 변환 완료 (UTF-8)");
+            return json;
+        } catch (Exception e) {
+            log.error("[information-trade-ntq] XML 파싱/변환 중 오류 발생, 원본 XML 반환: {}", e.getMessage(), e);
+            return raw;  // 오류 발생 시 원본 XML 반환
+        }
+    }
+
+    public String fallbackGetInformationTradeNTQ(String jmCd, Throwable throwable) {
+        log.warn("종목별 자격정보 조회 fallback triggered - jmCd: {}, error: {}", jmCd, throwable.getMessage());
+        throw new RuntimeException("종목별 자격정보 조회 실패: " + throwable.getMessage(), throwable);
     }
 
     /**
      * (6) 자격정보 교과과정 정보 조회
      * - Q-Net(openapi.q-net.or.kr) InquiryCurriCulumSVC/getList 사용
+     * - HTTP (포트 80) 연결 가능 (HTTPS는 연결 불가)
+     * 
+     * @param jmCd 종목코드 (선택, 정보처리기사: 1320)
+     * @param page 페이지 번호 (기본값: 1)
+     * @param size 페이지 크기 (기본값: 20)
      */
     @Retry(name = "qnetClient")
-    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackSync")
-    public SyncResult getCurriculumInfo() {
-        return fetchPaged(
-                "curriculum",
-                params -> qnetFeignClient.getCurriculumInfo(params),
-                com.OhRyue.certpilot.cert.dto.external.CurriculumItem.class,
-                item -> {
-                    // 교과과정 정보는 로깅만 하고 저장하지 않음 (필요시 Entity 추가)
-                    log.debug("Curriculum: {} - {}", item.getUnivNm(), item.getAtchFileNm());
-                    return SyncAction.SKIPPED;
-                },
-                extraParams -> {
-                    extraParams.put("_type", "json");
-                }
-        );
+    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackGetCurriculumInfo")
+    public SyncResult getCurriculumInfo(String jmCd, int page, int size) {
+        Map<String, String> params = baseParams();
+        params.put("pageNo", String.valueOf(Math.max(1, page)));
+        params.put("numOfRows", String.valueOf(Math.min(Math.max(1, size), 100)));
+        params.put("_type", "json");
+        
+        // jmCd가 있으면 추가 (API 스펙에 jmCd 파라미터가 있는지 확인 필요)
+        if (StringUtils.hasText(jmCd)) {
+            params.put("jmCd", jmCd);
+        }
+        
+        try {
+            log.info("[curriculum] 조회 시작 - jmCd={}, page={}, size={}", jmCd, page, size);
+            String raw = qnetFeignClient.getCurriculumInfo(params);
+            
+            Optional<QnetApiResponse> optional = parseResponse(raw);
+            if (optional.isEmpty()) {
+                log.warn("[curriculum] 응답 파싱 실패");
+                return SyncResult.failed("응답 파싱 실패");
+            }
+            
+            QnetApiResponse response = optional.get();
+            QnetApiResponse.Response resolvedResponse = response.resolveResponse();
+            if (resolvedResponse == null || resolvedResponse.getHeader() == null) {
+                log.warn("[curriculum] 응답 구조가 올바르지 않음");
+                return SyncResult.failed("응답 구조 오류");
+            }
+            
+            String resultCode = resolvedResponse.getHeader().getResultCode();
+            String resultMsg = resolvedResponse.getHeader().getResultMsg();
+            log.info("[curriculum] API 응답: code={}, message={}", resultCode, resultMsg);
+            
+            if (!"00".equals(resultCode)) {
+                return SyncResult.failed(String.format("API error [%s]: %s", resultCode, resultMsg));
+            }
+            
+            QnetApiResponse.Body body = resolvedResponse.getBody();
+            if (body == null) {
+                return new SyncResult("curriculum", 0, 0, 0, 0, false, null);
+            }
+            
+            List<CurriculumItem> items = convertItems(body.getItems(), CurriculumItem.class);
+            log.info("[curriculum] 조회 완료 - totalCount: {}, items: {}", body.getTotalCount(), items.size());
+            
+            // 교과과정 정보는 로깅만 하고 저장하지 않음 (필요시 Entity 추가)
+            int total = Optional.ofNullable(body.getTotalCount()).orElse(0);
+            
+            return new SyncResult("curriculum", 0, 0, 0, total, false, null);
+        } catch (Exception e) {
+            log.error("[curriculum] 조회 중 오류 발생: {}", e.getMessage(), e);
+            return SyncResult.failed("조회 중 오류: " + e.getMessage());
+        }
+    }
+    
+    public SyncResult fallbackGetCurriculumInfo(String jmCd, int page, int size, Throwable throwable) {
+        log.error("[curriculum] Fallback 호출: jmCd={}, page={}, size={}, error: {}", jmCd, page, size, throwable.getMessage());
+        return SyncResult.failed("Q-Net API 연결 실패: " + throwable.getMessage());
     }
 
     /**
-     * (7) Q-net 컨텐츠 관련 정보 조회
+     * (7) Q-net 컨텐츠 관련 정보 조회 (items 반환)
      * - Q-Net(openapi.q-net.or.kr) InquiryContentsSVC/getList 사용
+     * - HTTP (포트 80) 연결 가능 (HTTPS는 연결 불가)
+     * 
+     * @param jmCd 종목코드 (선택, 정보처리기사: 1320)
+     * @param page 페이지 번호 (기본값: 1)
+     * @param size 페이지 크기 (기본값: 20)
+     * @return JSON 문자열 (items 포함)
      */
     @Retry(name = "qnetClient")
-    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackSync")
-    public SyncResult getContentsInfo() {
-        return fetchPaged(
-                "contents",
-                params -> qnetFeignClient.getContentsInfo(params),
-                com.OhRyue.certpilot.cert.dto.external.ContentsItem.class,
-                item -> {
-                    // 컨텐츠 정보는 로깅만 하고 저장하지 않음 (필요시 Entity 추가)
-                    log.debug("Contents: {} - {}", item.getCtsNm(), item.getTitle());
-                    return SyncAction.SKIPPED;
-                },
-                extraParams -> {
-                    extraParams.put("_type", "json");
+    @CircuitBreaker(name = "qnetClient", fallbackMethod = "fallbackGetContentsInfoString")
+    public String getContentsInfoAsJson(String jmCd, int page, int size) {
+        Map<String, String> params = baseParams();
+        params.put("pageNo", String.valueOf(Math.max(1, page)));
+        params.put("numOfRows", String.valueOf(Math.min(Math.max(1, size), 100)));
+        params.put("_type", "json");
+        
+        // 주의: Q-Net InquiryContentsSVC API는 jmCd 파라미터를 지원하지 않는 것으로 보입니다.
+        // 전체 컨텐츠를 반환하므로, 클라이언트 측에서 필터링해야 합니다.
+        
+        try {
+            log.info("[contents] 조회 시작 - jmCd={}, page={}, size={}", jmCd, page, size);
+            String raw = qnetFeignClient.getContentsInfo(params);
+            
+            // JSON 또는 XML 응답 파싱 시도
+            // Q-Net API는 _type=json 파라미터로 JSON 응답을 반환하지만, 안전하게 처리
+            Optional<QnetApiResponse> optional = parseResponse(raw);
+            if (optional.isEmpty()) {
+                log.error("[contents] 응답 파싱 실패 - Raw response (처음 500자): {}", raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw);
+                return objectMapper.writeValueAsString(Map.of("error", "응답 파싱 실패: 응답을 파싱할 수 없습니다."));
+            }
+            
+            QnetApiResponse response = optional.get();
+            QnetApiResponse.Response resolvedResponse = response.resolveResponse();
+            if (resolvedResponse == null || resolvedResponse.getHeader() == null) {
+                log.warn("[contents] 응답 구조가 올바르지 않음");
+                return objectMapper.writeValueAsString(Map.of("error", "응답 구조 오류"));
+            }
+            
+            String resultCode = resolvedResponse.getHeader().getResultCode();
+            String resultMsg = resolvedResponse.getHeader().getResultMsg();
+            log.info("[contents] API 응답: code={}, message={}", resultCode, resultMsg);
+            
+            if (!"00".equals(resultCode)) {
+                return objectMapper.writeValueAsString(Map.of("error", String.format("API error [%s]: %s", resultCode, resultMsg)));
+            }
+            
+            QnetApiResponse.Body body = resolvedResponse.getBody();
+            if (body == null) {
+                return objectMapper.writeValueAsString(new ExternalCertDto.ContentsListResponse(List.of(), 0, page, size));
+            }
+            
+            List<ContentsItem> items = convertItems(body.getItems(), ContentsItem.class);
+            log.info("[contents] 조회 완료 - totalCount: {}, items: {}", body.getTotalCount(), items.size());
+            
+            // jmCd가 제공되면 서버 측에서 필터링 (Q-Net API가 jmCd 파라미터를 지원하지 않음)
+            if (StringUtils.hasText(jmCd)) {
+                String tempQualificationName = null;
+                
+                // DB에서 자격증 이름 조회 시도
+                Optional<QualificationEntity> qualificationOpt = qualificationRepository.findByJmCd(jmCd);
+                if (qualificationOpt.isPresent()) {
+                    tempQualificationName = qualificationOpt.get().getJmNm();
                 }
-        );
+                
+                // DB 값이 깨져있거나 없는 경우 jmCd로 직접 매핑
+                if (tempQualificationName == null || tempQualificationName.contains("?") || tempQualificationName.trim().isEmpty()) {
+                    // jmCd에 따른 자격증 이름 하드코딩 (정보처리기사: 1320)
+                    if ("1320".equals(jmCd)) {
+                        tempQualificationName = "정보처리기사";
+                        log.info("[contents] jmCd=1320에 대한 하드코딩된 자격증명 사용: {}", tempQualificationName);
+                    } else {
+                        log.warn("[contents] jmCd={}에 대한 자격증명을 찾을 수 없음", jmCd);
+                    }
+                }
+                
+                // final 변수로 복사하여 람다에서 사용 가능하도록 함
+                final String qualificationName = tempQualificationName;
+                
+                // 필터링 시도
+                if (StringUtils.hasText(qualificationName)) {
+                    log.info("[contents] jmCd={} 필터링 시도 - 자격증명: {}", jmCd, qualificationName);
+                    List<ContentsItem> filteredItems = items.stream()
+                            .filter(item -> {
+                                String title = item.getTitle() != null ? item.getTitle() : "";
+                                String ctsNm = item.getCtsNm() != null ? item.getCtsNm() : "";
+                                boolean matches = title.contains(qualificationName) || ctsNm.contains(qualificationName);
+                                if (matches) {
+                                    log.debug("[contents] 매칭된 항목: title={}, ctsNm={}", title, ctsNm);
+                                }
+                                return matches;
+                            })
+                            .collect(java.util.stream.Collectors.toList());
+                    
+                    if (!filteredItems.isEmpty()) {
+                        items = filteredItems;
+                        log.info("[contents] 필터링 성공 - 필터링 후 items: {} 개", items.size());
+                    } else {
+                        log.warn("[contents] jmCd={}에 해당하는 컨텐츠를 찾을 수 없음 (필터링된 결과: 0개)", jmCd);
+                        // 필터링 결과가 없으면 빈 배열 반환
+                        items = List.of();
+                    }
+                }
+            }
+            
+            // items를 ExternalCertDto.ContentsItem으로 변환
+            List<ExternalCertDto.ContentsItem> dtoItems = items.stream()
+                    .map(item -> new ExternalCertDto.ContentsItem(
+                            item.getCtsId(),
+                            item.getCtsNm(),
+                            item.getDeptNm(),
+                            item.getPubYnCcd(),
+                            item.getTitle()
+                    ))
+                    .toList();
+            
+            // ContentsListResponse 생성 (필터링된 경우 totalCount 조정)
+            int finalTotalCount = StringUtils.hasText(jmCd) ? dtoItems.size() : Optional.ofNullable(body.getTotalCount()).orElse(0);
+            ExternalCertDto.ContentsListResponse responseDto = new ExternalCertDto.ContentsListResponse(
+                    dtoItems,
+                    finalTotalCount,
+                    Optional.ofNullable(body.getPageNo()).orElse(page),
+                    Optional.ofNullable(body.getNumOfRows()).orElse(size)
+            );
+            
+            // JSON으로 변환하여 반환
+            String json = objectMapper.writeValueAsString(responseDto);
+            log.info("[contents] JSON 변환 완료 - items: {}", dtoItems.size());
+            return json;
+        } catch (Exception e) {
+            log.error("[contents] 조회 중 오류 발생: {}", e.getMessage(), e);
+            throw new RuntimeException("조회 중 오류: " + e.getMessage(), e);
+        }
+    }
+    
+    public String fallbackGetContentsInfoString(String jmCd, int page, int size, Throwable throwable) {
+        log.error("[contents] Fallback 호출: jmCd={}, page={}, size={}, error: {}", jmCd, page, size, throwable.getMessage());
+        try {
+            return objectMapper.writeValueAsString(Map.of("error", "Q-Net API 연결 실패: " + throwable.getMessage()));
+        } catch (Exception e) {
+            return "{\"error\": \"Q-Net API 연결 실패\"}";
+        }
     }
 
     /**
@@ -345,21 +668,44 @@ public class QnetSyncService {
                                       Class<T> itemClass,
                                       Function<T, SyncAction> handler,
                                       java.util.function.Consumer<Map<String, String>> extraParamConsumer) {
+        return fetchPaged(name, caller, itemClass, handler, extraParamConsumer, false);
+    }
+
+    private <T> SyncResult fetchPaged(String name,
+                                      Function<Map<String, String>, String> caller,
+                                      Class<T> itemClass,
+                                      Function<T, SyncAction> handler,
+                                      java.util.function.Consumer<Map<String, String>> extraParamConsumer,
+                                      boolean useDataGo) {
         int pageNo = 1;
         int inserted = 0;
         int updated = 0;
         int skipped = 0;
         int totalCount = 0;
 
+        // 동기화 시작 파라미터 로깅
+        Map<String, String> firstPageParams = useDataGo ? baseParamsForDataGo() : baseParams();
+        firstPageParams.put("pageNo", "1");
+        firstPageParams.put("numOfRows", String.valueOf(DEFAULT_PAGE_SIZE));
+        extraParamConsumer.accept(firstPageParams);
+        log.info("[{}] 동기화 시작 - 파라미터: {}", name, firstPageParams);
+
         while (true) {
-            Map<String, String> params = baseParams();
+            Map<String, String> params = useDataGo ? baseParamsForDataGo() : baseParams();
             params.put("pageNo", String.valueOf(pageNo));
             params.put("numOfRows", String.valueOf(DEFAULT_PAGE_SIZE));
 
             extraParamConsumer.accept(params);
 
             String raw = caller.apply(params);
-            log.debug("[{}] API raw response (page {}): {}", name, pageNo, raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw);
+            
+            // 첫 번째 페이지는 INFO 레벨로 로깅 (디버깅용), 나머지는 DEBUG
+            if (pageNo == 1) {
+                String rawPreview = raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw;
+                log.info("[{}] API raw response (처음 500자): {}", name, rawPreview);
+            } else {
+                log.debug("[{}] API raw response (page {}): {}", name, pageNo, raw != null && raw.length() > 500 ? raw.substring(0, 500) + "..." : raw);
+            }
             
             Optional<QnetApiResponse> optional = parseResponse(raw);
             if (optional.isEmpty()) {
@@ -395,10 +741,10 @@ public class QnetSyncService {
             }
 
             totalCount = Optional.ofNullable(body.getTotalCount()).orElse(0);
-            log.info("[{}] Total count: {}, page: {}, numOfRows: {}", name, totalCount, pageNo, body.getNumOfRows());
+            log.info("[{}] Total count: {}", name, totalCount);
             
             List<T> items = convertItems(body.getItems(), itemClass);
-            log.info("[{}] Converted {} items from page {}", name, items.size(), pageNo);
+            log.info("[{}] Converted {} items from page {} (page: {}, numOfRows: {})", name, items.size(), pageNo, body.getPageNo(), body.getNumOfRows());
             
             if (items.isEmpty()) {
                 log.info("[{}] No items found on page {}, stopping pagination", name, pageNo);
@@ -433,6 +779,7 @@ public class QnetSyncService {
      * 공통 기본 파라미터 – 인증키만 세팅
      * - 인코딩은 절대 하지 않고, 디코딩 키를 그대로 넣습니다.
      * - 일부 API 가 serviceKey / ServiceKey 를 섞어 쓰는 케이스를 대비해 둘 다 세팅합니다.
+     * - 주의: Q-Net API 전용 (openapi.q-net.or.kr)
      */
     private Map<String, String> baseParams() {
         Map<String, String> params = new HashMap<>();
@@ -441,6 +788,21 @@ public class QnetSyncService {
         if (StringUtils.hasText(key)) {
             params.put("serviceKey", key);
             params.put("ServiceKey", key);
+        }
+
+        return params;
+    }
+
+    /**
+     * 공공데이터포털 API용 기본 파라미터 – serviceKey만 세팅
+     * - data.go.kr API는 serviceKey만 필요하며, ServiceKey를 넣으면 중복 오류 발생
+     */
+    private Map<String, String> baseParamsForDataGo() {
+        Map<String, String> params = new HashMap<>();
+        String key = Optional.ofNullable(properties.getKey()).orElse("");
+
+        if (StringUtils.hasText(key)) {
+            params.put("serviceKey", key);  // serviceKey만 사용
         }
 
         return params;
@@ -503,15 +865,21 @@ public class QnetSyncService {
                     hasResponseNode, hasHeaderNode, hasBodyNode);
         } catch (JsonProcessingException e) {
             log.warn("Failed to parse response as JSON: {}", e.getOriginalMessage());
+            // JSON 파싱 실패 시, 응답이 XML로 시작하는 경우에만 XML 파싱 시도
+            String trimmed = raw.trim();
+            if (trimmed.startsWith("<") || trimmed.startsWith("<?xml")) {
+                try {
+                    log.debug("Attempting to parse as XML (response starts with '<')");
+                    return Optional.of(xmlMapper.readValue(raw, QnetApiResponse.class));
+                } catch (Exception xmlEx) {
+                    log.debug("Failed to parse response as XML: {}", xmlEx.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Unexpected error while parsing response: {}", e.getMessage());
         }
 
-        try {
-            // XML 응답 (혹시 설정이 잘못될 경우)
-            return Optional.of(xmlMapper.readValue(raw, QnetApiResponse.class));
-        } catch (Exception xmlEx) {
-            log.debug("Failed to parse response as XML: {}", xmlEx.getMessage());
-            return Optional.empty();
-        }
+        return Optional.empty();
     }
 
     private <T> List<T> convertItems(JsonNode itemsNode, Class<T> itemClass) {

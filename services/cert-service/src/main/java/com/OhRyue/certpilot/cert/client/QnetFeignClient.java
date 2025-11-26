@@ -60,4 +60,15 @@ public interface QnetFeignClient {
      */
     @GetMapping(value = "/InquiryContentsSVC/getList", produces = MediaType.APPLICATION_JSON_VALUE)
     String getContentsInfo(@RequestParam Map<String, String> params);
+
+    /**
+     * 종목별 자격정보 조회
+     * - Q-Net(openapi.q-net.or.kr) InquiryInformationTradeNTQSVC 사용
+     * ⚠️ 주의: Q-Net API는 현재 네트워크 연결 불가 상태
+     * 
+     * 예시:
+     *   /InquiryInformationTradeNTQSVC/getList?serviceKey=...&jmCd=1320&_type=xml
+     */
+    @GetMapping(value = "/InquiryInformationTradeNTQSVC/getList", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
+    String getInformationTradeNTQ(@RequestParam Map<String, String> params);
 }
