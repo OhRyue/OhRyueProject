@@ -109,53 +109,96 @@ public class BadgeService {
 
   @Transactional
   public RankDtos.BadgeStatusResponse evaluate(String userId) {
-    Map<String, BadgeCatalog> catalogByCode = badgeCatalogRepository.findAll().stream()
-        .collect(Collectors.toMap(BadgeCatalog::getCode, c -> c));
-    Set<Long> alreadyEarned = userBadgeRepository.findByUserIdOrderByEarnedAtDesc(userId).stream()
-        .map(UserBadge::getBadgeId)
-        .collect(Collectors.toSet());
+    try {
+      Map<String, BadgeCatalog> catalogByCode = badgeCatalogRepository.findAll().stream()
+          .collect(Collectors.toMap(BadgeCatalog::getCode, c -> c));
+      Set<Long> alreadyEarned = userBadgeRepository.findByUserIdOrderByEarnedAtDesc(userId).stream()
+          .map(UserBadge::getBadgeId)
+          .collect(Collectors.toSet());
 
-    List<BadgeCatalog> newlyEarned = new ArrayList<>();
+      List<BadgeCatalog> newlyEarned = new ArrayList<>();
 
-    maybeAward(userId, "FIRST_SOLVE", catalogByCode, alreadyEarned,
-        () -> userAnswerRepository.countByUserId(userId) >= 1,
-        newlyEarned);
+      maybeAward(userId, "FIRST_SOLVE", catalogByCode, alreadyEarned,
+          () -> {
+            try {
+              return userAnswerRepository.countByUserId(userId) >= 1;
+            } catch (Exception e) {
+              log.warn("Failed to check FIRST_SOLVE badge for user {}: {}", userId, e.getMessage());
+              return false;
+            }
+          },
+          newlyEarned);
 
-    maybeAward(userId, "STREAK_BRONZE", catalogByCode, alreadyEarned,
-        () -> userStreakRepository.findById(userId)
-            .map(UserStreak::getCurrentDays)
-            .orElse(0) >= 7,
-        newlyEarned);
+      maybeAward(userId, "STREAK_BRONZE", catalogByCode, alreadyEarned,
+          () -> {
+            try {
+              return userStreakRepository.findById(userId)
+                  .map(UserStreak::getCurrentDays)
+                  .orElse(0) >= 7;
+            } catch (Exception e) {
+              log.warn("Failed to check STREAK_BRONZE badge for user {}: {}", userId, e.getMessage());
+              return false;
+            }
+          },
+          newlyEarned);
 
-    maybeAward(userId, "XP_MASTER", catalogByCode, alreadyEarned,
-        () -> userXpWalletRepository.findById(userId)
-            .map(UserXpWallet::getXpTotal)
-            .orElse(0L) >= 3_000,
-        newlyEarned);
+      maybeAward(userId, "XP_MASTER", catalogByCode, alreadyEarned,
+          () -> {
+            try {
+              return userXpWalletRepository.findById(userId)
+                  .map(UserXpWallet::getXpTotal)
+                  .orElse(0L) >= 3_000;
+            } catch (Exception e) {
+              log.warn("Failed to check XP_MASTER badge for user {}: {}", userId, e.getMessage());
+              return false;
+            }
+          },
+          newlyEarned);
 
-    maybeAward(userId, "WEEKLY_WARRIOR", catalogByCode, alreadyEarned,
-        () -> reportWeeklyRepository.findTopByUserIdOrderByWeekIsoDesc(userId)
-            .map(ReportWeekly::getSolvedCount)
-            .orElse(0) >= 70,
-        newlyEarned);
+      maybeAward(userId, "WEEKLY_WARRIOR", catalogByCode, alreadyEarned,
+          () -> {
+            try {
+              return reportWeeklyRepository.findTopByUserIdOrderByWeekIsoDesc(userId)
+                  .map(ReportWeekly::getSolvedCount)
+                  .orElse(0) >= 70;
+            } catch (Exception e) {
+              log.warn("Failed to check WEEKLY_WARRIOR badge for user {}: {}", userId, e.getMessage());
+              return false;
+            }
+          },
+          newlyEarned);
 
-    maybeAward(userId, "TAG_SPECIALIST", catalogByCode, alreadyEarned,
-        () -> reportTagSkillRepository.findByUserIdOrderByAccuracyDesc(userId).stream()
-            .anyMatch(skill -> skill.getAccuracy().doubleValue() >= 90.0 && skill.getTotal() >= 20),
-        newlyEarned);
+      maybeAward(userId, "TAG_SPECIALIST", catalogByCode, alreadyEarned,
+          () -> {
+            try {
+              return reportTagSkillRepository.findByUserIdOrderByAccuracyDesc(userId).stream()
+                  .anyMatch(skill -> skill.getAccuracy() != null 
+                      && skill.getAccuracy().doubleValue() >= 90.0 
+                      && skill.getTotal() >= 20);
+            } catch (Exception e) {
+              log.warn("Failed to check TAG_SPECIALIST badge for user {}: {}", userId, e.getMessage());
+              return false;
+            }
+          },
+          newlyEarned);
 
-    if (!newlyEarned.isEmpty()) {
-      List<UserBadge> badges = newlyEarned.stream()
-          .map(b -> UserBadge.builder()
-              .userId(userId)
-              .badgeId(b.getId())
-              .earnedAt(Instant.now())
-              .build())
-          .toList();
-      userBadgeRepository.saveAll(badges);
+      if (!newlyEarned.isEmpty()) {
+        List<UserBadge> badges = newlyEarned.stream()
+            .map(b -> UserBadge.builder()
+                .userId(userId)
+                .badgeId(b.getId())
+                .earnedAt(Instant.now())
+                .build())
+            .toList();
+        userBadgeRepository.saveAll(badges);
+      }
+
+      return status(userId);
+    } catch (Exception e) {
+      log.error("Failed to evaluate badges for user {}: {}", userId, e.getMessage(), e);
+      // 에러 발생 시에도 현재 상태는 반환
+      return status(userId);
     }
-
-    return status(userId);
   }
 
   private BadgeStats toStats(List<BadgeCatalog> catalog, Set<Long> earnedIds) {

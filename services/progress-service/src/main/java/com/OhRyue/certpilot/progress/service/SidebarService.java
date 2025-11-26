@@ -26,34 +26,53 @@ public class SidebarService {
   private final StoreService storeService;
 
   public SidebarSummary sidebar(String userId) {
-    AccountMeResponse me = accountClient.me();
-    AccountMeResponse.Profile profile = me.profile();
+    try {
+      AccountMeResponse me = accountClient.me();
+      AccountMeResponse.Profile profile = me != null ? me.profile() : null;
 
-    UserXpWallet wallet = xpService.getWallet(userId);
-    UserStreak streak = streakService.get(userId);
-    StoreDtos.StoreCatalog catalog = storeService.catalog(userId, null, null);
+      UserXpWallet wallet = xpService.getWallet(userId);
+      UserStreak streak = streakService.get(userId);
+      StoreDtos.StoreCatalog catalog = storeService.catalog(userId, null, null);
 
-    SidebarUserCard userCard = new SidebarUserCard(
-        userId,
-        profile == null ? null : profile.nickname(),
-        profile == null ? null : profile.avatarUrl(),
-        wallet.getLevel(),
-        wallet.getXpTotal(),
-        streak.getCurrentDays(),
-        catalog.user().pointBalance()
-    );
+      SidebarUserCard userCard = new SidebarUserCard(
+          userId,
+          profile == null ? null : profile.nickname(),
+          profile == null ? null : profile.avatarUrl(),
+          wallet.getLevel(),
+          wallet.getXpTotal(),
+          streak.getCurrentDays(),
+          catalog != null && catalog.user() != null ? catalog.user().pointBalance() : 0L
+      );
 
-    int itemCount = catalog.categories().stream()
-        .mapToInt(section -> section.items().size())
-        .sum();
+      int itemCount = catalog != null && catalog.categories() != null
+          ? catalog.categories().stream()
+              .mapToInt(section -> section.items() != null ? section.items().size() : 0)
+              .sum()
+          : 0;
 
-    StorePreview storePreview = new StorePreview(
-        catalog.user().pointBalance(),
-        catalog.user().ownedItemCount(),
-        itemCount
-    );
+      StorePreview storePreview = new StorePreview(
+          catalog != null && catalog.user() != null ? catalog.user().pointBalance() : 0L,
+          catalog != null && catalog.user() != null ? catalog.user().ownedItemCount() : 0,
+          itemCount
+      );
 
-    return new SidebarSummary(userCard, storePreview, defaultQuickLinks());
+      return new SidebarSummary(userCard, storePreview, defaultQuickLinks());
+    } catch (Exception e) {
+      // Feign 호출 실패 시 기본값 반환
+      UserXpWallet wallet = xpService.getWallet(userId);
+      UserStreak streak = streakService.get(userId);
+      SidebarUserCard userCard = new SidebarUserCard(
+          userId,
+          null,
+          null,
+          wallet.getLevel(),
+          wallet.getXpTotal(),
+          streak.getCurrentDays(),
+          0L
+      );
+      StorePreview storePreview = new StorePreview(0L, 0, 0);
+      return new SidebarSummary(userCard, storePreview, defaultQuickLinks());
+    }
   }
 
   private List<QuickLink> defaultQuickLinks() {

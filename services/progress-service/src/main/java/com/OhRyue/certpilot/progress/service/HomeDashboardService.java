@@ -49,104 +49,134 @@ public class HomeDashboardService {
   private final UserPointWalletRepository userPointWalletRepository;
 
   public HomeOverview overview(String userId) {
-    // JWT 기반 Feign Interceptor가 Authorization 헤더를 자동으로 붙인다고 가정
-    AccountMeResponse me = accountClient.me();
-    AccountMeResponse.Profile profile = me.profile();
-    UserXpWallet wallet = xpService.getWallet(userId);
-    UserStreak streak = streakService.get(userId);
+    try {
+      // JWT 기반 Feign Interceptor가 Authorization 헤더를 자동으로 붙인다고 가정
+      AccountMeResponse me = accountClient.me();
+      AccountMeResponse.Profile profile = me != null ? me.profile() : null;
+      UserXpWallet wallet = xpService.getWallet(userId);
+      UserStreak streak = streakService.get(userId);
 
-    HomeUserCard userCard = new HomeUserCard(
-        userId,
-        profile == null ? null : profile.nickname(),
-        profile == null ? null : profile.avatarUrl(),
-        wallet.getLevel(),
-        wallet.getXpTotal(),
-        streak.getCurrentDays()
-    );
-
-    HomeGoal goal = null;
-    if (me.goal() != null) {
-      goal = new HomeGoal(
-          me.goal().certId(),
-          me.goal().targetExamMode(),
-          me.goal().targetRoundId(),
-          me.goal().ddayCached()
+      HomeUserCard userCard = new HomeUserCard(
+          userId,
+          profile == null ? null : profile.nickname(),
+          profile == null ? null : profile.avatarUrl(),
+          wallet.getLevel(),
+          wallet.getXpTotal(),
+          streak.getCurrentDays()
       );
-    }
 
-    return new HomeOverview(userCard, goal);
+      HomeGoal goal = null;
+      if (me != null && me.goal() != null) {
+        goal = new HomeGoal(
+            me.goal().certId(),
+            me.goal().targetExamMode(),
+            me.goal().targetRoundId(),
+            me.goal().ddayCached()
+        );
+      }
+
+      return new HomeOverview(userCard, goal);
+    } catch (Exception e) {
+      // Feign 호출 실패 시 기본값 반환
+      UserXpWallet wallet = xpService.getWallet(userId);
+      UserStreak streak = streakService.get(userId);
+      HomeUserCard userCard = new HomeUserCard(
+          userId,
+          null,
+          null,
+          wallet.getLevel(),
+          wallet.getXpTotal(),
+          streak.getCurrentDays()
+      );
+      return new HomeOverview(userCard, null);
+    }
   }
 
   public HomeProgressCard progressCard(String userId) {
-    AccountMeResponse me = accountClient.me();
-    if (me.goal() == null || me.goal().certId() == null) {
+    try {
+      AccountMeResponse me = accountClient.me();
+      if (me == null || me.goal() == null || me.goal().certId() == null) {
+        return new HomeProgressCard(0, 0, 0, 0.0, null);
+      }
+      // StudyReportClient 쪽은 JWT 기반으로 현재 사용자 기준 집계한다고 가정
+      return studyReportClient.progressCard(me.goal().certId());
+    } catch (Exception e) {
+      // Feign 호출 실패 시 기본값 반환
       return new HomeProgressCard(0, 0, 0, 0.0, null);
     }
-    // StudyReportClient 쪽은 JWT 기반으로 현재 사용자 기준 집계한다고 가정
-    return studyReportClient.progressCard(me.goal().certId());
   }
 
   public HomeRanking ranking(String userId) {
-    List<UserRankScore> top = rankService.topN(5);
-    List<String> userIds = top.stream()
-        .map(UserRankScore::getUserId)
-        .collect(Collectors.toList());
+    try {
+      List<UserRankScore> top = rankService.topN(5);
+      List<String> userIds = top.stream()
+          .map(UserRankScore::getUserId)
+          .collect(Collectors.toList());
 
-    if (!userIds.contains(userId)) {
-      userIds.add(userId);
+      if (!userIds.contains(userId)) {
+        userIds.add(userId);
+      }
+
+      List<ProfileSummaryResponse> summaries = List.of();
+      try {
+        summaries = userIds.isEmpty()
+            ? List.of()
+            : accountClient.summaries(userIds);
+      } catch (Exception e) {
+        // Feign 호출 실패 시 빈 리스트로 처리
+      }
+
+      Map<String, ProfileSummaryResponse> summaryMap = summaries.stream()
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s, (a, b) -> a));
+
+      Map<String, UserXpWallet> wallets = userXpWalletRepository.findAllById(userIds).stream()
+          .collect(Collectors.toMap(UserXpWallet::getUserId, w -> w));
+
+      List<HomeRankingItem> rankingItems = new ArrayList<>();
+      int rank = 1;
+      for (UserRankScore score : top) {
+        ProfileSummaryResponse summary = summaryMap.get(score.getUserId());
+        UserXpWallet wallet = wallets.getOrDefault(score.getUserId(), defaultWallet(score.getUserId()));
+        rankingItems.add(new HomeRankingItem(
+            score.getUserId(),
+            summary == null ? null : summary.nickname(),
+            summary == null ? null : summary.avatarUrl(),
+            wallet.getLevel(),
+            score.getScore(),
+            wallet.getXpTotal(),
+            score.getUserId().equals(userId),
+            rank++
+        ));
+      }
+
+      UserRankScore myScore = rankService.getScore(userId);
+      HomeRankingItem meItem = null;
+      if (myScore != null) {
+        ProfileSummaryResponse summary = summaryMap.get(userId);
+        UserXpWallet wallet = wallets.getOrDefault(userId, defaultWallet(userId));
+        int myRank = rankService.resolveRank(myScore);
+        meItem = new HomeRankingItem(
+            userId,
+            summary == null ? null : summary.nickname(),
+            summary == null ? null : summary.avatarUrl(),
+            wallet.getLevel(),
+            myScore.getScore(),
+            wallet.getXpTotal(),
+            true,
+            myRank
+        );
+      }
+
+      rankingItems.sort(Comparator.comparingLong(HomeRankingItem::score).reversed());
+      if (rankingItems.size() > 5) {
+        rankingItems = rankingItems.subList(0, 5);
+      }
+
+      return new HomeRanking(rankingItems, meItem, Instant.now().toString());
+    } catch (Exception e) {
+      // 전체 실패 시 빈 랭킹 반환
+      return new HomeRanking(List.of(), null, Instant.now().toString());
     }
-
-    List<ProfileSummaryResponse> summaries = userIds.isEmpty()
-        ? List.of()
-        : accountClient.summaries(userIds);
-
-    Map<String, ProfileSummaryResponse> summaryMap = summaries.stream()
-        .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s, (a, b) -> a));
-
-    Map<String, UserXpWallet> wallets = userXpWalletRepository.findAllById(userIds).stream()
-        .collect(Collectors.toMap(UserXpWallet::getUserId, w -> w));
-
-    List<HomeRankingItem> rankingItems = new ArrayList<>();
-    int rank = 1;
-    for (UserRankScore score : top) {
-      ProfileSummaryResponse summary = summaryMap.get(score.getUserId());
-      UserXpWallet wallet = wallets.getOrDefault(score.getUserId(), defaultWallet(score.getUserId()));
-      rankingItems.add(new HomeRankingItem(
-          score.getUserId(),
-          summary == null ? null : summary.nickname(),
-          summary == null ? null : summary.avatarUrl(),
-          wallet.getLevel(),
-          score.getScore(),
-          wallet.getXpTotal(),
-          score.getUserId().equals(userId),
-          rank++
-      ));
-    }
-
-    UserRankScore myScore = rankService.getScore(userId);
-    HomeRankingItem meItem = null;
-    if (myScore != null) {
-      ProfileSummaryResponse summary = summaryMap.get(userId);
-      UserXpWallet wallet = wallets.getOrDefault(userId, defaultWallet(userId));
-      int myRank = rankService.resolveRank(myScore);
-      meItem = new HomeRankingItem(
-          userId,
-          summary == null ? null : summary.nickname(),
-          summary == null ? null : summary.avatarUrl(),
-          wallet.getLevel(),
-          myScore.getScore(),
-          wallet.getXpTotal(),
-          true,
-          myRank
-      );
-    }
-
-    rankingItems.sort(Comparator.comparingLong(HomeRankingItem::score).reversed());
-    if (rankingItems.size() > 5) {
-      rankingItems = rankingItems.subList(0, 5);
-    }
-
-    return new HomeRanking(rankingItems, meItem, Instant.now().toString());
   }
 
   public HomeQuickStats quickStats(String userId) {

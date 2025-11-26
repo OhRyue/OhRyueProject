@@ -180,7 +180,13 @@ public class LeaderboardService {
   private RankDtos.LeaderboardResponse weeklyLeaderboard(String userId, String reference, int page, int size) {
     LocalDate refDate = resolveReferenceDate(RankScope.WEEKLY, reference);
     String weekIso = weekKey(refDate);
-    List<RankDtos.LeaderboardEntry> entries = weeklyEntries(weekIso, DEFAULT_LEADERBOARD_LIMIT);
+    
+    // 전체 엔트리 수 계산
+    long totalElements = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, Pageable.unpaged()).size();
+    int totalPages = totalElements == 0 ? 0 : (int) ((totalElements + size - 1) / size);
+    
+    // 페이지네이션 적용
+    List<RankDtos.LeaderboardEntry> entries = weeklyEntries(weekIso, page, size);
 
     RankDtos.LeaderboardEntry meEntry = null;
     if (userId != null) {
@@ -202,23 +208,20 @@ public class LeaderboardService {
           .orElse(null);
     }
 
-    int effectiveSize = entries.size();
-    long totalElements = effectiveSize;
-    int totalPages = effectiveSize == 0 ? 0 : 1;
-
     return new RankDtos.LeaderboardResponse(
         RankScope.WEEKLY,
         weekIso,
         Instant.now(),
         entries,
         meEntry,
-        0,
-        effectiveSize,
+        page,
+        size,
         totalElements,
         totalPages
     );
   }
 
+  @SuppressWarnings("unused")
   private RankDtos.LeaderboardResponse hallOfFameLeaderboard(String userId, String reference, int page, int size) {
     List<RankDtos.LeaderboardEntry> entries = hallEntries(3);
 
@@ -258,6 +261,7 @@ public class LeaderboardService {
     );
   }
 
+  @SuppressWarnings("unused")
   private RankDtos.LeaderboardResponse friendsLeaderboard(String userId, int page, int size) {
     List<UserFriend> friends = userFriendRepository.findByUserIdAndStatus(userId, FRIEND_ACCEPTED);
     List<String> candidateIds = new ArrayList<>();
@@ -324,6 +328,24 @@ public class LeaderboardService {
     return entries;
   }
 
+  private List<RankDtos.LeaderboardEntry> weeklyEntries(String weekIso, int page, int size) {
+    Pageable pageable = PageRequest.of(page, size);
+    List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
+    List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
+    int rank = page * size + 1;
+    for (ReportWeekly report : weekly) {
+      entries.add(new RankDtos.LeaderboardEntry(
+          report.getUserId(),
+          report.getXpGained(),
+          rank++,
+          (long) report.getXpGained(),
+          null,
+          Instant.now()
+      ));
+    }
+    return entries;
+  }
+
   private List<RankDtos.LeaderboardEntry> hallEntries(int limit) {
     List<UserStreak> streaks = userStreakRepository.findTop10ByOrderByBestDaysDesc();
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
@@ -346,7 +368,8 @@ public class LeaderboardService {
       return List.of();
     }
     try {
-      return objectMapper.readValue(payloadJson, new TypeReference<>() {});
+      return objectMapper.readValue(payloadJson, new TypeReference<>() {
+      });
     } catch (JsonProcessingException e) {
       log.warn("Failed to deserialize leaderboard snapshot: {}", e.getMessage());
       return List.of();
@@ -358,16 +381,24 @@ public class LeaderboardService {
     if (reference == null || reference.isBlank()) {
       return today;
     }
+
     return switch (scope) {
       case OVERALL, HALL_OF_FAME, FRIENDS -> LocalDate.parse(reference);
-      case WEEKLY -> parseWeek(reference);
+      case WEEKLY -> {
+        // 1) 2025-W47 같은 ISO week key 형식
+        if (reference.contains("W")) {
+          yield parseWeek(reference);
+        }
+        // 2) 2025-11-20 같은 날짜 형식도 허용
+        yield LocalDate.parse(reference);
+      }
     };
   }
 
   private String formatReference(RankScope scope, LocalDate date) {
     return switch (scope) {
       case OVERALL, HALL_OF_FAME, FRIENDS -> date.format(DateTimeFormatter.ISO_DATE);
-      case WEEKLY -> weekKey(date);
+      case WEEKLY -> weekKey(date); // 예: 2025-W47
     };
   }
 
@@ -381,8 +412,13 @@ public class LeaderboardService {
   private LocalDate parseWeek(String weekIso) {
     WeekFields weekFields = WeekFields.ISO;
     String[] parts = weekIso.split("-W");
+    if (parts.length != 2) {
+      // 방어 로직: 형식이 이상하면 그냥 오늘 기준으로 해석
+      return LocalDate.now();
+    }
     int year = Integer.parseInt(parts[0]);
     int week = Integer.parseInt(parts[1]);
+    // 해당 주의 월요일(주 시작일)로 맞춰줌
     return LocalDate.now()
         .with(weekFields.weekBasedYear(), year)
         .with(weekFields.weekOfWeekBasedYear(), week)
