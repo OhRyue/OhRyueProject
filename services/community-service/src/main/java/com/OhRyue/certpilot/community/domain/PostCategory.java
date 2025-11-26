@@ -21,6 +21,12 @@ public class PostCategory {
 
   @Column(nullable = false, length = 50)
   private String name;
+
+  /**
+   * 화면 표시 순서
+   * - V3 마이그레이션에서 ADD COLUMN sort_order TINYINT NOT NULL DEFAULT 0;
+   * - FREE, QNA, TIP, STUDY, REVIEW 순으로 값 설정
+   */
+  @Column(name = "sort_order", nullable = false)
+  private Byte sortOrder;
 }
-
-

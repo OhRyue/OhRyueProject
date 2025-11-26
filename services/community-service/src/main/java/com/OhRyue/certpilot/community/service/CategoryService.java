@@ -17,20 +17,19 @@ public class CategoryService {
 
   private final PostCategoryRepository categoryRepository;
 
+  /**
+   * 프론트에서 사용하는 카테고리 목록
+   * - 전체(ALL)는 제외
+   * - V3에서 정의한 sort_order 기준으로 정렬
+   * (FREE → QNA → TIP → STUDY → REVIEW)
+   */
   @Cacheable(cacheNames = "community:category:all")
   public List<PostCategory> findAll() {
-    return categoryRepository.findAll();
+    return categoryRepository.findByCodeNotOrderBySortOrderAsc("ALL");
   }
 
   public PostCategory getByCode(String code) {
     return categoryRepository.findByCode(code)
         .orElseThrow(() -> new ResourceNotFoundException("카테고리를 찾을 수 없습니다: " + code));
   }
-
-  public PostCategory getById(Byte id) {
-    return categoryRepository.findById(id)
-        .orElseThrow(() -> new ResourceNotFoundException("카테고리를 찾을 수 없습니다: " + id));
-  }
 }
-
-
