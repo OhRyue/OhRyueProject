@@ -35,6 +35,15 @@ public final class Jsons {
     if (v instanceof Number n) return n.intValue();
     try { return v==null? null : Integer.parseInt(String.valueOf(v)); } catch(Exception e){ return null; }
   }
+  public static Boolean optBoolean(Map<?,?> m, String k){
+    Object v = m==null? null : m.get(k);
+    if (v instanceof Boolean b) return b;
+    if (v instanceof String s) {
+      return "true".equalsIgnoreCase(s) || "1".equals(s);
+    }
+    if (v instanceof Number n) return n.intValue() != 0;
+    return null;
+  }
   public static Double optDouble(Map<?,?> m, String k){
     Object v = m==null? null : m.get(k);
     if (v instanceof Number n) return n.doubleValue();

@@ -266,7 +266,7 @@ public class PracticalService {
 
       persistUserAnswer(userId, question, userAnswer, isCorrect, 100, session, item, "PRACTICAL_MINI");
       pushProgressHook(userId, QuestionType.OX, isCorrect, 100, question.getId());
-      updateProgress(userId, question.getTopicId(), isCorrect ? 100 : 0);
+      updateProgress(userId, question.getTopicId(), isCorrect);
     }
 
     boolean passedNow = correctCount == req.answers().size();
@@ -572,7 +572,7 @@ public class PracticalService {
 
     List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
     List<Long> wrongIds = new ArrayList<>();
-    int totalScore = 0;
+    int correctCount = 0;
 
     for (int idx = 0; idx < req.answers().size(); idx++) {
       PracticalDtos.PracticalAnswer answer = req.answers().get(idx);
@@ -583,22 +583,23 @@ public class PracticalService {
 
       AIExplanationService.PracticalResult result = aiExplanationService.explainAndScorePractical(
           question, answer.userText());
-      int score = Optional.ofNullable(result.score()).orElse(0);
-      boolean passed = score >= 60;
-      totalScore += score;
-      if (!passed) wrongIds.add(question.getId());
+      boolean correct = Optional.ofNullable(result.correct()).orElse(false);
+      if (correct) {
+        correctCount++;
+      } else {
+        wrongIds.add(question.getId());
+      }
 
       items.add(new PracticalDtos.PracticalSubmitItem(
           question.getId(),
-          score,
+          correct,
           Optional.ofNullable(question.getSolutionText()).orElse(""),
           result.explain()
       ));
 
       Map<String, Object> answerJson = new HashMap<>();
       answerJson.put("answer", Optional.ofNullable(answer.userText()).orElse(""));
-      answerJson.put("score", score);
-      answerJson.put("passed", passed);
+      answerJson.put("correct", correct);
       answerJson.put("tips", result.tips());
 
       // 순서는 세션에 할당된 순서 사용
@@ -608,8 +609,8 @@ public class PracticalService {
           question.getId(),
           orderNo,
           toJson(answerJson),
-          passed,
-          score,
+          correct,
+          correct ? 100 : 0,  // 하위 호환성을 위해 점수도 저장 (맞으면 100, 틀리면 0)
           toJson(Map.of("explain", result.explain(), "tips", result.tips()))
       );
 
@@ -617,14 +618,14 @@ public class PracticalService {
           userId,
           question,
           answer.userText(),
-          passed,
-          score,
+          correct,
+          correct ? 100 : 0,  // 하위 호환성을 위해 점수도 저장
           session,
           item,
           "MICRO_PRACTICAL"
       );
-      pushProgressHook(userId, question.getType(), passed, score, question.getId());
-      updateProgress(userId, question.getTopicId(), score);
+      pushProgressHook(userId, question.getType(), correct, correct ? 100 : 0, question.getId());
+      updateProgress(userId, question.getTopicId(), correct);
     }
 
     // upsertItem 후 최신 상태로 다시 조회 (트랜잭션 내에서 반영 확인)
@@ -646,21 +647,18 @@ public class PracticalService {
     LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
     Map<String, Object> prevPracticalMeta = parseJson(practicalStep.getMetadataJson());
     
-    // StudySessionItem에서 실제 점수 정보 직접 계산 (누적 계산 대신)
+    // StudySessionItem에서 실제 정답 정보 직접 계산 (누적 계산 대신)
     int total = allocatedTotal;  // 할당된 총 문제 수
-    int totalScoreSum = 0;
+    int totalCorrect = 0;
     List<Long> allWrongIds = new ArrayList<>();
     
     for (StudySessionItem item : allPracticalItems) {
-      if (item.getScore() != null) {
-        totalScoreSum += item.getScore();
-      }
-      if (Boolean.FALSE.equals(item.getCorrect())) {
+      if (Boolean.TRUE.equals(item.getCorrect())) {
+        totalCorrect++;
+      } else if (Boolean.FALSE.equals(item.getCorrect())) {
         allWrongIds.add(item.getQuestionId());
       }
     }
-    
-    double avgScore = total == 0 ? 0.0 : totalScoreSum * 1.0 / total;
     
     boolean allPassedNow = total > 0 && allWrongIds.isEmpty();
     boolean everCompleted = Boolean.TRUE.equals(prevPracticalMeta.get("completed"));
@@ -668,13 +666,13 @@ public class PracticalService {
 
     Map<String, Object> practicalMeta = new HashMap<>(prevPracticalMeta);
     practicalMeta.put("total", total);
-    practicalMeta.put("avgScore", avgScore);
+    practicalMeta.put("correct", totalCorrect);
     practicalMeta.put("completed", finalCompleted);
     practicalMeta.put("wrongQuestionIds", allWrongIds);
     practicalMeta.put("lastSubmittedAt", Instant.now().toString());
     
     String metadataJson = toJson(practicalMeta);
-    int scorePct = total == 0 ? 0 : (int) Math.round(avgScore);
+    int scorePct = total == 0 ? 0 : (totalCorrect * 100) / total;  // 정확도 퍼센트 (하위 호환성)
 
     // StudySession의 summaryJson에도 저장 (하위 호환성)
     sessionManager.saveStepMeta(session, "practical", practicalMeta);
@@ -713,8 +711,8 @@ public class PracticalService {
         nextStep,
         sessionManager.loadMeta(session),
         new PracticalDtos.PracticalSubmitResp(
-            total,
-            total == 0 ? 0 : (int) Math.round(avgScore),
+            items.size(),
+            correctCount,
             items,
             wrongIds
         ),
@@ -857,7 +855,7 @@ public class PracticalService {
 
     List<PracticalDtos.PracticalSubmitItem> items = new ArrayList<>();
     List<Long> wrongIds = new ArrayList<>();
-    int totalScore = 0;
+    int correctCount = 0;
 
     for (int idx = 0; idx < req.answers().size(); idx++) {
       PracticalDtos.PracticalAnswer answer = req.answers().get(idx);
@@ -868,24 +866,23 @@ public class PracticalService {
 
       AIExplanationService.PracticalResult result = aiExplanationService.explainAndScorePractical(
           question, answer.userText());
-      int score = Optional.ofNullable(result.score()).orElse(0);
-      boolean passed = score >= 60;
-      totalScore += score;
-      if (!passed) {
+      boolean correct = Optional.ofNullable(result.correct()).orElse(false);
+      if (correct) {
+        correctCount++;
+      } else {
         wrongIds.add(question.getId());
       }
 
       items.add(new PracticalDtos.PracticalSubmitItem(
           question.getId(),
-          score,
+          correct,
           Optional.ofNullable(question.getSolutionText()).orElse(""),
           result.explain()
       ));
 
       Map<String, Object> answerJson = new HashMap<>();
       answerJson.put("answer", Optional.ofNullable(answer.userText()).orElse(""));
-      answerJson.put("score", score);
-      answerJson.put("passed", passed);
+      answerJson.put("correct", correct);
       answerJson.put("tips", result.tips());
 
       // 순서는 세션에 할당된 순서 사용
@@ -895,8 +892,8 @@ public class PracticalService {
           question.getId(),
           orderNo,
           toJson(answerJson),
-          passed,
-          score,
+          correct,
+          correct ? 100 : 0,  // 하위 호환성을 위해 점수도 저장
           toJson(Map.of("explain", result.explain(), "tips", result.tips()))
       );
 
@@ -904,19 +901,18 @@ public class PracticalService {
           userId,
           question,
           answer.userText(),
-          passed,
-          score,
+          correct,
+          correct ? 100 : 0,  // 하위 호환성을 위해 점수도 저장
           session,
           item,
           "PRACTICAL_REVIEW"
       );
-      pushProgressHook(userId, question.getType(), passed, score, question.getId());
+      pushProgressHook(userId, question.getType(), correct, correct ? 100 : 0, question.getId());
       // 실기 리뷰도 Progress 에 반영
-      updateProgress(userId, question.getTopicId(), score);
+      updateProgress(userId, question.getTopicId(), correct);
     }
 
     int total = items.size();
-    double avgScore = total == 0 ? 0.0 : totalScore * 1.0 / total;
     boolean allPassedNow = total > 0 && wrongIds.isEmpty();
 
     // 이전 메타 불러와서 everCompleted 유지
@@ -926,16 +922,17 @@ public class PracticalService {
 
     Map<String, Object> reviewMeta = new HashMap<>(prevReviewMeta);
     reviewMeta.put("total", total);
-    reviewMeta.put("avgScore", avgScore);
+    reviewMeta.put("correct", correctCount);
     reviewMeta.put("completed", finalCompleted);
     reviewMeta.put("wrongQuestionIds", wrongIds);
     reviewMeta.put("lastSubmittedAt", Instant.now().toString());
     sessionManager.saveStepMeta(session, "review", reviewMeta);
 
     // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
-    // 실기는 60점 이상이면 passed
+    // 실기는 맞으면 passed
+    int scorePct = total == 0 ? 0 : (correctCount * 100) / total;  // 정확도 퍼센트 (하위 호환성)
     if (!everCompleted && allPassedNow) {
-      sessionManager.closeSession(session, avgScore, true, Map.of("avgScore", avgScore));
+      sessionManager.closeSession(session, scorePct, true, Map.of("correct", correctCount));
     } else if (!everCompleted) {
       sessionManager.updateStatus(session, "OPEN");
     }
@@ -967,7 +964,7 @@ public class PracticalService {
         sessionManager.loadMeta(session),
         new PracticalDtos.PracticalReviewSubmitResp(
             total,
-            total == 0 ? 0 : (int) Math.round(avgScore),
+            correctCount,
             items,
             wrongIds
         ),
@@ -1006,7 +1003,6 @@ public class PracticalService {
 
     int practicalTotal = readInt(practicalMeta, "total");
     int practicalCorrect = readInt(practicalMeta, "correct");
-    double avgScore = readDouble(practicalMeta, "avgScore");
     boolean practicalCompleted = Boolean.TRUE.equals(practicalMeta.get("completed"));
 
     // 5. 약점 태그 계산
@@ -1047,7 +1043,7 @@ public class PracticalService {
     String summary = aiExplanationService.summarizePractical(
         topicTitle,
         totalSolved,
-        (int) Math.round(avgScore),
+        practicalCorrect,
         mistakes
     );
 
@@ -1056,7 +1052,7 @@ public class PracticalService {
         miniCorrect,
         miniPassed,
         practicalTotal,
-        practicalPassed,
+        practicalCorrect,
         summary,
         completed
     );
@@ -1077,8 +1073,8 @@ public class PracticalService {
           ));
           sessionManager.markXpGranted(session);
           if (!Boolean.TRUE.equals(session.getCompleted())) {
-            double finalAvgScore = avgScore;
-            sessionManager.closeSession(session, finalAvgScore, completed, Map.of());
+            int scorePct = practicalTotal == 0 ? 0 : (practicalCorrect * 100) / practicalTotal;
+            sessionManager.closeSession(session, scorePct, completed, Map.of());
           }
         } catch (Exception ignored) {
           // XP hook 실패는 학습 흐름을 막지 않음
@@ -1124,11 +1120,11 @@ public class PracticalService {
 
     PracticalDtos.PracticalSubmitResp resp = envelope.payload();
     PracticalDtos.PracticalSubmitItem item = resp.items().isEmpty()
-        ? new PracticalDtos.PracticalSubmitItem(req.questionId(), 0, "", "")
+        ? new PracticalDtos.PracticalSubmitItem(req.questionId(), false, "", "")
         : resp.items().get(0);
 
     return new PracticalDtos.PracticalGradeOneResp(
-        item.score(),
+        item.correct(),
         item.baseExplanation(),
         item.aiExplanation()
     );
@@ -1312,7 +1308,7 @@ public class PracticalService {
     userAnswerRepository.save(userAnswer);
   }
 
-  private void updateProgress(String userId, Long topicId, int score) {
+  private void updateProgress(String userId, Long topicId, boolean correct) {
     UserProgress progress = userProgressRepository.findByUserIdAndTopicId(userId, topicId)
         .orElseGet(() -> UserProgress.builder()
             .userId(userId)
@@ -1327,6 +1323,8 @@ public class PracticalService {
     int total = Optional.ofNullable(progress.getPracticalDoneCnt()).orElse(0);
     double avg = Optional.ofNullable(progress.getPracticalAvgScore()).orElse(0.0);
     progress.setPracticalDoneCnt(total + 1);
+    // 맞으면 100점, 틀리면 0점으로 계산하여 평균 점수 업데이트 (하위 호환성)
+    int score = correct ? 100 : 0;
     double newAvg = ((avg * total) + score) / (total + 1);
     progress.setPracticalAvgScore(Math.round(newAvg * 10.0) / 10.0);
     progress.setLastStudiedAt(Instant.now());
@@ -1354,7 +1352,7 @@ public class PracticalService {
 
   private List<String> collectMistakes(List<UserAnswer> answers, Map<Long, Question> questionCache) {
     return answers.stream()
-        .filter(ans -> Optional.ofNullable(ans.getScore()).orElse(0) < 60)
+        .filter(ans -> Boolean.FALSE.equals(ans.getCorrect()))  // 틀린 답안만
         .map(ans -> questionCache.get(ans.getQuestionId()))
         .filter(Objects::nonNull)
         .flatMap(q -> questionTagRepository.findTagsByQuestionId(q.getId()).stream())

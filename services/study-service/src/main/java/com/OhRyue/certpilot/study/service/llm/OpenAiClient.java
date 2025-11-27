@@ -45,13 +45,14 @@ public class OpenAiClient implements AiClient {
     String system = """
         당신은 정보처리기사 실기 채점관입니다.
         - JSON 객체로만 답하세요.
-        - keys = score(number 0~100), explain(string<=200자), tips(array of string, max 3).
-        - 점수는 rubric을 기준으로 판단합니다.
+        - keys = correct(boolean), explain(string<=200자), tips(array of string, max 3).
+        - correct는 사용자 답안이 정답인지 틀렸는지를 판단합니다 (true=맞음, false=틀림).
+        - rubric과 정답을 기준으로 엄격하게 판단하세요.
         """;
     String user = buildGradePrompt(request);
     Map<String, Object> json = invoke(system, user);
     return new GradeResponse(
-        Jsons.optInt(json, "score"),
+        Jsons.optBoolean(json, "correct"),
         Jsons.optString(json, "explain"),
         Jsons.optListString(json, "tips")
     );

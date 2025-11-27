@@ -40,7 +40,7 @@ public interface AiClient {
   ) {}
 
   record GradeResponse(
-      Integer score,
+      Boolean correct,  // 맞음(true) / 틀림(false)
       String explain,
       List<String> tips
   ) {}
