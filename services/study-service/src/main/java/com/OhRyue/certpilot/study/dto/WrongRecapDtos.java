@@ -17,7 +17,8 @@ public class WrongRecapDtos {
                 String correctAnswer,   // 정답 라벨/boolean/NULL(실기는 정답 개념이 없는 경우 빈값)
                 String baseExplanation, // DB 해설
                 String imageUrl,        // 선택
-                String aiExplanation   // AI 해설 (실기에서 사용, 필기에서는 null)
+                String aiExplanation,   // AI 해설 (실기에서 사용, 필기에서는 null)
+                Boolean aiExplanationFailed // AI 해설 생성 실패 여부 (실기에서만 사용, 필기에서는 null)
         ){}
     }
 }

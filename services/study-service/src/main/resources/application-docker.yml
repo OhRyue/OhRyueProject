@@ -36,7 +36,7 @@ security:
 llm:
   base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
   api-key: ${LLM_API_KEY:}
-  timeout-ms: 3000
+  timeout-ms: 6000
 
 frontend:
   origin: ${FRONTEND_ORIGIN:http://localhost:5173,http://localhost:3000}
@@ -73,7 +73,7 @@ resilience4j:
   timelimiter:
     configs:
       default:
-        timeout-duration: 3s
+        timeout-duration: 6s
         cancel-running-future: true
     # 필요 시 Feign 전용 인스턴스를 추가해도 됨(없으면 default 사용)
     # instances:

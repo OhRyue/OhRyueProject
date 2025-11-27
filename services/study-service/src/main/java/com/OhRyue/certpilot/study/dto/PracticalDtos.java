@@ -81,9 +81,10 @@ public class PracticalDtos {
   // 실기 즉시 채점 응답
   @Schema(description = "실기 단건 즉시 채점 응답")
   public record PracticalGradeOneResp(
-      Boolean correct,       // 맞음(true) / 틀림(false) (AI 채점)
-      String answerKey,      // 문제의 정답 (question.answer_key)
-      String baseExplanation,// DB 기본 해설
-      String aiExplanation   // LLM 맞춤 해설
+      Boolean correct,           // 맞음(true) / 틀림(false) (AI 채점)
+      String answerKey,          // 문제의 정답 (question.answer_key)
+      String baseExplanation,    // DB 기본 해설
+      String aiExplanation,      // LLM 맞춤 해설
+      Boolean aiExplanationFailed // AI 해설 생성 실패 여부 (true=실패, false=성공)
   ) {}
 }

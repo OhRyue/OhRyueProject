@@ -1509,7 +1509,8 @@ public class WrittenService {
         correctAnswer,
         solution,
         question.getImageUrl(),
-        null  // 필기는 AI 해설 미사용
+        null,  // 필기는 AI 해설 미사용
+        null   // 필기는 AI 해설 실패 여부 미사용
     );
   }
 

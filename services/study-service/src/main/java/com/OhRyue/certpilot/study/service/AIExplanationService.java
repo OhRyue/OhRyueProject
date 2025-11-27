@@ -103,19 +103,25 @@ public class AIExplanationService {
     AiClient.GradeResponse response = aiClient.grade(request);
     if (response == null) {
       boolean correct = heuristicGrade(question, userAnswerText);
-      return new PracticalResult(correct, FALLBACK_GRADE_MSG, List.of());
+      return new PracticalResult(correct, FALLBACK_GRADE_MSG, "", "", List.of(), true);
     }
 
     boolean correct = Optional.ofNullable(response.correct()).orElse(heuristicGrade(question, userAnswerText));
     String explain = Optional.ofNullable(response.explain()).filter(s -> !s.isBlank()).orElse(FALLBACK_GRADE_MSG);
+    String explainCorrect = Optional.ofNullable(response.explainCorrect()).filter(s -> !s.isBlank()).orElse("");
+    String explainUser = Optional.ofNullable(response.explainUser()).filter(s -> !s.isBlank()).orElse("");
     List<String> tips = Optional.ofNullable(response.tips()).orElse(List.of());
+    
+    // AI 해설 실패 여부 판단: explain이 FALLBACK_GRADE_MSG이거나, explainCorrect와 explainUser가 모두 비어있으면 실패로 간주
+    boolean aiFailed = explain.equals(FALLBACK_GRADE_MSG) || 
+                       (explainCorrect.isBlank() && explainUser.isBlank());
 
-    return new PracticalResult(correct, explain, tips);
+    return new PracticalResult(correct, explain, explainCorrect, explainUser, tips, aiFailed);
   }
 
   private PracticalResult fallbackGradePractical(Question question, String userAnswerText, Throwable throwable) {
     boolean correct = heuristicGrade(question, userAnswerText);
-    return new PracticalResult(correct, FALLBACK_GRADE_MSG, List.of());
+    return new PracticalResult(correct, FALLBACK_GRADE_MSG, "", "", List.of(), true);
   }
 
   /* ===================== 필기 요약 ===================== */
@@ -234,5 +240,12 @@ public class AIExplanationService {
     return matchCount >= 3;
   }
 
-  public record PracticalResult(boolean correct, String explain, List<String> tips) {}
+  public record PracticalResult(
+      boolean correct,
+      String explain,  // 하위 호환성을 위한 조합된 해설
+      String explainCorrect,  // 정답 및 채점 기준이 왜 맞는지
+      String explainUser,  // 사용자의 답안이 왜 맞거나 틀렸는지
+      List<String> tips,
+      boolean aiFailed  // AI 해설 생성 실패 여부
+  ) {}
 }

@@ -43,19 +43,58 @@ public class OpenAiClient implements AiClient {
   @Override
   public GradeResponse grade(GradeRequest request) {
     String system = """
-        당신은 정보처리기사 실기 채점관입니다.
-        - JSON 객체로만 답하세요.
-        - keys = correct(boolean), explain(string<=200자), tips(array of string, max 3).
-        - correct는 사용자 답안이 정답인지 틀렸는지를 판단합니다 (true=맞음, false=틀림).
-        - rubric과 정답을 기준으로 엄격하게 판단하세요.
+        당신은 정보처리기사 실기 채점관입니다
+
+        출력 형식 규칙:
+        - JSON 객체로만 답하세요
+        - 속성:
+          - correct: boolean        // 사용자 답안이 정답인지 여부 (true=맞음, false=틀림)
+          - explainCorrect: string  // 정답 및 채점 기준이 왜 맞는지 (최대 150자)
+          - explainUser: string     // 사용자의 답안이 왜 맞거나 틀렸는지 (최대 150자)
+          - tips: string[]          // 최대 3개, 각 50자 이내, 다음에 맞추기 위한 팁
+
+        설명 작성 규칙:
+        - 모든 문자열은 한국어로 작성합니다
+        - explainCorrect에는 모범답안 관점의 해설을 씁니다
+          - 핵심 개념, 키워드, 이유를 간단히 정리합니다
+        - explainUser에는 수험자 답안을 직접 언급하며 평가합니다
+          - 어떤 부분이 정확한지, 어떤 부분이 부족하거나 잘못되었는지 구체적으로 말합니다
+          - 오개념이 있다면 왜 틀렸는지 짧게 설명합니다
+
+        채점 기준:
+        - rubric과 정답을 기준으로 엄격하게 채점합니다
+        - 핵심 키워드가 모두 포함되고 의미가 같으면 correct=true
+        - 핵심 키워드가 빠졌거나 의미가 다르면 correct=false
+        - 표현만 달라지고 의미가 동일하면 정답으로 인정합니다
+
+        주의:
+        - JSON 이외의 텍스트는 절대 출력하지 마세요
         """;
     String user = buildGradePrompt(request);
     Map<String, Object> json = invoke(system, user);
+    
+    String explainCorrect = Jsons.optString(json, "explainCorrect");
+    String explainUser = Jsons.optString(json, "explainUser");
+    // 하위 호환성을 위해 두 해설을 조합한 explain 생성
+    String explain = combineExplanations(explainCorrect, explainUser);
+    
     return new GradeResponse(
         Jsons.optBoolean(json, "correct"),
-        Jsons.optString(json, "explain"),
+        explain,
+        explainCorrect,
+        explainUser,
         Jsons.optListString(json, "tips")
     );
+  }
+  
+  private static String combineExplanations(String explainCorrect, String explainUser) {
+    if (explainCorrect == null || explainCorrect.isBlank()) {
+      return explainUser != null ? explainUser : "";
+    }
+    if (explainUser == null || explainUser.isBlank()) {
+      return explainCorrect;
+    }
+    return explainCorrect + "\n\n" + explainUser;
   }
 
   @Override
