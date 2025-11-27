@@ -15,12 +15,12 @@ CREATE TABLE IF NOT EXISTS match_participant (
   user_id     VARCHAR(100) NOT NULL,
   joined_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   final_score INT NULL,
-  rank        INT NULL,
+  player_rank INT NULL,
   INDEX ix_mp_room (room_id),
   INDEX ix_mp_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ✅ 라운드/파이널/부활을 명확히 관리하기 위해 round_no/phase 추가
+-- 라운드/파이널/부활을 명확히 관리하기 위해 round_no/phase 추가
 CREATE TABLE IF NOT EXISTS match_question (
   id             BIGINT AUTO_INCREMENT PRIMARY KEY,
   room_id        BIGINT NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS match_question (
   INDEX ix_mq_q (question_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ✅ 답안에도 round_no/phase(옵션) 추가 → 최종전 합산/부활전 집계 용이
+-- 답안에도 round_no/phase(옵션) 추가 → 최종전 합산/부활전 집계 용이
 CREATE TABLE IF NOT EXISTS match_answer (
   id           BIGINT AUTO_INCREMENT PRIMARY KEY,
   room_id      BIGINT NOT NULL,

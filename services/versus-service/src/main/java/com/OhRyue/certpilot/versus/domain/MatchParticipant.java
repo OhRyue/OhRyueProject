@@ -30,8 +30,8 @@ public class MatchParticipant {
   @Column(name = "final_score")
   private Integer finalScore;
 
-  @Column(name = "rank")
-  private Integer rank;
+  @Column(name = "player_rank")
+  private Integer playerRank;
 
   @Column(name = "eliminated", nullable = false)
   private boolean eliminated;

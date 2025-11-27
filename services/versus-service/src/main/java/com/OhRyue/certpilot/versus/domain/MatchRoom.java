@@ -29,6 +29,9 @@ public class MatchRoom {
   @Column(name = "scope_json", columnDefinition = "JSON")
   private String scopeJson;
 
+  @Column(name = "scheduled_at")
+  private Instant scheduledAt;  // 예약 시작 시간 (GOLDENBELL 모드용)
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 

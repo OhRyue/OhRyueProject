@@ -5,10 +5,10 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- 1) match_participant에 탈락 상태 플래그 추가
 -- ------------------------------------------------------------
 ALTER TABLE match_participant
-  ADD COLUMN IF NOT EXISTS eliminated TINYINT(1) NOT NULL DEFAULT 0
-  AFTER rank;
+  ADD COLUMN eliminated TINYINT(1) NOT NULL DEFAULT 0
+  AFTER player_rank;
 
-CREATE INDEX IF NOT EXISTS ix_mp_active ON match_participant (room_id, eliminated);
+CREATE INDEX ix_mp_active ON match_participant (room_id, eliminated);
 
 -- ------------------------------------------------------------
 -- 2) 실시간 타임라인 보존용 match_event 테이블 생성
