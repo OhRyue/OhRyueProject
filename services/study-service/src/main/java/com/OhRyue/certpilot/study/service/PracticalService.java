@@ -90,6 +90,9 @@ public class PracticalService {
 
   /**
    * CONCEPT 단계 완료 처리
+   * 주의: 이제 advance API를 통해 단계 전이를 수행해야 합니다.
+   * 이 메서드는 하위 호환성을 위해 유지되지만, 내부적으로는 아무 작업도 하지 않습니다.
+   * 프론트엔드는 POST /api/study/session/advance를 호출해야 합니다.
    */
   @Transactional
   public void completeConcept(Long learningSessionId) {
@@ -100,14 +103,8 @@ public class PracticalService {
       throw new IllegalStateException("세션 소유자가 아닙니다.");
     }
     
-    LearningStep conceptStep = learningSessionService.getStep(learningSession, "CONCEPT");
-    learningSessionService.updateStepStatus(conceptStep, "COMPLETE", null, null);
-    
-    // MINI 단계를 IN_PROGRESS로 변경
-    LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
-    if ("READY".equals(miniStep.getStatus())) {
-      learningSessionService.updateStepStatus(miniStep, "IN_PROGRESS", null, null);
-    }
+    // 상태 변경은 advance API를 통해 수행되어야 함
+    // 하위 호환성을 위해 메서드는 유지하지만 실제 작업은 하지 않음
   }
 
   /* ========================= 미니체크(OX) ========================= */
@@ -163,9 +160,9 @@ public class PracticalService {
     String status = miniStep.getStatus();
     boolean completed = "COMPLETE".equals(status);
     
-    // MINI 단계를 IN_PROGRESS로 변경
+    // 상태 변경은 advance API를 통해 수행되어야 함
+    // 단계가 READY 상태이면 IN_PROGRESS로 표시만 함 (실제 변경은 advance에서)
     if ("READY".equals(status)) {
-      learningSessionService.updateStepStatus(miniStep, "IN_PROGRESS", null, null);
       status = "IN_PROGRESS";
     }
 
@@ -304,18 +301,12 @@ public class PracticalService {
     // 4. StudySession의 summaryJson에도 저장 (하위 호환성)
     sessionManager.saveStepMeta(session, "mini", miniMeta);
 
-    // 5. 미니체크 완료 시 LearningStep 업데이트
-    if (newTotal >= MINI_SIZE) {
-      learningSessionService.updateStepStatus(miniStep, "COMPLETE", accumulatedScorePct, metadataJson);
-      // PRACTICAL 단계를 IN_PROGRESS로 변경
-      LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
-      if (practicalStep != null && "READY".equals(practicalStep.getStatus())) {
-        learningSessionService.updateStepStatus(practicalStep, "IN_PROGRESS", null, null);
-      }
-    } else {
-      // 미완료 시 상태만 업데이트
-      learningSessionService.updateStepStatus(miniStep, "IN_PROGRESS", accumulatedScorePct, metadataJson);
-    }
+    // 5. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
+    // MINI 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
+    miniStep.setMetadataJson(metadataJson);
+    miniStep.setScorePct(accumulatedScorePct);
+    miniStep.setUpdatedAt(Instant.now());
+    learningStepRepository.save(miniStep);
 
     boolean finalPassed = everPassed;
 
@@ -687,26 +678,12 @@ public class PracticalService {
       learningSessionService.saveLearningSession(learningSession);
     }
 
-    // PRACTICAL 단계 업데이트: 모든 문제를 풀었으면 COMPLETE
-    if (finalCompleted) {
-      learningSessionService.updateStepStatus(practicalStep, "COMPLETE", scorePct, metadataJson);
-      // 오답이 있으면 REVIEW_WRONG 단계를 IN_PROGRESS로, 없으면 SUMMARY로
-      if (!allWrongIds.isEmpty()) {
-        // 오답이 있으면 REVIEW_WRONG 단계로 이동
-        LearningStep reviewStep = learningSessionService.getStep(learningSession, "REVIEW_WRONG");
-        if (reviewStep != null && "READY".equals(reviewStep.getStatus())) {
-          learningSessionService.updateStepStatus(reviewStep, "IN_PROGRESS", null, null);
-        }
-      } else {
-        // 오답이 없으면 바로 SUMMARY로
-        LearningStep summaryStep = learningSessionService.getStep(learningSession, "SUMMARY");
-        if (summaryStep != null && "READY".equals(summaryStep.getStatus())) {
-          learningSessionService.updateStepStatus(summaryStep, "IN_PROGRESS", null, null);
-        }
-      }
-    } else {
-      learningSessionService.updateStepStatus(practicalStep, "IN_PROGRESS", scorePct, metadataJson);
-    }
+    // PRACTICAL 단계 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
+    // PRACTICAL 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
+    practicalStep.setMetadataJson(metadataJson);
+    practicalStep.setScorePct(scorePct);
+    practicalStep.setUpdatedAt(Instant.now());
+    learningStepRepository.save(practicalStep);
 
     // 다음 단계 결정: 오답이 있으면 REVIEW_WRONG, 없으면 SUMMARY
     String nextStep = finalCompleted 
@@ -1092,23 +1069,8 @@ public class PracticalService {
       }
     }
 
-    // SUMMARY 단계를 COMPLETE로 변경
-    LearningStep summaryStep = learningSessionService.getStep(learningSession, "SUMMARY");
-    if (!"COMPLETE".equals(summaryStep.getStatus())) {
-      learningSessionService.updateStepStatus(summaryStep, "COMPLETE", null, null);
-    }
-    
-    // 모든 단계가 완료되었는지 확인하고, 완료되었으면 LearningSession의 status를 DONE으로 변경
-    List<LearningStep> allSteps = learningStepRepository.findByLearningSessionIdOrderByIdAsc(learningSession.getId());
-    // 모든 단계가 COMPLETE 상태인지 확인 (READY나 IN_PROGRESS 상태인 단계가 없어야 함)
-    boolean allStepsCompleted = allSteps.stream()
-        .allMatch(step -> "COMPLETE".equals(step.getStatus()));
-    
-    if (allStepsCompleted && !"DONE".equals(learningSession.getStatus())) {
-      learningSession.setStatus("DONE");
-      learningSession.setUpdatedAt(Instant.now());
-      learningSessionService.saveLearningSession(learningSession);
-    }
+    // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
+    // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
 
     return new FlowDtos.StepEnvelope<>(
         sessionId,

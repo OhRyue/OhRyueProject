@@ -25,7 +25,7 @@ public class StudySessionService {
 
   /** 필기(WRITTEN) 단계 순서 */
   private static final List<String> ORDER_WRITTEN = List.of(
-      "CONCEPT", "MINI", "REVIEW_WRONG", "MCQ", "SUMMARY"
+      "CONCEPT", "MINI", "MCQ", "REVIEW_WRONG", "SUMMARY"
   );
   /** 실기(PRACTICAL) 단계 순서 */
   private static final List<String> ORDER_PRACTICAL = List.of(

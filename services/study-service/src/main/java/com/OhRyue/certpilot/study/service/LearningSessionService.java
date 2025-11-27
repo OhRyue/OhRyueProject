@@ -8,12 +8,15 @@ import com.OhRyue.certpilot.study.domain.enums.QuestionType;
 import com.OhRyue.certpilot.study.dto.SessionDtos.*;
 import com.OhRyue.certpilot.study.repository.LearningSessionRepository;
 import com.OhRyue.certpilot.study.repository.LearningStepRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,10 +28,11 @@ public class LearningSessionService {
   private final LearningSessionRepository sessionRepo;
   private final LearningStepRepository stepRepo;
   private final StudySessionManager sessionManager;
+  private final ObjectMapper objectMapper;
 
   /** 필기(WRITTEN) 단계 순서 */
   private static final List<String> ORDER_WRITTEN = List.of(
-      "CONCEPT", "MINI", "REVIEW_WRONG", "MCQ", "SUMMARY"
+      "CONCEPT", "MINI", "MCQ", "REVIEW_WRONG", "SUMMARY"
   );
   /** 실기(PRACTICAL) 단계 순서 */
   private static final List<String> ORDER_PRACTICAL = List.of(
@@ -227,6 +231,9 @@ public class LearningSessionService {
    * 현재 step을 COMPLETE 처리(프런트가 '해당 단계 문제를 전부 완료'한 뒤 호출).
    * 다음 READY 단계로 이동. 남은 READY 단계가 없으면 DONE.
    * - JWT 기반 유저 검증 추가
+   * - 단계별 완료 조건 검증
+   * - StudySession 종료 처리
+   * - 다음 단계 자동 활성화
    */
   @Transactional
   public AdvanceResp advance(AdvanceReq req) {
@@ -245,24 +252,58 @@ public class LearningSessionService {
         .findFirst()
         .orElseThrow(() -> new NoSuchElementException("step not found in session"));
 
-    // 문제를 다 풀어야 COMPLETE
+    // 현재 단계가 IN_PROGRESS 상태인지 확인
+    if (!"IN_PROGRESS".equals(current.getStatus()) && !"READY".equals(current.getStatus())) {
+      throw new IllegalStateException("단계가 진행 가능한 상태가 아닙니다. 현재 상태: " + current.getStatus());
+    }
+
+    // 단계별 완료 조건 검증 (문제가 있는 단계만)
+    if (requiresCompletionCheck(current.getStepCode())) {
+      validateStepCompletion(current, s);
+    }
+
+    // 단계를 COMPLETE로 변경
     current.setStatus("COMPLETE");
     current.setScorePct(req.score());
     current.setMetadataJson(req.detailsJson());
     current.setUpdatedAt(Instant.now());
     stepRepo.save(current);
 
-    // 세션의 mode(String) 기준으로 다음 단계 탐색
-    String next = null;
-    for (String stepCode : orderOf(s.getMode())) {
-      var found = steps.stream()
-          .filter(x -> x.getStepCode().equals(stepCode))
+    // StudySession 종료 처리 (MINI, MCQ, PRACTICAL 단계 완료 시)
+    if (hasStudySession(current)) {
+      com.OhRyue.certpilot.study.domain.StudySession studySession;
+      
+      // PRACTICAL 단계는 MINI 단계와 같은 StudySession을 공유하므로 MINI 단계에서 가져옴
+      if ("PRACTICAL".equals(current.getStepCode())) {
+        var miniStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), "MINI")
+            .orElseThrow(() -> new IllegalStateException("MINI 단계를 찾을 수 없습니다."));
+        studySession = miniStep.getStudySession();
+      } else {
+        studySession = current.getStudySession();
+      }
+      
+      if (studySession != null && !"CLOSED".equals(studySession.getStatus()) && !"SUBMITTED".equals(studySession.getStatus())) {
+        // 메타데이터에서 점수 추출
+        Integer scorePct = req.score() != null ? req.score() : current.getScorePct();
+        if (scorePct == null) scorePct = 0;
+        
+        sessionManager.closeSession(studySession, scorePct, parseMetadata(req.detailsJson()));
+      }
+    }
+
+    // 세션의 mode(String) 기준으로 다음 단계 탐색 및 활성화
+    // 오답이 없으면 REVIEW_WRONG 단계를 건너뛰고 SUMMARY로 이동
+    String next = findNextStep(steps, s.getMode(), current);
+    
+    if (next != null) {
+      var nextStep = steps.stream()
+          .filter(x -> x.getStepCode().equals(next))
           .findFirst()
           .orElseThrow();
-      if ("READY".equals(found.getStatus())) {
-        next = stepCode;
-        break;
-      }
+      // 다음 단계를 IN_PROGRESS로 활성화
+      nextStep.setStatus("IN_PROGRESS");
+      nextStep.setUpdatedAt(Instant.now());
+      stepRepo.save(nextStep);
     }
 
     if (next == null) {
@@ -274,6 +315,157 @@ public class LearningSessionService {
       s.setUpdatedAt(Instant.now());
       sessionRepo.save(s);
       return new AdvanceResp(s.getId(), next, s.getStatus());
+    }
+  }
+
+  /**
+   * 단계별 완료 조건 검증이 필요한지 확인
+   */
+  private boolean requiresCompletionCheck(String stepCode) {
+    return "MINI".equals(stepCode) || "MCQ".equals(stepCode) || "PRACTICAL".equals(stepCode);
+  }
+
+  /**
+   * 단계별 완료 조건 검증
+   */
+  private void validateStepCompletion(LearningStep step, LearningSession session) {
+    com.OhRyue.certpilot.study.domain.StudySession studySession;
+    
+    // PRACTICAL 단계는 MINI 단계와 같은 StudySession을 공유하므로 MINI 단계에서 가져옴
+    if ("PRACTICAL".equals(step.getStepCode())) {
+      var miniStep = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "MINI")
+          .orElseThrow(() -> new IllegalStateException("MINI 단계를 찾을 수 없습니다."));
+      studySession = miniStep.getStudySession();
+    } else {
+      studySession = step.getStudySession();
+    }
+    
+    if (studySession == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다.");
+    }
+
+    var items = sessionManager.items(studySession.getId());
+    if (items.isEmpty()) {
+      throw new IllegalStateException("세션에 할당된 문제가 없습니다.");
+    }
+
+    // MINI와 MCQ는 각각 별도의 StudySession을 가지므로 모든 아이템이 해당 단계의 문제
+    // PRACTICAL은 MINI와 같은 StudySession을 공유하므로 orderNo > 4로 필터링
+    List<com.OhRyue.certpilot.study.domain.StudySessionItem> stepItems;
+    if ("MINI".equals(step.getStepCode())) {
+      // MINI는 orderNo 1-4
+      stepItems = items.stream()
+          .filter(item -> item.getOrderNo() <= 4)
+          .toList();
+    } else if ("MCQ".equals(step.getStepCode())) {
+      // MCQ는 별도 StudySession이므로 모든 아이템
+      stepItems = items;
+    } else if ("PRACTICAL".equals(step.getStepCode())) {
+      // PRACTICAL은 MINI와 같은 StudySession을 공유하므로 orderNo > 4
+      stepItems = items.stream()
+          .filter(item -> item.getOrderNo() > 4)
+          .toList();
+    } else {
+      return; // 검증 불필요
+    }
+
+    // 모든 문제에 답변이 있는지 확인
+    long answeredCount = stepItems.stream()
+        .filter(item -> item.getUserAnswerJson() != null && !item.getUserAnswerJson().isBlank())
+        .count();
+
+    if (answeredCount < stepItems.size()) {
+      throw new IllegalStateException(
+          String.format("%s 단계의 모든 문제를 풀어야 합니다. (완료: %d/%d)", 
+              step.getStepCode(), answeredCount, stepItems.size()));
+    }
+  }
+
+  /**
+   * 단계에 StudySession이 연결되어 있는지 확인
+   */
+  private boolean hasStudySession(LearningStep step) {
+    return "MINI".equals(step.getStepCode()) || 
+           "MCQ".equals(step.getStepCode()) || 
+           "PRACTICAL".equals(step.getStepCode());
+  }
+
+  /**
+   * 다음 단계 찾기 (오답이 없으면 REVIEW_WRONG 건너뛰기)
+   */
+  private String findNextStep(List<LearningStep> steps, String mode, LearningStep currentStep) {
+    List<String> stepOrder = orderOf(mode);
+    
+    // 현재 단계의 오답 목록 확인
+    // REVIEW_WRONG 단계를 완료할 때는 이전 단계(MCQ 또는 PRACTICAL)의 오답을 확인해야 함
+    boolean hasWrongAnswers;
+    if ("REVIEW_WRONG".equals(currentStep.getStepCode())) {
+      // REVIEW_WRONG 단계를 완료할 때는 이전 단계(MCQ 또는 PRACTICAL)의 오답을 확인
+      String previousStepCode = mode.equals("PRACTICAL") ? "PRACTICAL" : "MCQ";
+      var previousStep = steps.stream()
+          .filter(x -> x.getStepCode().equals(previousStepCode))
+          .findFirst()
+          .orElse(null);
+      hasWrongAnswers = previousStep != null && hasWrongAnswers(previousStep);
+    } else {
+      // 다른 단계를 완료할 때는 현재 단계의 오답을 확인
+      hasWrongAnswers = hasWrongAnswers(currentStep);
+    }
+    
+    for (String stepCode : stepOrder) {
+      var found = steps.stream()
+          .filter(x -> x.getStepCode().equals(stepCode))
+          .findFirst()
+          .orElseThrow();
+      
+      // READY 상태인 단계를 찾음 (IN_PROGRESS는 현재 진행 중인 단계이므로 제외)
+      if ("READY".equals(found.getStatus())) {
+        // REVIEW_WRONG 단계이고 오답이 없으면 건너뛰기
+        if ("REVIEW_WRONG".equals(stepCode) && !hasWrongAnswers) {
+          continue;
+        }
+        return stepCode;
+      }
+    }
+    
+    return null; // 다음 단계 없음
+  }
+
+  /**
+   * 현재 단계에 오답이 있는지 확인
+   */
+  private boolean hasWrongAnswers(LearningStep step) {
+    String metadataJson = step.getMetadataJson();
+    if (metadataJson == null || metadataJson.isBlank()) {
+      return false;
+    }
+    
+    try {
+      Map<String, Object> metadata = objectMapper.readValue(
+          metadataJson, new TypeReference<Map<String, Object>>() {});
+      
+      Object wrongIdsObj = metadata.get("wrongQuestionIds");
+      if (wrongIdsObj instanceof List<?> wrongIds) {
+        return !wrongIds.isEmpty();
+      }
+      
+      return false;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /**
+   * JSON 문자열을 Map으로 파싱
+   */
+  private Map<String, Object> parseMetadata(String json) {
+    if (json == null || json.isBlank()) {
+      return Map.of();
+    }
+    try {
+      return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+    } catch (Exception e) {
+      return Map.of();
     }
   }
 
