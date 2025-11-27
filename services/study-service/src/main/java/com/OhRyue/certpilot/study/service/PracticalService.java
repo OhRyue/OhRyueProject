@@ -1112,6 +1112,10 @@ public class PracticalService {
   }
 
   public PracticalDtos.PracticalGradeOneResp gradeOnePractical(Long learningSessionId, PracticalDtos.PracticalGradeOneReq req) {
+    // 문제 조회하여 answerKey 가져오기
+    Question question = questionRepository.findById(req.questionId())
+        .orElseThrow(() -> new NoSuchElementException("문제를 찾을 수 없습니다: " + req.questionId()));
+    
     FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> envelope =
         submitPractical(learningSessionId, new PracticalDtos.PracticalSubmitReq(
             req.topicId(),
@@ -1125,6 +1129,7 @@ public class PracticalService {
 
     return new PracticalDtos.PracticalGradeOneResp(
         item.correct(),
+        Optional.ofNullable(question.getAnswerKey()).orElse(""),
         item.baseExplanation(),
         item.aiExplanation()
     );
