@@ -604,6 +604,10 @@ public class PracticalService {
 
       // 순서는 세션에 할당된 순서 사용
       int orderNo = questionOrderMap.get(question.getId());
+      Map<String, Object> aiExplainMap = new HashMap<>();
+      aiExplainMap.put("explain", result.explain());
+      aiExplainMap.put("tips", result.tips());
+      aiExplainMap.put("aiFailed", result.aiFailed());
       StudySessionItem item = sessionManager.upsertItem(
           session,
           question.getId(),
@@ -611,7 +615,7 @@ public class PracticalService {
           toJson(answerJson),
           correct,
           correct ? 100 : 0,  // 하위 호환성을 위해 점수도 저장 (맞으면 100, 틀리면 0)
-          toJson(Map.of("explain", result.explain(), "tips", result.tips()))
+          toJson(aiExplainMap)
       );
 
       persistUserAnswer(
@@ -676,6 +680,12 @@ public class PracticalService {
 
     // StudySession의 summaryJson에도 저장 (하위 호환성)
     sessionManager.saveStepMeta(session, "practical", practicalMeta);
+
+    // 진정한 완료 설정 (PRACTICAL 단계 완료 시 모든 문제를 맞췄을 때)
+    if (finalCompleted && allWrongIds.isEmpty() && learningSession.getTrulyCompleted() == null) {
+      learningSession.setTrulyCompleted(true);
+      learningSessionService.saveLearningSession(learningSession);
+    }
 
     // PRACTICAL 단계 업데이트: 모든 문제를 풀었으면 COMPLETE
     if (finalCompleted) {
@@ -1090,10 +1100,11 @@ public class PracticalService {
     
     // 모든 단계가 완료되었는지 확인하고, 완료되었으면 LearningSession의 status를 DONE으로 변경
     List<LearningStep> allSteps = learningStepRepository.findByLearningSessionIdOrderByIdAsc(learningSession.getId());
-    boolean hasReadyStep = allSteps.stream()
-        .anyMatch(step -> "READY".equals(step.getStatus()));
+    // 모든 단계가 COMPLETE 상태인지 확인 (READY나 IN_PROGRESS 상태인 단계가 없어야 함)
+    boolean allStepsCompleted = allSteps.stream()
+        .allMatch(step -> "COMPLETE".equals(step.getStatus()));
     
-    if (!hasReadyStep && !"DONE".equals(learningSession.getStatus())) {
+    if (allStepsCompleted && !"DONE".equals(learningSession.getStatus())) {
       learningSession.setStatus("DONE");
       learningSession.setUpdatedAt(Instant.now());
       learningSessionService.saveLearningSession(learningSession);
@@ -1116,6 +1127,10 @@ public class PracticalService {
     Question question = questionRepository.findById(req.questionId())
         .orElseThrow(() -> new NoSuchElementException("문제를 찾을 수 없습니다: " + req.questionId()));
     
+    // AI 해설 생성 및 실패 여부 확인
+    AIExplanationService.PracticalResult result = aiExplanationService.explainAndScorePractical(
+        question, req.userText());
+    
     FlowDtos.StepEnvelope<PracticalDtos.PracticalSubmitResp> envelope =
         submitPractical(learningSessionId, new PracticalDtos.PracticalSubmitReq(
             req.topicId(),
@@ -1131,7 +1146,8 @@ public class PracticalService {
         item.correct(),
         Optional.ofNullable(question.getAnswerKey()).orElse(""),
         item.baseExplanation(),
-        item.aiExplanation()
+        item.aiExplanation(),
+        result.aiFailed()
     );
   }
 
@@ -1395,12 +1411,17 @@ public class PracticalService {
 
     // AI 해설 파싱 (StudySessionItem의 aiExplainJson에서 가져오기)
     String aiExplanation = "";
+    Boolean aiExplanationFailed = null;
     if (sessionItem != null && sessionItem.getAiExplainJson() != null) {
       try {
         Map<String, Object> aiExplainMap = parseJson(sessionItem.getAiExplainJson());
         Object explainObj = aiExplainMap.get("explain");
         if (explainObj != null) {
           aiExplanation = explainObj.toString();
+        }
+        Object aiFailedObj = aiExplainMap.get("aiFailed");
+        if (aiFailedObj instanceof Boolean) {
+          aiExplanationFailed = (Boolean) aiFailedObj;
         }
       } catch (Exception e) {
         // 파싱 실패 시 빈 문자열
@@ -1420,7 +1441,8 @@ public class PracticalService {
         correctAnswer,
         baseExplain,
         question.getImageUrl(),
-        aiExplanation
+        aiExplanation,
+        aiExplanationFailed
     );
   }
 

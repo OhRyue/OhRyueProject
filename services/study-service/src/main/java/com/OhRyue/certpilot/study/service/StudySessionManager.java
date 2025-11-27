@@ -6,6 +6,7 @@ import com.OhRyue.certpilot.study.domain.StudySession;
 import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.domain.enums.QuestionType;
+import com.OhRyue.certpilot.study.repository.LearningStepRepository;
 import com.OhRyue.certpilot.study.repository.QuestionRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionRepository;
@@ -28,6 +29,7 @@ public class StudySessionManager {
     private final StudySessionRepository sessionRepository;
     private final StudySessionItemRepository itemRepository;
     private final QuestionRepository questionRepository;
+    private final LearningStepRepository learningStepRepository;
     private final ObjectMapper objectMapper;
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
@@ -324,6 +326,28 @@ public class StudySessionManager {
     public void updateStatus(StudySession session, String status) {
         session.setStatus(status);
         sessionRepository.save(session);
+    }
+
+    /**
+     * LearningSession의 모든 StudySession을 CLOSED 처리
+     * "처음부터 하기" 시 기존 IN_PROGRESS 세션의 모든 StudySession을 종료하기 위해 사용
+     */
+    @Transactional
+    public void closeAllSessionsForLearningSession(com.OhRyue.certpilot.study.domain.LearningSession learningSession) {
+        // LearningSession의 모든 LearningStep을 조회
+        List<com.OhRyue.certpilot.study.domain.LearningStep> steps = learningStepRepository.findByLearningSessionIdOrderByIdAsc(learningSession.getId());
+        
+        // 각 LearningStep에 연결된 StudySession을 CLOSED 처리
+        for (com.OhRyue.certpilot.study.domain.LearningStep step : steps) {
+            com.OhRyue.certpilot.study.domain.StudySession studySession = step.getStudySession();
+            if (studySession != null && !"CLOSED".equals(studySession.getStatus())) {
+                studySession.setStatus("CLOSED");
+                if (studySession.getFinishedAt() == null) {
+                    studySession.setFinishedAt(Instant.now());
+                }
+                sessionRepository.save(studySession);
+            }
+        }
     }
 
     public StudySession getSession(Long sessionId) {

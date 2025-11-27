@@ -58,23 +58,39 @@ public class LearningSessionService {
   /**
    * 학습 세션 시작 (resume=true면 최신 세션 재개)
    * - 외부 시그니처에서 userId 제거, 내부에서 JWT 기반 AuthUserUtil 사용
+   * - resume=true: IN_PROGRESS 상태인 세션만 재사용
+   * - resume=false: 기존 IN_PROGRESS 세션이 있으면 CLOSED 처리하고 DONE으로 변경 후 새로 생성
    */
   @Transactional
   public StartResp start(StartReq req) {
     String userId = AuthUserUtil.getCurrentUserId();
+    String modeStr = String.valueOf(req.mode());
 
     if (Boolean.TRUE.equals(req.resume())) {
+      // IN_PROGRESS 상태인 세션만 재사용
       var found = sessionRepo.findFirstByUserIdAndTopicIdAndModeOrderByIdDesc(
-          userId, req.topicId(), String.valueOf(req.mode()));
-      if (found.isPresent()) {
+          userId, req.topicId(), modeStr);
+      if (found.isPresent() && "IN_PROGRESS".equals(found.get().getStatus())) {
         var s = found.get();
         s.setUpdatedAt(Instant.now());
         return new StartResp(s.getId(), s.getStatus());
       }
+    } else {
+      // resume=false: 기존 IN_PROGRESS 세션이 있으면 CLOSED 처리하고 DONE으로 변경
+      var existingInProgress = sessionRepo.findFirstByUserIdAndTopicIdAndModeOrderByIdDesc(
+          userId, req.topicId(), modeStr);
+      if (existingInProgress.isPresent() && "IN_PROGRESS".equals(existingInProgress.get().getStatus())) {
+        var oldSession = existingInProgress.get();
+        // 모든 StudySession을 CLOSED 처리
+        sessionManager.closeAllSessionsForLearningSession(oldSession);
+        // LearningSession의 status를 DONE으로 변경
+        oldSession.setStatus("DONE");
+        oldSession.setUpdatedAt(Instant.now());
+        sessionRepo.save(oldSession);
+      }
     }
 
     // 어떤 타입(ExamMode/String) 이든 문자열로 저장
-    String modeStr = String.valueOf(req.mode());
 
     var s = sessionRepo.save(LearningSession.builder()
         .userId(userId)

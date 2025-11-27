@@ -826,10 +826,11 @@ public class WrittenService {
     
     // 모든 단계가 완료되었는지 확인하고, 완료되었으면 LearningSession의 status를 DONE으로 변경
     List<LearningStep> allSteps = learningStepRepository.findByLearningSessionIdOrderByIdAsc(learningSession.getId());
-    boolean hasReadyStep = allSteps.stream()
-        .anyMatch(step -> "READY".equals(step.getStatus()));
+    // 모든 단계가 COMPLETE 상태인지 확인 (READY나 IN_PROGRESS 상태인 단계가 없어야 함)
+    boolean allStepsCompleted = allSteps.stream()
+        .allMatch(step -> "COMPLETE".equals(step.getStatus()));
     
-    if (!hasReadyStep && !"DONE".equals(learningSession.getStatus())) {
+    if (allStepsCompleted && !"DONE".equals(learningSession.getStatus())) {
       learningSession.setStatus("DONE");
       learningSession.setUpdatedAt(Instant.now());
       learningSessionService.saveLearningSession(learningSession);

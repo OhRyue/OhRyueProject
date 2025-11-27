@@ -35,6 +35,7 @@ public class TopicProgressService {
         .collect(Collectors.groupingBy(LearningSession::getTopicId));
 
     // 각 토픽에 대한 상태 결정
+    // 완료 상태(status)와 이어서 하기 가능 여부(resumable)는 독립적으로 결정
     List<TopicMicroStatus> statuses = topicIds.stream()
         .map(topicId -> {
           List<LearningSession> topicSessions = sessionsByTopic.getOrDefault(topicId, List.of());
@@ -44,29 +45,30 @@ public class TopicProgressService {
             return new TopicMicroStatus(topicId, "NOT_STARTED", false);
           }
           
-          // 완료된 세션 중 가장 최근 것 찾기 (DONE 상태)
+          // 완료 상태 결정: DONE 세션 중 가장 최근 것 찾기
           LearningSession completedSession = topicSessions.stream()
               .filter(s -> "DONE".equals(s.getStatus()))
               .max((s1, s2) -> s1.getUpdatedAt().compareTo(s2.getUpdatedAt()))
               .orElse(null);
           
-          // 진행 중인 세션 확인 (IN_PROGRESS 상태)
+          // 이어서 하기 가능 여부: IN_PROGRESS 세션 존재 여부
           boolean hasInProgress = topicSessions.stream()
               .anyMatch(s -> "IN_PROGRESS".equals(s.getStatus()));
           
-          // 완료 상태 결정
+          // 완료 상태 결정 (DONE 세션의 완료 기록 기반)
           String status;
           if (completedSession == null) {
             // 완료된 세션이 없으면 시작 안함
             status = "NOT_STARTED";
           } else if (Boolean.TRUE.equals(completedSession.getTrulyCompleted())) {
-            // 진정한 완료 (MCQ 완료)
+            // 진정한 완료 (필기: MCQ 완료, 실기: PRACTICAL 완료)
             status = "TRULY_COMPLETED";
           } else {
-            // 일반 완료 (전체 과정 완료)
+            // 일반 완료 (전체 과정 완료했지만 문제를 틀림)
             status = "COMPLETED";
           }
           
+          // resumable은 IN_PROGRESS 세션 존재 여부로만 결정 (완료 상태와 독립적)
           return new TopicMicroStatus(topicId, status, hasInProgress);
         })
         .collect(Collectors.toList());
