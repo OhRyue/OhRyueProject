@@ -15,6 +15,17 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  jackson:
+    # JSON 파싱 설정: 사용자가 자유롭게 입력한 텍스트(줄바꿈, 특수문자 등)를 안전하게 처리
+    deserialization:
+      # 알 수 없는 속성 무시
+      fail-on-unknown-properties: false
+      # 빈 문자열을 null로 변환하지 않음
+      accept-empty-string-as-null-object: false
+    # JSON 파싱 시 제어 문자(줄바꿈, 탭 등) 허용
+    parser:
+      allow-unquoted-control-chars: true
+      allow-numeric-leading-zeros: true
 
 eureka:
   client:
@@ -120,6 +131,13 @@ resilience4j:
 # === 시연 모드 설정 ===
 versus:
   demo-mode: ${DEMO_MODE:true}  # 시연 모드 활성화 (기본값: true)
+
+# === 외부 서비스 URL (Eureka 실패 시 직접 URL 사용) ===
+services:
+  study:
+    url: ${STUDY_SERVICE_URL:http://study-service:8082}  # Eureka 실패 시 직접 URL 사용
+  progress:
+    url: ${PROGRESS_SERVICE_URL:http://progress-service:8083}  # Eureka 실패 시 직접 URL 사용
 
 # === 모니터링 로깅 ===
 logging:

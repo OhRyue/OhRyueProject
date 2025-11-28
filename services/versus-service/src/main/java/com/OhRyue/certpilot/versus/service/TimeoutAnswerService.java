@@ -133,7 +133,7 @@ public class TimeoutAnswerService {
             return; // 이미 답안 제출됨
         }
 
-        // 자동 오답 생성
+        // 자동 오답 생성 (시간 제한 내 제출 못함)
         MatchAnswer timeoutAnswer = MatchAnswer.builder()
             .roomId(room.getId())
             .questionId(question.getQuestionId())
@@ -143,6 +143,7 @@ public class TimeoutAnswerService {
             .correct(false) // 자동 오답
             .timeMs(timeLimitSec * 1000) // 시간 제한을 시간으로 설정
             .scoreDelta(0) // 오답이므로 점수 변화 없음
+            .userAnswer("") // 공백으로 처리
             .build();
 
         answerRepository.save(timeoutAnswer);

@@ -8,6 +8,7 @@ import java.util.List;
 @FeignClient(
     name = "progress-service", 
     path = "/api/progress",
+    url = "${services.progress.url:http://progress-service:8083}",  // Docker 환경에서는 직접 URL 사용, Eureka 실패 시 대비
     fallback = ProgressServiceClientFallback.class
 )
 public interface ProgressServiceClient {
@@ -24,7 +25,8 @@ public interface ProgressServiceClient {
         String winner,
         List<ParticipantResult> participants,
         Integer questionCount,
-        Long durationMs
+        Long durationMs,
+        String examMode  // WRITTEN, PRACTICAL
     ) {}
 
     record ParticipantResult(
@@ -33,7 +35,18 @@ public interface ProgressServiceClient {
         Integer rank,
         Integer correctCount,
         Integer totalCount,
-        Long totalTimeMs
+        Long totalTimeMs,
+        List<AnswerDetail> answers  // 개별 답안 목록
+    ) {}
+    
+    record AnswerDetail(
+        Long questionId,
+        String userAnswer,
+        Boolean isCorrect,
+        Integer timeMs,
+        Integer scoreDelta,
+        Integer roundNo,
+        String phase
     ) {}
 }
 

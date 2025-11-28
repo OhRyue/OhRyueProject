@@ -151,11 +151,11 @@ public class StudyActivityService {
     }
 
     private int computeXpDelta(ExamMode mode, QuestionType type, boolean correct) {
-        // 실기 서술형/단답 오답에도 어느 정도 보상을 주고 싶다면 유지
-        if (mode == ExamMode.PRACTICAL && type != QuestionType.OX && !correct) {
-            return 3; // 실기 오답 기본 보상
+        // 보조학습: 정답만 경험치 지급, 오답은 0 XP
+        if (!correct) {
+            return 0; // 오답은 경험치 지급 안함
         }
-        return correct ? 10 : 2;
+        return 5; // 정답 5 XP
     }
 
     /**

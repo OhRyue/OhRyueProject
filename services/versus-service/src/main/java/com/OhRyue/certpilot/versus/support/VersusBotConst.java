@@ -13,9 +13,12 @@ public final class VersusBotConst {
      * 봇 난이도
      */
     public enum BotDifficulty {
-        EASY("EASY", "연습 봇(EASY)", 0.30, 0.60, 1500, 3000),
-        NORMAL("NORMAL", "연습 봇(NORMAL)", 0.50, 0.80, 1200, 2500),
-        HARD("HARD", "연습 봇(HARD)", 0.70, 0.95, 800, 1800);
+        // 패자부활전 테스트를 위해 정답률을 낮춤
+        // 필요시 더 낮춰서 탈락 확률을 높일 수 있음
+        // 딜레이를 더 현실적으로 조정: 최소 2초, 최대 8초
+        EASY("EASY", "연습 봇(EASY)", 0.20, 0.40, 2000, 8000),      // 20-40% 정답률, 2-8초 딜레이
+        NORMAL("NORMAL", "연습 봇(NORMAL)", 0.30, 0.60, 2000, 7000), // 30-60% 정답률, 2-7초 딜레이
+        HARD("HARD", "연습 봇(HARD)", 0.50, 0.80, 2000, 6000);        // 50-80% 정답률, 2-6초 딜레이
 
         private final String code;
         private final String nickname;

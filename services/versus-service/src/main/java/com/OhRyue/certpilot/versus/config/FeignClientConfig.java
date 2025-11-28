@@ -35,6 +35,7 @@ public class FeignClientConfig {
     /**
      * Feign Client 요청에 JWT 토큰을 자동으로 추가하는 Interceptor
      * 현재 요청의 Authorization 헤더를 Feign 요청에도 전달
+     * 비동기 작업에서는 ThreadLocal에서 JWT 토큰을 가져옴
      */
     @Bean
     public RequestInterceptor requestInterceptor() {
@@ -42,22 +43,29 @@ public class FeignClientConfig {
             @Override
             public void apply(RequestTemplate template) {
                 try {
-                    // 현재 HTTP 요청에서 Authorization 헤더 가져오기
+                    String authorization = null;
+                    
+                    // 1. 현재 HTTP 요청에서 Authorization 헤더 가져오기 (일반 요청)
                     ServletRequestAttributes attributes = 
                         (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
                     
                     if (attributes != null) {
                         HttpServletRequest request = attributes.getRequest();
-                        String authorization = request.getHeader("Authorization");
-                        
-                        if (authorization != null && !authorization.isBlank()) {
-                            template.header("Authorization", authorization);
-                            log.debug("Feign Client에 JWT 토큰 전달: {}", authorization.substring(0, Math.min(20, authorization.length())) + "...");
-                        } else {
-                            log.warn("Feign Client 요청에 Authorization 헤더가 없습니다.");
-                        }
+                        authorization = request.getHeader("Authorization");
+                    }
+                    
+                    // 2. 비동기 작업에서는 ThreadLocal에서 JWT 토큰 가져오기
+                    if ((authorization == null || authorization.isBlank()) && AsyncConfig.getJwtToken() != null) {
+                        authorization = AsyncConfig.getJwtToken();
+                        log.debug("비동기 작업에서 ThreadLocal의 JWT 토큰 사용");
+                    }
+                    
+                    if (authorization != null && !authorization.isBlank()) {
+                        template.header("Authorization", authorization);
+                        log.debug("Feign Client에 JWT 토큰 전달: {}", authorization.substring(0, Math.min(20, authorization.length())) + "...");
                     } else {
-                        log.warn("RequestContextHolder에서 요청 정보를 가져올 수 없습니다.");
+                        log.warn("Feign Client 요청에 Authorization 헤더가 없습니다. (RequestContextHolder: {}, ThreadLocal: {})", 
+                                attributes != null, AsyncConfig.getJwtToken() != null);
                     }
                 } catch (Exception e) {
                     log.error("Feign Client에 JWT 토큰 전달 중 오류 발생: {}", e.getMessage(), e);

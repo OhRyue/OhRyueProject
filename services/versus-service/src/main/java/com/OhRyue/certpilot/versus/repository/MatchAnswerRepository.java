@@ -8,16 +8,18 @@ import java.util.Optional;
 
 public interface MatchAnswerRepository extends JpaRepository<MatchAnswer, Long> {
 
-  List<MatchAnswer> findByRoomId(Long roomId);
+    List<MatchAnswer> findByRoomId(Long roomId);
 
-  Optional<MatchAnswer> findByRoomIdAndQuestionIdAndUserId(Long roomId, Long questionId, String userId);
+    Optional<MatchAnswer> findByRoomIdAndQuestionIdAndUserId(Long roomId, Long questionId, String userId);
 
-  long countByRoomId(Long roomId);
+    long countByRoomId(Long roomId);
 
-  long countByRoomIdAndQuestionId(Long roomId, Long questionId);
+    long countByRoomIdAndQuestionId(Long roomId, Long questionId);
 
-  long countByRoomIdAndRoundNo(Long roomId, Integer roundNo);
+    long countByRoomIdAndRoundNo(Long roomId, Integer roundNo);
 
-  List<MatchAnswer> findByRoomIdAndRoundNo(Long roomId, Integer roundNo);
+    List<MatchAnswer> findByRoomIdAndRoundNo(Long roomId, Integer roundNo);
+
+    List<MatchAnswer> findByRoomIdAndQuestionId(Long roomId, Long questionId);
 }
  

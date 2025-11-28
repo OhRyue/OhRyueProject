@@ -103,12 +103,12 @@ public class StudyFlowService {
      * - 예시는 임의 값입니다. 마음에 드는 값으로 조정하셔도 됩니다.
      */
     private int computeFlowXp(ExamMode mode, String flowType) {
-        // 추측 기반 예시값입니다. 원하시면 숫자만 바꾸시면 됩니다.
+        // 메인학습: 경험치를 많이 지급
         if ("MICRO".equals(flowType)) {
-            return (mode == ExamMode.PRACTICAL) ? 80 : 60;  // 실기 Micro 조금 더 크게
+            return (mode == ExamMode.PRACTICAL) ? 200 : 150;  // 실기 Micro 조금 더 크게
         }
         if ("REVIEW".equals(flowType)) {
-            return (mode == ExamMode.PRACTICAL) ? 100 : 80; // Review는 더 크게
+            return (mode == ExamMode.PRACTICAL) ? 250 : 200; // Review는 더 크게
         }
         return 0;
     }

@@ -5,7 +5,6 @@ import com.OhRyue.certpilot.versus.domain.MatchPhase;
 import com.OhRyue.certpilot.versus.domain.MatchStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -71,8 +70,10 @@ public class VersusDtos {
           example = "true")
       boolean correct,
       
-      @Min(0)
-      @Schema(description = "문제 풀이 소요 시간 (밀리초)", example = "5000", required = true)
+      @Schema(description = "문제 풀이 소요 시간 (밀리초, 선택사항)\n" +
+          "**중요**: 서버에서 QUESTION_STARTED 이벤트 기준으로 자동 계산되므로 이 값은 무시됩니다.\n" +
+          "하위 호환성을 위해 유지되지만, null로 보내도 됩니다.", 
+          example = "5000")
       Integer timeMs,
       
       @Schema(description = "점수 변화량 (자동 계산되므로 보통 null)", example = "100")
@@ -153,5 +154,25 @@ public class VersusDtos {
       RoomDetailResp detail,
       List<TimelineEvent> timeline,
       RealtimeSnapshot realtime
+  ) {}
+
+  /**
+   * 답안 정보 (프론트엔드 표시용)
+   */
+  public record AnswerInfo(
+      String userId,
+      String userAnswer,
+      boolean correct,
+      Integer timeMs,
+      Integer scoreDelta,
+      Instant submittedAt
+  ) {}
+
+  /**
+   * 문제별 답안 목록 응답
+   */
+  public record QuestionAnswersResp(
+      Long questionId,
+      List<AnswerInfo> answers
   ) {}
 }

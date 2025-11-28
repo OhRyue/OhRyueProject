@@ -5,6 +5,7 @@ import com.OhRyue.certpilot.progress.domain.ReportTagSkill;
 import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
 import com.OhRyue.certpilot.progress.dto.ReportDtos.*;
 import com.OhRyue.certpilot.progress.feign.StudyReportClient;
+import com.OhRyue.certpilot.progress.repository.BattleRecordRepository;
 import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
 import com.OhRyue.certpilot.progress.repository.ReportTagSkillRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class ReportService {
   private final ReportTagSkillRepository tagSkillRepository;
   private final StudyReportClient studyReportClient;
   private final StreakService streakService;
+  private final BattleRecordRepository battleRecordRepository;
 
   /**
    * 필기/실기 합산 리포트 개요
@@ -131,13 +133,50 @@ public class ReportService {
   }
 
   public RecentRecordsResp recentRecords(String userId, int limit) {
-    RecentRecordsResp resp = studyReportClient.recent(limit);
-    if (resp == null || resp.records() == null) {
-      return new RecentRecordsResp(List.of());
+    // study-service에서 학습 기록 가져오기
+    RecentRecordsResp studyResp = studyReportClient.recent(limit);
+    List<RecentRecord> allRecords = new ArrayList<>();
+    
+    if (studyResp != null && studyResp.records() != null) {
+      allRecords.addAll(studyResp.records());
     }
-    List<RecentRecord> sorted = new ArrayList<>(resp.records());
-    sorted.sort(Comparator.comparing(RecentRecord::date).reversed());
-    return new RecentRecordsResp(sorted);
+    
+    // progress-service에서 배틀 기록 가져오기
+    List<RecentRecord> battleRecords = battleRecordRepository
+        .findRecentByUser(userId, org.springframework.data.domain.PageRequest.of(0, limit))
+        .stream()
+        .map(br -> {
+          String type = switch (br.getMode()) {
+            case "DUEL" -> "1:1 배틀";
+            case "TOURNAMENT" -> "토너먼트";
+            case "GOLDENBELL" -> "골든벨";
+            default -> "배틀";
+          };
+          double accuracy = br.getTotalCount() > 0 
+              ? (double) br.getCorrectCount() / br.getTotalCount() * 100.0 
+              : 0.0;
+          return new RecentRecord(
+              br.getCompletedAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toLocalDate(),
+              type,
+              br.getExamMode() != null ? (br.getExamMode() == ExamMode.WRITTEN ? "필기" : "실기") : "배틀",
+              br.getTotalCount(),
+              br.getCorrectCount(),
+              accuracy
+          );
+        })
+        .toList();
+    
+    allRecords.addAll(battleRecords);
+    
+    // 날짜 내림차순 정렬 (최신순)
+    allRecords.sort(Comparator.comparing(RecentRecord::date).reversed());
+    
+    // limit만큼만 반환
+    if (allRecords.size() > limit) {
+      allRecords = allRecords.subList(0, limit);
+    }
+    
+    return new RecentRecordsResp(allRecords);
   }
 
   private ExamMode parseMode(String mode) {

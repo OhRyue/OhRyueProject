@@ -26,11 +26,12 @@ public class VersusResultController {
         description = "매치 완료 시 호출됩니다. 참가자별 XP 지급, 뱃지 평가, 랭킹 반영을 수행합니다.\n\n" +
             "**자동 처리 사항:**\n" +
             "1. 각 참가자에게 모드별 XP 지급\n" +
-            "   - DUEL 승리: 100 XP, 참가: 50 XP\n" +
-            "   - TOURNAMENT 우승: 500 XP, 참가: 100 XP\n" +
-            "   - GOLDENBELL 우승: 1000 XP, 참가: 100 XP\n" +
-            "2. 뱃지 평가 (배틀 관련 뱃지 체크)\n" +
-            "3. 랭킹 재계산\n\n" +
+            "   - DUEL 승리: 30 XP, 참가: 5 XP\n" +
+            "   - TOURNAMENT 우승: 100 XP, 참가: 10 XP\n" +
+            "   - GOLDENBELL 우승: 200 XP, 참가: 20 XP\n" +
+            "2. 배틀 기록 저장 (battle_record, battle_answer 테이블)\n" +
+            "3. 뱃지 평가 (배틀 관련 뱃지 체크)\n" +
+            "4. 랭킹 재계산\n\n" +
             "**주의사항:**\n" +
             "- winner는 1등 참가자의 userId입니다.\n" +
             "- participants는 점수 순으로 정렬된 리스트여야 합니다.\n" +

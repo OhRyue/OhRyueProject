@@ -3,10 +3,13 @@ package com.OhRyue.certpilot.versus.service;
 import com.OhRyue.certpilot.versus.domain.*;
 import com.OhRyue.certpilot.versus.repository.*;
 import com.OhRyue.certpilot.versus.support.VersusBotConst;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Instant;
 import java.util.*;
@@ -37,9 +40,17 @@ public class VersusMatchService {
      * @param difficulty 난이도 모드일 때 난이도 ("EASY", "NORMAL", "HARD") (null 가능)
      */
     @Transactional
-    public DuelWithBotResult startDuelWithBot(String userId, String scopeType, Long topicId, String difficulty) {
+    public DuelWithBotResult startDuelWithBot(String userId, String examMode, String scopeType, Long topicId, String difficulty) {
+        // examMode 기본값 처리
+        if (examMode == null || examMode.isBlank()) {
+            examMode = "WRITTEN";
+        }
+        if (!examMode.equalsIgnoreCase("WRITTEN") && !examMode.equalsIgnoreCase("PRACTICAL")) {
+            throw new IllegalArgumentException("examMode는 WRITTEN 또는 PRACTICAL이어야 합니다.");
+        }
+        
         // scopeJson 생성
-        String scopeJson = buildScopeJson(scopeType, topicId, difficulty);
+        String scopeJson = buildScopeJson(examMode, scopeType, topicId, difficulty);
         
         // 1) DUEL 방 생성 (status = ONGOING)
         MatchRoom room = MatchRoom.builder()
@@ -107,7 +118,9 @@ public class VersusMatchService {
         );
 
         // 7) 봇 자동 플레이 비동기 시작 (트랜잭션 커밋 이후 실행)
-        botPlayService.simulateDuelBotPlayAsync(room.getId(), VersusBotConst.DUEL_BOT_USER_ID);
+        // JWT 토큰 추출 (study-service 호출용)
+        String jwtToken = extractJwtToken();
+        botPlayService.simulateDuelBotPlayAsync(room.getId(), VersusBotConst.DUEL_BOT_USER_ID, jwtToken);
 
         log.info("연습 봇 매칭 시작: roomId={}, userId={}, botUserId={}, scopeType={}, topicId={}, difficulty={}", 
                 room.getId(), userId, VersusBotConst.DUEL_BOT_USER_ID, scopeType, topicId, difficulty);
@@ -136,14 +149,25 @@ public class VersusMatchService {
 
     /**
      * TOURNAMENT 봇 자동 매칭 시작
+     * @param userId 사용자 ID
+     * @param examMode "WRITTEN" 또는 "PRACTICAL" (기본값: "WRITTEN")
      */
     @Transactional
-    public TournamentWithBotResult startTournamentWithBot(String userId) {
+    public TournamentWithBotResult startTournamentWithBot(String userId, String examMode) {
+        // examMode 기본값 처리
+        if (examMode == null || examMode.isBlank()) {
+            examMode = "WRITTEN";
+        }
+        if (!examMode.equalsIgnoreCase("WRITTEN") && !examMode.equalsIgnoreCase("PRACTICAL")) {
+            throw new IllegalArgumentException("examMode는 WRITTEN 또는 PRACTICAL이어야 합니다.");
+        }
+        
         // 1) TOURNAMENT 방 생성
+        String scopeJson = String.format("{\"examMode\":\"%s\",\"topicScope\":\"ALL\",\"difficulty\":\"NORMAL\"}", examMode);
         MatchRoom room = MatchRoom.builder()
                 .mode(MatchMode.TOURNAMENT)
                 .status(MatchStatus.ONGOING)
-                .scopeJson("{\"examMode\":\"WRITTEN\",\"topicScope\":\"ALL\",\"difficulty\":\"NORMAL\"}")
+                .scopeJson(scopeJson)
                 .build();
         matchRoomRepository.save(room);
 
@@ -198,7 +222,8 @@ public class VersusMatchService {
         ));
 
         // 4) 봇 자동 플레이 비동기 시작
-        botPlayService.simulateTournamentBotPlayAsync(room.getId());
+        String jwtToken = extractJwtToken();
+        botPlayService.simulateTournamentBotPlayAsync(room.getId(), jwtToken);
 
         log.info("TOURNAMENT 봇 매칭 시작: roomId={}, userId={}, bots={}", 
                 room.getId(), userId, botUserIds.size());
@@ -212,14 +237,26 @@ public class VersusMatchService {
 
     /**
      * GOLDENBELL 봇 자동 매칭 시작
+     * @param userId 사용자 ID
+     * @param examMode "WRITTEN" 또는 "PRACTICAL" (기본값: "WRITTEN")
      */
     @Transactional
-    public GoldenbellWithBotResult startGoldenbellWithBot(String userId) {
+    public GoldenbellWithBotResult startGoldenbellWithBot(String userId, String examMode) {
+        // examMode 기본값 처리
+        if (examMode == null || examMode.isBlank()) {
+            examMode = "WRITTEN";
+        }
+        if (!examMode.equalsIgnoreCase("WRITTEN") && !examMode.equalsIgnoreCase("PRACTICAL")) {
+            throw new IllegalArgumentException("examMode는 WRITTEN 또는 PRACTICAL이어야 합니다.");
+        }
+        boolean isPractical = "PRACTICAL".equalsIgnoreCase(examMode);
+        
         // 1) GOLDENBELL 방 생성
+        String scopeJson = String.format("{\"examMode\":\"%s\",\"topicScope\":\"ALL\",\"difficulty\":\"NORMAL\"}", examMode);
         MatchRoom room = MatchRoom.builder()
                 .mode(MatchMode.GOLDENBELL)
                 .status(MatchStatus.ONGOING)
-                .scopeJson("{\"examMode\":\"WRITTEN\",\"topicScope\":\"ALL\",\"difficulty\":\"NORMAL\"}")
+                .scopeJson(scopeJson)
                 .build();
         matchRoomRepository.save(room);
 
@@ -262,25 +299,60 @@ public class VersusMatchService {
             ));
         }
 
-        // 5) GoldenbellRule 설정 (기본 규칙)
-        String defaultRule = """
-                [
-                  {"round":1,"type":"OX","count":1,"limitSec":10,"phase":"MAIN"},
-                  {"round":2,"type":"OX","count":1,"limitSec":10,"phase":"MAIN"},
-                  {"round":3,"type":"MCQ","count":1,"limitSec":10,"phase":"MAIN"},
-                  {"round":4,"type":"MCQ","count":1,"limitSec":10,"phase":"MAIN"},
-                  {"round":5,"type":"SHORT","count":1,"limitSec":10,"phase":"MAIN"},
-                  {"round":6,"type":"LONG","count":1,"limitSec":10,"phase":"MAIN"},
-                  {"round":7,"type":"SHORT","count":1,"limitSec":10,"phase":"FINAL"},
-                  {"round":8,"type":"LONG","count":1,"limitSec":10,"phase":"FINAL"}
-                ]
-                """;
+        // 5) GoldenbellRule 설정 (새로운 규칙)
+        String ruleJson;
+        String revivalRuleJson;
+        
+        if (isPractical) {
+            // 실기 골든벨: SHORT만 사용
+            ruleJson = """
+                    [
+                      {"round":1,"type":"SHORT","count":2,"limitSec":25,"phase":"MAIN"},
+                      {"round":2,"type":"SHORT","count":2,"limitSec":25,"phase":"MAIN"},
+                      {"round":3,"type":"SHORT","count":1,"limitSec":25,"phase":"REVIVAL"},
+                      {"round":4,"type":"SHORT","count":2,"limitSec":25,"phase":"FINAL"}
+                    ]
+                    """;
+        } else {
+            // 필기 골든벨: OX, MCQ 사용
+            ruleJson = """
+                    [
+                      {"round":1,"type":"OX","count":2,"limitSec":8,"phase":"MAIN"},
+                      {"round":2,"type":"MCQ","count":2,"limitSec":12,"phase":"MAIN"},
+                      {"round":3,"type":"MCQ","count":1,"limitSec":15,"phase":"REVIVAL"},
+                      {"round":4,"type":"MCQ","count":2,"limitSec":12,"phase":"FINAL"}
+                    ]
+                    """;
+        }
+        
+        // 패자부활 규칙 (필기/실기 공통)
+        revivalRuleJson = """
+                {
+                  "enabled": true,
+                  "triggerMode": "AFTER_QUESTION_INDEX",
+                  "triggerAfterIndex": 4,
+                  "minAlive": 5,
+                  "revivalPhase": "REVIVAL",
+                  "mode": "ONE_QUESTION_FASTEST",
+                  "revivalQuestion": {"type":"%s","limitSec":%d},
+                  "slots": 1,
+                  "spectatorExistingAlive": true,
+                  "candidates": "ELIMINATED_ONLY",
+                  "earlyZeroAlive": {
+                    "enabled": true,
+                    "topN": 5,
+                    "criteria": "best_correct_then_fastest",
+                    "fillIfAllWrong": true,
+                    "phase": "REVIVAL"
+                  }
+                }
+                """.formatted(isPractical ? "SHORT" : "MCQ", isPractical ? 25 : 15);
         
         goldenbellRuleRepository.save(GoldenbellRule.builder()
                 .roomId(room.getId())
-                .roundFlowJson(defaultRule)
+                .roundFlowJson(ruleJson)
                 .elimination(GoldenbellElimination.IMMEDIATE)
-                .revivalRuleJson(null)
+                .revivalRuleJson(revivalRuleJson)
                 .build());
 
         saveEvent(room.getId(), "ROOM_CREATED", Map.of(
@@ -300,7 +372,8 @@ public class VersusMatchService {
         ));
 
         // 6) 봇 자동 플레이 비동기 시작
-        botPlayService.simulateGoldenbellBotPlayAsync(room.getId());
+        String jwtToken = extractJwtToken();
+        botPlayService.simulateGoldenbellBotPlayAsync(room.getId(), jwtToken);
 
         log.info("GOLDENBELL 봇 매칭 시작: roomId={}, userId={}, bots={}", 
                 room.getId(), userId, botUserIds.size());
@@ -315,10 +388,10 @@ public class VersusMatchService {
     /**
      * scopeJson 생성 (카테고리 모드 또는 난이도 모드)
      */
-    private String buildScopeJson(String scopeType, Long topicId, String difficulty) {
+    private String buildScopeJson(String examMode, String scopeType, Long topicId, String difficulty) {
         try {
             Map<String, Object> scope = new HashMap<>();
-            scope.put("examMode", "WRITTEN");
+            scope.put("examMode", examMode != null ? examMode.toUpperCase() : "WRITTEN");
             
             if ("CATEGORY".equalsIgnoreCase(scopeType)) {
                 // 카테고리 모드: 2레벨 토픽 한 가지
@@ -372,6 +445,26 @@ public class VersusMatchService {
             String myUserId,
             List<String> botUserIds
     ) {}
+
+    /**
+     * 현재 요청에서 JWT 토큰 추출
+     */
+    private String extractJwtToken() {
+        try {
+            ServletRequestAttributes attributes = 
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                String authHeader = request.getHeader("Authorization");
+                if (authHeader != null && !authHeader.isBlank()) {
+                    return authHeader;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("JWT 토큰 추출 실패: {}", e.getMessage());
+        }
+        return null;
+    }
 }
 
 

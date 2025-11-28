@@ -9,6 +9,7 @@ import java.util.Map;
 @FeignClient(
     name = "study-service", 
     path = "/api/study",
+    url = "${services.study.url:}",  // 환경 변수로 직접 URL 지정 가능 (비어있으면 Eureka 사용)
     fallback = StudyServiceClientFallback.class
 )
 public interface StudyServiceClient {

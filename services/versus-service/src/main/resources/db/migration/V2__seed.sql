@@ -108,39 +108,40 @@ ON DUPLICATE KEY UPDATE pairing_json = VALUES(pairing_json);
 
 -- ------------------------------------------------------------
 -- 5) goldenbell_rule (기획 정합: 부활/최종전 포함)
---   라운드:
---     1: OX(1)  2: OX(1)  3: MCQ(1)  4: MCQ(1)  5: SHORT(1)  6: LONG(1)
+--   골든벨 규칙 (필기/실기 모드별로 다름)
+--   필기 골든벨:
+--     라운드 1: OX 2문제 (8초)
+--     라운드 2: MCQ 2문제 (12초)
+--     라운드 3: MCQ 1문제 (REVIVAL, 15초)
+--     라운드 4: MCQ 2문제 (HARD, FINAL, 12초)
+--   실기 골든벨:
+--     라운드 1: SHORT 2문제 (25초)
+--     라운드 2: SHORT 2문제 (25초, 난이도 ↑)
+--     라운드 3: SHORT 1문제 (REVIVAL, 25초)
+--     라운드 4: SHORT 2문제 (FINAL, 25초, 난이도 ↑)
 --   부활:
---     - 4문제 종료(=R1~R4) 시 생존 ≤ 5 → 부활전(단답 1문제, 정답+가장 빠른 1명)
+--     - OX+MCQ 총 4문제 종료 후(라운드 1~2) 생존 ≤ 5 → 부활전(정답+가장 빠른 1명)
 --     - 조기 전멸(4문제 전에 생존=0) → TOP5 즉시 부활
---   최종전:
---     - SHORT 1 + LONG 1 (round_no=99, phase='FINAL'), 합산 고득점 승
 -- ------------------------------------------------------------
 INSERT INTO goldenbell_rule (room_id, round_flow_json, elimination, revival_rule_json)
 SELECT
   @r_gb,
   JSON_ARRAY(
-    JSON_OBJECT('round', 1,  'type', 'OX',    'count', 1, 'limitSec', 10, 'phase', 'MAIN'),
-    JSON_OBJECT('round', 2,  'type', 'OX',    'count', 1, 'limitSec', 10, 'phase', 'MAIN'),
-    JSON_OBJECT('round', 3,  'type', 'MCQ',   'count', 1, 'limitSec', 10, 'phase', 'MAIN'),
-    JSON_OBJECT('round', 4,  'type', 'MCQ',   'count', 1, 'limitSec', 10, 'phase', 'MAIN'),
-    JSON_OBJECT('round', 5,  'type', 'SHORT', 'count', 1, 'limitSec', 10, 'phase', 'MAIN'),
-    JSON_OBJECT('round', 6,  'type', 'LONG',  'count', 1, 'limitSec', 10, 'phase', 'MAIN'),
-    JSON_OBJECT(
-      'round', 99, 'type', 'FINAL_MIX', 'count', 2, 'limitSec', 10, 'phase', 'FINAL',
-      'finalParts', JSON_ARRAY('SHORT','LONG'),
-      'scoring', 'sum_correct_then_fastest'
-    )
+    -- 필기 골든벨 기본 구성 (실제로는 examMode에 따라 동적으로 생성됨)
+    JSON_OBJECT('round', 1,  'type', 'OX',    'count', 2, 'limitSec', 8,  'phase', 'MAIN'),
+    JSON_OBJECT('round', 2,  'type', 'MCQ',   'count', 2, 'limitSec', 12, 'phase', 'MAIN'),
+    JSON_OBJECT('round', 3,  'type', 'MCQ',   'count', 1, 'limitSec', 15, 'phase', 'REVIVAL'),
+    JSON_OBJECT('round', 4,  'type', 'MCQ',   'count', 2, 'limitSec', 12, 'phase', 'FINAL')
   ),
   'IMMEDIATE',
   JSON_OBJECT(
     'enabled', TRUE,
     'triggerMode', 'AFTER_QUESTION_INDEX',
-    'triggerAfterIndex', 4,                 -- OX/MCQ 4문제 종료 후
+    'triggerAfterIndex', 4,                 -- OX+MCQ 총 4문제 종료 후 (라운드 1~2)
     'minAlive', 5,
     'revivalPhase', 'REVIVAL',
     'mode', 'ONE_QUESTION_FASTEST',
-    'revivalQuestion', JSON_OBJECT('type','SHORT','limitSec',10),
+    'revivalQuestion', JSON_OBJECT('type','MCQ','limitSec',15),
     'slots', 1,
     'spectatorExistingAlive', TRUE,
     'candidates', 'ELIMINATED_ONLY',

@@ -116,11 +116,20 @@ public class VersusQuestionService {
         if (question.getType() == QuestionType.OX || question.getType() == QuestionType.MCQ) {
             // OX, MCQ: label 비교
             isCorrect = correctAnswer.equalsIgnoreCase(userAnswerText);
+            log.debug("Answer validation (OX/MCQ): questionId={}, correctAnswer={}, userAnswer={}, isCorrect={}",
+                    questionId, correctAnswer, userAnswerText, isCorrect);
         } else if (question.getType() == QuestionType.SHORT || question.getType() == QuestionType.LONG) {
             // SHORT, LONG: 텍스트 비교 (대소문자 무시, 공백 정규화)
             String normalizedCorrect = normalizeText(correctAnswer);
             String normalizedUser = normalizeText(userAnswerText);
             isCorrect = normalizedCorrect.equals(normalizedUser);
+            
+            log.info("Answer validation (SHORT/LONG): questionId={}, questionType={}, " +
+                    "correctAnswer=[{}], userAnswer=[{}], " +
+                    "normalizedCorrect=[{}], normalizedUser=[{}], isCorrect={}",
+                    questionId, question.getType(),
+                    correctAnswer, userAnswerText,
+                    normalizedCorrect, normalizedUser, isCorrect);
             
             // 실기는 AI 채점이 필요할 수 있지만, 일단 간단한 텍스트 비교
             // 향후 AIExplanationService 활용 가능

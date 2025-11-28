@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.Objects;
+import java.util.Arrays;
 
 /**
  * 봇 자동 플레이 서비스
@@ -34,6 +35,7 @@ public class BotPlayService {
     private final MatchParticipantRepository participantRepository;
     private final GoldenbellStateRepository goldenbellStateRepository;
     private final VersusService versusService;
+    private final com.OhRyue.certpilot.versus.client.StudyServiceClient studyServiceClient;
     private final ObjectMapper objectMapper;
     private final Random random = new Random();
 
@@ -41,12 +43,23 @@ public class BotPlayService {
 
     /**
      * DUEL 봇 자동 플레이 시뮬레이션 (비동기)
+     * @param jwtToken JWT 토큰 (study-service 호출용)
      */
-    @Async
-    public void simulateDuelBotPlayAsync(Long roomId, String botUserId) {
+    @Async("taskExecutor")
+    public void simulateDuelBotPlayAsync(Long roomId, String botUserId, String jwtToken) {
         try {
-            Thread.sleep(500); // 트랜잭션 커밋 대기
-            
+            // JWT 토큰을 ThreadLocal에 저장 (Feign Client에서 사용)
+            if (jwtToken != null && !jwtToken.isBlank()) {
+                com.OhRyue.certpilot.versus.config.AsyncConfig.setJwtToken(jwtToken);
+            }
+
+            try {
+                Thread.sleep(500); // 트랜잭션 커밋 대기
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("DUEL 봇 시작 대기 중 인터럽트 발생: roomId={}, botUserId={}", roomId, botUserId);
+                return;
+            }
             log.info("DUEL 봇 자동 플레이 시작: roomId={}, botUserId={}", roomId, botUserId);
             
             MatchRoom room = roomRepository.findById(roomId)
@@ -67,14 +80,14 @@ public class BotPlayService {
                     .toList();
             log.info("생성된 문제 ID 목록: roomId={}, questionIds={}", roomId, questionIds);
             
-            // 봇 플레이 실행
-            playQuestions(roomId, botUserId, questions, room.getMode());
+            // 이벤트 기반 봇 플레이: 각 문제가 시작될 때만 답안 제출
+            playQuestionsEventDriven(roomId, botUserId, questions, room.getMode());
             
             log.info("DUEL 봇 자동 플레이 완료: roomId={}, botUserId={}", roomId, botUserId);
             
-        } catch (Exception e) {
-            log.error("DUEL 봇 자동 플레이 실패: roomId={}, botUserId={}, error={}", 
-                    roomId, botUserId, e.getMessage(), e);
+        } finally {
+            // JWT 토큰 정리
+            com.OhRyue.certpilot.versus.config.AsyncConfig.clearJwtToken();
         }
     }
 
@@ -83,12 +96,23 @@ public class BotPlayService {
     /**
      * TOURNAMENT 봇 자동 플레이 시뮬레이션 (비동기)
      * - 모든 봇이 각 라운드의 문제를 자동으로 풀고 답안 제출
+     * @param jwtToken JWT 토큰 (study-service 호출용)
      */
-    @Async
-    public void simulateTournamentBotPlayAsync(Long roomId) {
+    @Async("taskExecutor")
+    public void simulateTournamentBotPlayAsync(Long roomId, String jwtToken) {
         try {
-            Thread.sleep(500);
-            
+            // JWT 토큰을 ThreadLocal에 저장 (Feign Client에서 사용)
+            if (jwtToken != null && !jwtToken.isBlank()) {
+                com.OhRyue.certpilot.versus.config.AsyncConfig.setJwtToken(jwtToken);
+            }
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("TOURNAMENT 봇 시작 대기 중 인터럽트 발생: roomId={}", roomId);
+                return;
+            }
             log.info("TOURNAMENT 봇 자동 플레이 시작: roomId={}", roomId);
             
             MatchRoom room = roomRepository.findById(roomId)
@@ -128,7 +152,8 @@ public class BotPlayService {
                         .collect(Collectors.toList());
                 
                 for (String botUserId : activeBots) {
-                    playQuestions(roomId, botUserId, roundQuestions, MatchMode.TOURNAMENT);
+                    // 이벤트 기반 봇 플레이: 각 문제가 시작될 때만 답안 제출
+                    playQuestionsEventDriven(roomId, botUserId, roundQuestions, MatchMode.TOURNAMENT);
                 }
                 
                 // 라운드 종료 이벤트는 VersusService에서 처리
@@ -136,8 +161,9 @@ public class BotPlayService {
             
             log.info("TOURNAMENT 봇 자동 플레이 완료: roomId={}", roomId);
             
-        } catch (Exception e) {
-            log.error("TOURNAMENT 봇 자동 플레이 실패: roomId={}, error={}", roomId, e.getMessage(), e);
+        } finally {
+            // JWT 토큰 정리
+            com.OhRyue.certpilot.versus.config.AsyncConfig.clearJwtToken();
         }
     }
 
@@ -145,13 +171,25 @@ public class BotPlayService {
 
     /**
      * GOLDENBELL 봇 자동 플레이 시뮬레이션 (비동기)
-     * - 모든 생존 봇이 각 라운드의 문제를 자동으로 풀고 답안 제출
+     * - 이벤트 기반: 각 문제가 시작될 때만 답안 제출
+     * - QUESTION_STARTED 이벤트를 기다렸다가 답 제출
+     * @param jwtToken JWT 토큰 (study-service 호출용)
      */
-    @Async
-    public void simulateGoldenbellBotPlayAsync(Long roomId) {
+    @Async("taskExecutor")
+    public void simulateGoldenbellBotPlayAsync(Long roomId, String jwtToken) {
         try {
-            Thread.sleep(500);
-            
+            // JWT 토큰을 ThreadLocal에 저장 (Feign Client에서 사용)
+            if (jwtToken != null && !jwtToken.isBlank()) {
+                com.OhRyue.certpilot.versus.config.AsyncConfig.setJwtToken(jwtToken);
+            }
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("GOLDENBELL 봇 시작 대기 중 인터럽트 발생: roomId={}", roomId);
+                return;
+            }
             log.info("GOLDENBELL 봇 자동 플레이 시작: roomId={}", roomId);
             
             MatchRoom room = roomRepository.findById(roomId)
@@ -160,18 +198,22 @@ public class BotPlayService {
             // 문제 생성 (없으면)
             ensureQuestionsExist(room);
             
-            // 모든 문제를 라운드별로 그룹화
+            // 모든 문제를 순서대로 가져오기
             List<MatchQuestion> allQuestions = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId);
-            Map<Integer, List<MatchQuestion>> questionsByRound = allQuestions.stream()
-                    .collect(Collectors.groupingBy(MatchQuestion::getRoundNo));
             
-            // 라운드 순서대로 처리
-            List<Integer> roundNos = new ArrayList<>(questionsByRound.keySet());
-            Collections.sort(roundNos);
+            if (allQuestions.isEmpty()) {
+                log.warn("GOLDENBELL 문제가 없음: roomId={}", roomId);
+                return;
+            }
             
-            for (Integer roundNo : roundNos) {
-                List<MatchQuestion> roundQuestions = questionsByRound.get(roundNo);
-                if (roundQuestions == null || roundQuestions.isEmpty()) {
+            // 각 문제에 대해 이벤트를 기다리며 봇이 답 제출
+            for (MatchQuestion question : allQuestions) {
+                // 문제가 시작될 때까지 대기 (QUESTION_STARTED 이벤트 확인)
+                Instant questionStartTime = waitForQuestionStart(roomId, question.getQuestionId());
+                
+                if (questionStartTime == null) {
+                    log.warn("문제 시작 이벤트를 기다리는 중 중단: roomId={}, questionId={}", 
+                            roomId, question.getQuestionId());
                     continue;
                 }
                 
@@ -186,65 +228,61 @@ public class BotPlayService {
                         .collect(Collectors.toList());
                 
                 if (aliveBotUserIds.isEmpty()) {
-                    log.info("GOLDENBELL 라운드 {}: 생존 봇 없음", roundNo);
+                    log.info("GOLDENBELL 문제 {}: 생존 봇 없음", question.getQuestionId());
                     continue;
                 }
                 
-                log.info("GOLDENBELL 라운드 {} 봇 플레이 시작: roomId={}, aliveBots={}, questions={}", 
-                        roomId, aliveBotUserIds.size(), roundQuestions.size());
+                log.info("GOLDENBELL 문제 {} 봇 플레이 시작: roomId={}, aliveBots={}", 
+                        question.getQuestionId(), roomId, aliveBotUserIds.size());
                 
-                // 각 문제마다 모든 생존 봇이 답안 제출
-                for (MatchQuestion question : roundQuestions) {
-                    // 생존 봇 목록 재조회 (오답으로 탈락한 봇 제외)
-                    List<GoldenbellState> currentAliveStates = goldenbellStateRepository.findByRoomId(roomId).stream()
-                            .filter(GoldenbellState::isAlive)
-                            .collect(Collectors.toList());
+                // 모든 생존 봇이 답안 제출
+                for (String botUserId : aliveBotUserIds) {
+                    // REVIVAL phase 문제는 부활한 봇도 참여 가능 (이미 답안 제출했어도 재참여)
+                    // 다른 phase는 이미 답안 제출했으면 스킵
+                    boolean isRevivalPhase = question.getPhase() == MatchPhase.REVIVAL;
+                    boolean alreadyAnswered = answerRepository
+                            .findByRoomIdAndQuestionIdAndUserId(roomId, question.getQuestionId(), botUserId)
+                            .isPresent();
                     
-                    List<String> currentAliveBots = currentAliveStates.stream()
-                            .map(GoldenbellState::getUserId)
-                            .filter(userId -> userId.startsWith("BOT_"))
-                            .collect(Collectors.toList());
-                    
-                    for (String botUserId : currentAliveBots) {
-                        // 봇이 이미 답안을 제출했는지 확인
-                        boolean alreadyAnswered = answerRepository
-                                .findByRoomIdAndQuestionIdAndUserId(roomId, question.getQuestionId(), botUserId)
-                                .isPresent();
-                        
-                        if (!alreadyAnswered) {
-                            boolean correct = playSingleQuestion(roomId, botUserId, question, MatchMode.GOLDENBELL);
-                            
-                            // 오답 시 즉시 탈락 처리
-                            if (!correct) {
-                                goldenbellStateRepository.findByRoomIdAndUserId(roomId, botUserId)
-                                        .ifPresent(state -> {
-                                            state.setAlive(false);
-                                            goldenbellStateRepository.save(state);
-                                            
-                                            saveEvent(roomId, "PLAYER_ELIMINATED", Map.of(
-                                                    "userId", botUserId,
-                                                    "mode", "GOLDENBELL",
-                                                    "round", question.getRoundNo(),
-                                                    "reason", "INCORRECT_ANSWER"
-                                            ));
-                                        });
-                            }
-                        }
+                    // REVIVAL phase가 아니고 이미 답안을 제출했다면 스킵
+                    if (!isRevivalPhase && alreadyAnswered) {
+                        continue;
                     }
-                }
-                
-                // 라운드 종료 후 부활전 처리 (VersusService 로직 활용)
-                // R4 라운드 종료 시 부활전 체크
-                if (roundNo == 4) {
-                    long finalAliveCount = goldenbellStateRepository.findByRoomId(roomId).stream()
-                            .filter(GoldenbellState::isAlive)
-                            .count();
                     
-                    if (finalAliveCount <= 5) {
-                        // 부활전 로직은 VersusService에서 처리되므로 여기서는 이벤트만 기록
-                        saveEvent(roomId, "REVIVAL_ROUND_START", Map.of(
-                                "aliveCount", finalAliveCount
-                        ));
+                    // REVIVAL phase이고 이미 답안을 제출했다면, 부활한 봇인지 확인
+                    if (isRevivalPhase && alreadyAnswered) {
+                        GoldenbellState state = goldenbellStateRepository.findByRoomIdAndUserId(roomId, botUserId)
+                                .orElse(null);
+                        // 부활한 봇이 아니면 스킵 (이미 처리한 문제)
+                        if (state == null || !state.isRevived()) {
+                            continue;
+                        }
+                        // 부활한 봇이면 기존 답안 삭제하고 재참여
+                        answerRepository.findByRoomIdAndQuestionIdAndUserId(roomId, question.getQuestionId(), botUserId)
+                                .ifPresent(answerRepository::delete);
+                        log.info("부활한 봇이 REVIVAL 문제 재참여: roomId={}, questionId={}, botUserId={}", 
+                                roomId, question.getQuestionId(), botUserId);
+                    }
+                    
+                    // 문제 시작 시간을 기준으로 딜레이 계산
+                    boolean correct = playSingleQuestionWithStartTime(
+                            roomId, botUserId, question, MatchMode.GOLDENBELL, questionStartTime);
+                    
+                    // 오답 시 즉시 탈락 처리
+                    if (!correct) {
+                        goldenbellStateRepository.findByRoomIdAndUserId(roomId, botUserId)
+                                .ifPresent(state -> {
+                                    state.setAlive(false);
+                                    goldenbellStateRepository.save(state);
+                                    
+                                    saveEvent(roomId, "PLAYER_ELIMINATED", Map.of(
+                                            "userId", botUserId,
+                                            "mode", "GOLDENBELL",
+                                            "round", question.getRoundNo(),
+                                            "phase", question.getPhase().name(),
+                                            "reason", "INCORRECT_ANSWER"
+                                    ));
+                                });
                     }
                 }
             }
@@ -253,14 +291,168 @@ public class BotPlayService {
             
         } catch (Exception e) {
             log.error("GOLDENBELL 봇 자동 플레이 실패: roomId={}, error={}", roomId, e.getMessage(), e);
+        } finally {
+            // JWT 토큰 정리
+            com.OhRyue.certpilot.versus.config.AsyncConfig.clearJwtToken();
+        }
+    }
+    
+    /**
+     * 문제 시작 이벤트를 기다림 (최대 60초)
+     * @return 문제 시작 시간, 없으면 null
+     */
+    private Instant waitForQuestionStart(Long roomId, Long questionId) {
+        int maxWaitSeconds = 60;
+        int pollIntervalMs = 200; // 200ms마다 확인
+        int maxPolls = (maxWaitSeconds * 1000) / pollIntervalMs;
+        
+        for (int i = 0; i < maxPolls; i++) {
+            try {
+                // QUESTION_STARTED 이벤트 확인
+                List<MatchEvent> startEvents = eventRepository.findByRoomIdAndEventType(roomId, "QUESTION_STARTED");
+                for (MatchEvent event : startEvents) {
+                    try {
+                        if (event.getPayloadJson() == null) continue;
+                        Map<String, Object> payload = objectMapper.readValue(
+                                event.getPayloadJson(), 
+                                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}
+                        );
+                        Object qId = payload.get("questionId");
+                        if (qId != null && questionId.equals(Long.valueOf(qId.toString()))) {
+                            // 문제 시작 시간 반환
+                            String startedAtStr = (String) payload.get("startedAt");
+                            if (startedAtStr != null) {
+                                return Instant.parse(startedAtStr);
+                            }
+                            // startedAt이 없으면 이벤트 생성 시간 사용
+                            return event.getCreatedAt();
+                        }
+                    } catch (Exception e) {
+                        // 무시하고 계속
+                    }
+                }
+                
+                // 이벤트가 없으면 잠시 대기 후 다시 확인
+                Thread.sleep(pollIntervalMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
+        
+        log.warn("문제 시작 이벤트를 찾지 못함: roomId={}, questionId={}", roomId, questionId);
+        return null;
+    }
+    
+    /**
+     * 문제 시작 시간을 기준으로 딜레이를 계산하여 답안 제출
+     */
+    private boolean playSingleQuestionWithStartTime(Long roomId, String botUserId, MatchQuestion question, 
+                                                     MatchMode mode, Instant questionStartTime) {
+        try {
+            VersusBotConst.BotDifficulty difficulty = VersusBotConst.extractDifficulty(botUserId);
+            
+            // 난이도별 딜레이 계산
+            int delayMs = difficulty.calculateDelay(random);
+            
+            // 문제 시작 시간부터 딜레이만큼 대기
+            Instant now = Instant.now();
+            long elapsedMs = java.time.Duration.between(questionStartTime, now).toMillis();
+            long remainingDelay = delayMs - elapsedMs;
+            
+            if (remainingDelay > 0) {
+                Thread.sleep(remainingDelay);
+            }
+            
+            // 실제 제출 시간 계산
+            Instant submitTime = Instant.now();
+            long actualTimeMs = java.time.Duration.between(questionStartTime, submitTime).toMillis();
+            
+            // 난이도별 정답 결정
+            boolean correct = difficulty.decideCorrect(random);
+            
+            // 점수 계산
+            int scoreDelta = calculateScore(question, correct, (int) actualTimeMs);
+            
+            // 답안 저장
+            saveBotAnswer(roomId, botUserId, question, correct, (int) actualTimeMs, scoreDelta);
+            
+            // 이벤트 기록
+            saveEvent(roomId, "BOT_ANSWERED", Map.of(
+                    "userId", botUserId,
+                    "questionId", question.getQuestionId(),
+                    "roundNo", question.getRoundNo(),
+                    "phase", question.getPhase().name(),
+                    "isCorrect", correct,
+                    "timeMs", actualTimeMs,
+                    "scoreDelta", scoreDelta
+            ));
+            
+            return correct;
+            
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (Exception e) {
+            log.error("단일 문제 플레이 실패: roomId={}, questionId={}, botUserId={}, error={}", 
+                    roomId, question.getQuestionId(), botUserId, e.getMessage(), e);
+            return false;
         }
     }
 
     // ========== 공통 메서드 ==========
 
     /**
-     * 문제 목록 플레이 (여러 문제를 순차적으로 플레이)
+     * 이벤트 기반 문제 플레이 (DUEL, TOURNAMENT 모드용)
+     * - 각 문제가 시작될 때까지 기다렸다가 답안 제출
+     * - QUESTION_STARTED 이벤트를 기다림
      */
+    private void playQuestionsEventDriven(Long roomId, String botUserId, List<MatchQuestion> questions, MatchMode mode) {
+        log.info("이벤트 기반 봇 플레이 시작: roomId={}, botUserId={}, mode={}, questions={}", 
+                roomId, botUserId, mode, questions.size());
+        
+        for (MatchQuestion question : questions) {
+            try {
+                // 이미 답안을 제출했는지 확인
+                boolean alreadyAnswered = answerRepository
+                        .findByRoomIdAndQuestionIdAndUserId(roomId, question.getQuestionId(), botUserId)
+                        .isPresent();
+                
+                if (alreadyAnswered) {
+                    log.debug("봇이 이미 답안 제출함: roomId={}, questionId={}, botUserId={}", 
+                            roomId, question.getQuestionId(), botUserId);
+                    continue;
+                }
+                
+                // 문제가 시작될 때까지 대기 (QUESTION_STARTED 이벤트 확인)
+                Instant questionStartTime = waitForQuestionStart(roomId, question.getQuestionId());
+                
+                if (questionStartTime == null) {
+                    log.warn("문제 시작 이벤트를 기다리는 중 중단: roomId={}, questionId={}", 
+                            roomId, question.getQuestionId());
+                    continue;
+                }
+                
+                log.info("문제 {} 봇 플레이 시작: roomId={}, botUserId={}", 
+                        question.getQuestionId(), roomId, botUserId);
+                
+                // 문제 시작 시간을 기준으로 답안 제출
+                playSingleQuestionWithStartTime(roomId, botUserId, question, mode, questionStartTime);
+                
+            } catch (Exception e) {
+                log.error("문제 플레이 중 오류: roomId={}, questionId={}, botUserId={}, error={}", 
+                        roomId, question.getQuestionId(), botUserId, e.getMessage(), e);
+            }
+        }
+        
+        log.info("이벤트 기반 봇 플레이 완료: roomId={}, botUserId={}", roomId, botUserId);
+    }
+
+    /**
+     * 문제 목록 플레이 (여러 문제를 순차적으로 플레이)
+     * @deprecated DUEL/TOURNAMENT는 playQuestionsEventDriven 사용 권장
+     */
+    @Deprecated
     private void playQuestions(Long roomId, String botUserId, List<MatchQuestion> questions, MatchMode mode) {
         VersusBotConst.BotDifficulty difficulty = VersusBotConst.extractDifficulty(botUserId);
         int botScore = 0;
@@ -506,33 +698,66 @@ public class BotPlayService {
                 }
             }
         } else if (mode == MatchMode.GOLDENBELL) {
-            // GOLDENBELL: 8문제 (R1~R6: MAIN, R7~R8: FINAL)
-            for (int i = 1; i <= 6; i++) {
-                dummyQuestions.add(MatchQuestion.builder()
-                        .roomId(roomId)
-                        .roundNo(i)
-                        .phase(MatchPhase.MAIN)
-                        .orderNo(1)
-                        .questionId(90000L + i)
-                        .timeLimitSec(10)
-                        .build());
-            }
-            // FINAL 라운드
+            // GOLDENBELL: 라운드 1(OX 2), 라운드 2(MCQ 2), 라운드 3(부활전 MCQ 1), 라운드 4(FINAL SHORT 1 + LONG 1)
+            // 라운드 1: OX 2문제 (order 1, 2)
             dummyQuestions.add(MatchQuestion.builder()
                     .roomId(roomId)
-                    .roundNo(7)
-                    .phase(MatchPhase.FINAL)
+                    .roundNo(1)
+                    .phase(MatchPhase.MAIN)
                     .orderNo(1)
-                    .questionId(90007L)
+                    .questionId(90001L)
                     .timeLimitSec(10)
                     .build());
             dummyQuestions.add(MatchQuestion.builder()
                     .roomId(roomId)
-                    .roundNo(8)
+                    .roundNo(1)
+                    .phase(MatchPhase.MAIN)
+                    .orderNo(2)
+                    .questionId(90002L)
+                    .timeLimitSec(10)
+                    .build());
+            // 라운드 2: MCQ 2문제 (order 1, 2)
+            dummyQuestions.add(MatchQuestion.builder()
+                    .roomId(roomId)
+                    .roundNo(2)
+                    .phase(MatchPhase.MAIN)
+                    .orderNo(1)
+                    .questionId(90003L)
+                    .timeLimitSec(10)
+                    .build());
+            dummyQuestions.add(MatchQuestion.builder()
+                    .roomId(roomId)
+                    .roundNo(2)
+                    .phase(MatchPhase.MAIN)
+                    .orderNo(2)
+                    .questionId(90004L)
+                    .timeLimitSec(10)
+                    .build());
+            // 라운드 3: MCQ 1문제 (REVIVAL) - 패자부활전 (15초)
+            dummyQuestions.add(MatchQuestion.builder()
+                    .roomId(roomId)
+                    .roundNo(3)
+                    .phase(MatchPhase.REVIVAL)
+                    .orderNo(1)
+                    .questionId(90005L)
+                    .timeLimitSec(15)
+                    .build());
+            // 라운드 4: SHORT 1문제 + LONG 1문제 (FINAL, order 1, 2) (30초)
+            dummyQuestions.add(MatchQuestion.builder()
+                    .roomId(roomId)
+                    .roundNo(4)
+                    .phase(MatchPhase.FINAL)
+                    .orderNo(1)
+                    .questionId(90006L)
+                    .timeLimitSec(30)
+                    .build());
+            dummyQuestions.add(MatchQuestion.builder()
+                    .roomId(roomId)
+                    .roundNo(4)
                     .phase(MatchPhase.FINAL)
                     .orderNo(2)
-                    .questionId(90008L)
-                    .timeLimitSec(10)
+                    .questionId(90007L)
+                    .timeLimitSec(30)
                     .build());
         }
         
@@ -558,6 +783,9 @@ public class BotPlayService {
                                  boolean correct,
                                  int timeMs,
                                  int scoreDelta) {
+        // 단답식/서술형을 위한 답안 텍스트 생성
+        String userAnswerText = generateBotAnswerText(q.getQuestionId(), correct);
+        
         MatchAnswer answer = MatchAnswer.builder()
                 .roomId(roomId)
                 .roundNo(q.getRoundNo())
@@ -568,9 +796,100 @@ public class BotPlayService {
                 .correct(correct)
                 .timeMs(timeMs)
                 .scoreDelta(scoreDelta)
+                .userAnswer(userAnswerText)
                 .build();
         
         answerRepository.save(answer);
+    }
+
+    /**
+     * 봇 답안 텍스트 생성 (단답식/서술형용)
+     * OX/MCQ는 label을 반환하고, SHORT/LONG은 텍스트를 생성
+     */
+    private String generateBotAnswerText(Long questionId, boolean correct) {
+        try {
+            // study-service에서 문제 정보 가져오기
+            com.OhRyue.certpilot.versus.client.StudyServiceClient.QuestionDto questionDto = 
+                    studyServiceClient.getQuestion(questionId);
+            
+            if (questionDto == null) {
+                // 문제 정보를 가져올 수 없으면 더미 답안 생성
+                return correct ? "정답" : "오답";
+            }
+            
+            String questionType = questionDto.type(); // OX, MCQ, SHORT, LONG
+            String correctAnswer = questionDto.answerKey(); // 정답 키
+            
+            // OX/MCQ는 label 반환
+            if ("OX".equals(questionType) || "MCQ".equals(questionType)) {
+                if (correct && correctAnswer != null) {
+                    // 정답인 경우 정답 키 반환
+                    return correctAnswer;
+                } else {
+                    // 오답인 경우 반드시 정답이 아닌 답 선택
+                    if ("OX".equals(questionType)) {
+                        // OX: 정답이 "O"면 "X", 정답이 "X"면 "O"
+                        if (correctAnswer != null && correctAnswer.trim().equalsIgnoreCase("O")) {
+                            return "X";
+                        } else if (correctAnswer != null && correctAnswer.trim().equalsIgnoreCase("X")) {
+                            return "O";
+                        } else {
+                            // 정답 키를 알 수 없으면 랜덤
+                            return random.nextBoolean() ? "O" : "X";
+                        }
+                    } else {
+                        // MCQ: 정답이 아닌 선택지 중 랜덤 선택
+                        String[] allLabels = {"A", "B", "C", "D", "E"};
+                        if (correctAnswer != null) {
+                            String correctLabel = correctAnswer.trim().toUpperCase();
+                            List<String> wrongLabels = Arrays.stream(allLabels)
+                                    .filter(label -> !label.equals(correctLabel))
+                                    .collect(Collectors.toList());
+                            if (!wrongLabels.isEmpty()) {
+                                return wrongLabels.get(random.nextInt(wrongLabels.size()));
+                            }
+                        }
+                        // 정답 키를 알 수 없으면 랜덤
+                        return allLabels[random.nextInt(allLabels.length)];
+                    }
+                }
+            }
+            
+            // SHORT/LONG은 텍스트 생성
+            if ("SHORT".equals(questionType) || "LONG".equals(questionType)) {
+                if (correct && questionDto.answerKey() != null) {
+                    // 정답인 경우 정답 키 사용 (일부만 사용하여 자연스럽게)
+                    String answerKey = questionDto.answerKey();
+                    // 정답이 너무 길면 일부만 사용
+                    if (answerKey.length() > 50 && "SHORT".equals(questionType)) {
+                        return answerKey.substring(0, Math.min(30, answerKey.length())) + "...";
+                    }
+                    return answerKey;
+                } else {
+                    // 오답인 경우 랜덤 텍스트 생성
+                    String[] wrongAnswers = {
+                        "데이터베이스", "정규화", "인덱스", "트랜잭션", "무결성",
+                        "쿼리", "스키마", "뷰", "프로시저", "트리거",
+                        "관계형", "NoSQL", "분산", "복제", "백업"
+                    };
+                    String base = wrongAnswers[random.nextInt(wrongAnswers.length)];
+                    if ("LONG".equals(questionType)) {
+                        // 서술형은 더 긴 텍스트
+                        return base + "에 대한 설명입니다. " + 
+                               wrongAnswers[random.nextInt(wrongAnswers.length)] + 
+                               "와 관련이 있습니다.";
+                    }
+                    return base;
+                }
+            }
+            
+            return correct ? "정답" : "오답";
+            
+        } catch (Exception e) {
+            log.warn("봇 답안 텍스트 생성 실패: questionId={}, error={}", questionId, e.getMessage());
+            // 실패 시 기본값
+            return correct ? "정답" : "오답";
+        }
     }
 
     /**

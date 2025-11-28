@@ -39,7 +39,10 @@ public class VersusDtos {
         @Min(0)
         @Schema(description = "매치 총 소요 시간 (밀리초)", 
             example = "120000", required = true)
-        Long durationMs
+        Long durationMs,
+        
+        @Schema(description = "시험 모드 (WRITTEN, PRACTICAL)")
+        String examMode
     ) {}
 
     @Schema(description = "참가자 결과")
@@ -71,7 +74,36 @@ public class VersusDtos {
         @Min(0)
         @Schema(description = "총 소요 시간 (밀리초)", 
             example = "45000", required = true)
-        Long totalTimeMs
+        Long totalTimeMs,
+        
+        @Schema(description = "개별 답안 목록 (배틀 기록용)")
+        List<AnswerDetail> answers
+    ) {}
+    
+    @Schema(description = "개별 답안 상세 정보")
+    public record AnswerDetail(
+        @NotNull
+        @Schema(description = "문제 ID", required = true)
+        Long questionId,
+        
+        @Schema(description = "사용자가 제출한 답안")
+        String userAnswer,
+        
+        @Schema(description = "정답 여부", required = true)
+        Boolean isCorrect,
+        
+        @Min(0)
+        @Schema(description = "제출 시간 (밀리초)", required = true)
+        Integer timeMs,
+        
+        @Schema(description = "점수 변화량", required = true)
+        Integer scoreDelta,
+        
+        @Schema(description = "라운드 번호")
+        Integer roundNo,
+        
+        @Schema(description = "페이즈 (MAIN, FINAL, REVIVAL)")
+        String phase
     ) {}
 }
 

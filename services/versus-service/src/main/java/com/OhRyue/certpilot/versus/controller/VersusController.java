@@ -428,20 +428,22 @@ public class VersusController {
                     "**기능:**\n" +
                     "- DUEL 방 자동 생성\n" +
                     "- 사용자 + 봇 1명 자동 참가 (총 2명)\n" +
-                    "- 문제 자동 생성 (WRITTEN 모드, 10문제)\n" +
+                    "- 문제 자동 생성 (필기/실기 모드 선택 가능)\n" +
+                    "- **필기 모드 (WRITTEN)**: OX 2개 + MCQ 8개 (총 10문제)\n" +
+                    "- **실기 모드 (PRACTICAL)**: SHORT 8개 + LONG 2개 (총 10문제)\n" +
                     "- 봇 자동 플레이 시작 (1.5~3초 간격으로 답안 제출)\n\n" +
                     "**봇 동작:**\n" +
                     "- 70% 확률 정답, 30% 확률 오답\n" +
                     "- 각 문제마다 1.5~3초 랜덤 딜레이\n" +
                     "- 정답 시 점수 획득, 오답 시 0점\n\n" +
-                    "**모드 선택:**\n" +
-                    "- **카테고리 모드 (scopeType=CATEGORY)**: 2레벨 토픽 한 가지 선택\n" +
-                    "  - topicId: 2레벨 토픽 ID (필수)\n" +
-                    "- **난이도 모드 (scopeType=DIFFICULTY)**: 쉬움, 보통, 어려움 선택\n" +
-                    "  - difficulty: EASY, NORMAL, HARD (기본값: NORMAL)\n\n" +
+                    "**파라미터:**\n" +
+                    "- **examMode**: \"WRITTEN\" (기본값) 또는 \"PRACTICAL\"\n" +
+                    "- **scopeType**: CATEGORY (카테고리 모드) 또는 DIFFICULTY (난이도 모드, 기본값)\n" +
+                    "- **topicId**: 카테고리 모드일 때 2레벨 토픽 ID (필수)\n" +
+                    "- **difficulty**: 난이도 모드일 때 EASY, NORMAL (기본값), HARD\n\n" +
                     "**예시:**\n" +
-                    "- 카테고리 모드: `?scopeType=CATEGORY&topicId=101`\n" +
-                    "- 난이도 모드: `?scopeType=DIFFICULTY&difficulty=HARD`\n\n" +
+                    "- 필기 모드 (난이도): `?examMode=WRITTEN&scopeType=DIFFICULTY&difficulty=HARD`\n" +
+                    "- 실기 모드 (카테고리): `?examMode=PRACTICAL&scopeType=CATEGORY&topicId=101`\n\n" +
                     "**이벤트:**\n" +
                     "- ROOM_CREATED, PLAYER_JOINED, MATCH_STARTED\n" +
                     "- BOT_ANSWERED, SCORE_UPDATED (봇 답안 제출 시)\n" +
@@ -454,6 +456,8 @@ public class VersusController {
     })
     @PostMapping("/match/duel/bot")
     public VersusMatchService.DuelWithBotResult startDuelWithBot(
+            @Parameter(description = "시험 모드 (WRITTEN: 필기, PRACTICAL: 실기)", example = "WRITTEN")
+            @RequestParam(required = false, defaultValue = "WRITTEN") String examMode,
             @Parameter(description = "모드 타입 (CATEGORY: 카테고리 모드, DIFFICULTY: 난이도 모드)", example = "DIFFICULTY")
             @RequestParam(required = false, defaultValue = "DIFFICULTY") String scopeType,
             @Parameter(description = "카테고리 모드일 때 2레벨 토픽 ID", example = "101")
@@ -462,7 +466,7 @@ public class VersusController {
             @RequestParam(required = false, defaultValue = "NORMAL") String difficulty) {
 
         String userId = AuthUserUtil.getCurrentUserId();
-        return versusMatchService.startDuelWithBot(userId, scopeType, topicId, difficulty);
+        return versusMatchService.startDuelWithBot(userId, examMode, scopeType, topicId, difficulty);
     }
 
     @Operation(
@@ -471,21 +475,28 @@ public class VersusController {
                     "**기능:**\n" +
                     "- TOURNAMENT 방 자동 생성\n" +
                     "- 사용자 + 봇 7명 자동 참가 (총 8명)\n" +
-                    "- 문제 자동 생성 (3라운드 × 3문제 = 9문제)\n" +
+                    "- 문제 자동 생성 (필기/실기 모드 선택 가능)\n" +
+                    "- **필기 모드 (WRITTEN)**: 1R OX 3개, 2R MCQ 3개, 3R MCQ 3개 (총 9문제)\n" +
+                    "- **실기 모드 (PRACTICAL)**: 1R SHORT 3개, 2R SHORT 3개, 3R SHORT 1개 + LONG 2개 (총 9문제)\n" +
                     "- 모든 봇이 각 라운드 문제를 자동으로 풀고 답안 제출\n" +
                     "- 라운드별 탈락 처리 자동 진행\n\n" +
                     "**봇 구성:**\n" +
                     "- EASY 봇 2명, NORMAL 봇 3명, HARD 봇 2명\n" +
-                    "- 난이도별 정답률 및 시간 지연 적용"
+                    "- 난이도별 정답률 및 시간 지연 적용\n\n" +
+                    "**파라미터:**\n" +
+                    "- examMode: \"WRITTEN\" (기본값) 또는 \"PRACTICAL\""
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "토너먼트 봇 매칭 시작 성공"),
-            @ApiResponse(responseCode = "401", description = "인증 실패")
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "400", description = "잘못된 examMode (WRITTEN 또는 PRACTICAL만 가능)")
     })
     @PostMapping("/match/tournament/bot")
-    public VersusMatchService.TournamentWithBotResult startTournamentWithBot() {
+    public VersusMatchService.TournamentWithBotResult startTournamentWithBot(
+            @Parameter(description = "시험 모드 (WRITTEN: 필기, PRACTICAL: 실기)", example = "WRITTEN")
+            @RequestParam(required = false, defaultValue = "WRITTEN") String examMode) {
         String userId = AuthUserUtil.getCurrentUserId();
-        return versusMatchService.startTournamentWithBot(userId);
+        return versusMatchService.startTournamentWithBot(userId, examMode);
     }
 
     @Operation(
@@ -494,21 +505,28 @@ public class VersusController {
                     "**기능:**\n" +
                     "- GOLDENBELL 방 자동 생성\n" +
                     "- 사용자 + 봇 19명 자동 참가 (총 20명)\n" +
-                    "- 문제 자동 생성 (8라운드: OX 2, MCQ 2, SHORT 2, LONG 2)\n" +
+                    "- examMode에 따라 필기/실기 골든벨 자동 구성\n" +
+                    "- **필기 골든벨 (WRITTEN)**: OX 2개, MCQ 2개, MCQ(REVIVAL) 1개, MCQ(FINAL) 2개\n" +
+                    "- **실기 골든벨 (PRACTICAL)**: SHORT 7개 (LONG 제거)\n" +
                     "- 모든 생존 봇이 각 라운드 문제를 자동으로 풀고 답안 제출\n" +
                     "- 오답 시 즉시 탈락, 부활전 자동 처리\n\n" +
                     "**봇 구성:**\n" +
                     "- EASY 봇 6명, NORMAL 봇 7명, HARD 봇 6명\n" +
-                    "- 난이도별 정답률 및 시간 지연 적용"
+                    "- 난이도별 정답률 및 시간 지연 적용\n\n" +
+                    "**파라미터:**\n" +
+                    "- examMode: \"WRITTEN\" (기본값) 또는 \"PRACTICAL\""
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "골든벨 봇 매칭 시작 성공"),
-            @ApiResponse(responseCode = "401", description = "인증 실패")
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "400", description = "잘못된 examMode (WRITTEN 또는 PRACTICAL만 가능)")
     })
     @PostMapping("/match/goldenbell/bot")
-    public VersusMatchService.GoldenbellWithBotResult startGoldenbellWithBot() {
+    public VersusMatchService.GoldenbellWithBotResult startGoldenbellWithBot(
+            @Parameter(description = "시험 모드: WRITTEN(필기) 또는 PRACTICAL(실기), 기본값: WRITTEN")
+            @RequestParam(required = false, defaultValue = "WRITTEN") String examMode) {
         String userId = AuthUserUtil.getCurrentUserId();
-        return versusMatchService.startGoldenbellWithBot(userId);
+        return versusMatchService.startGoldenbellWithBot(userId, examMode);
     }
 
     @Operation(
@@ -555,5 +573,55 @@ public class VersusController {
       @Parameter(description = "방 ID", example = "1", required = true)
       @PathVariable Long roomId) {
     return versusService.getRoomQuestions(roomId);
+  }
+
+  @Operation(
+      summary = "문제별 답안 목록 조회 (골든벨용)",
+      description = "특정 문제에 대한 모든 사용자의 답안을 조회합니다.\n\n" +
+          "**모드별 동작:**\n" +
+          "- GOLDENBELL: 모든 사용자의 답안 반환 (단답식/서술형 답안 텍스트 포함)\n" +
+          "- DUEL/TOURNAMENT: 빈 리스트 반환 (상대방 답 안 띄움)\n\n" +
+          "**답안 정보:**\n" +
+          "- userAnswer: 사용자가 제출한 답안 (OX/MCQ: label, SHORT/LONG: 텍스트)\n" +
+          "- correct: 정답 여부\n" +
+          "- timeMs: 문제 풀이 소요 시간\n" +
+          "- scoreDelta: 점수 변화량"
+  )
+  @ApiResponses(value = {
+      @ApiResponse(responseCode = "200", description = "조회 성공")
+  })
+  @GetMapping("/rooms/{roomId}/questions/{questionId}/answers")
+  public VersusDtos.QuestionAnswersResp getQuestionAnswers(
+      @Parameter(description = "방 ID", example = "1", required = true)
+      @PathVariable Long roomId,
+      @Parameter(description = "문제 ID", example = "1001", required = true)
+      @PathVariable Long questionId) {
+    return versusService.getQuestionAnswers(roomId, questionId);
+  }
+
+  @Operation(
+      summary = "문제 시작 이벤트 기록 (테스트용)",
+      description = "모든 모드(1:1 배틀, 토너먼트, 골든벨)에서 문제 시작 이벤트를 직접 기록합니다. (Swagger 테스트용)\n\n" +
+          "**사용 시나리오:**\n" +
+          "- 모든 모드에서 다음 문제가 시작될 때 QUESTION_STARTED 이벤트를 기록합니다.\n" +
+          "- 모든 참가자가 동시에 시작하도록 `allParticipants: true`로 기록됩니다.\n" +
+          "- 시간 계산의 기준점이 됩니다.\n\n" +
+          "**자동 기록 시점:**\n" +
+          "- `startRoom` 호출 시: 첫 번째 문제 자동 기록\n" +
+          "- `ROUND_COMPLETED` 후: 다음 문제가 있으면 자동 기록\n\n" +
+          "**주의사항:**\n" +
+          "- 실제 게임에서는 위 시점에서 자동으로 기록되므로 이 API는 테스트용입니다."
+  )
+  @ApiResponses(value = {
+      @ApiResponse(responseCode = "200", description = "이벤트 기록 성공"),
+      @ApiResponse(responseCode = "400", description = "잘못된 요청 (문제가 없거나 이미 기록됨)")
+  })
+  @PostMapping("/rooms/{roomId}/questions/{questionId}/start")
+  public Map<String, Object> startQuestion(
+      @Parameter(description = "방 ID", example = "1", required = true)
+      @PathVariable Long roomId,
+      @Parameter(description = "문제 ID", example = "1001", required = true)
+      @PathVariable Long questionId) {
+    return versusService.recordQuestionStartEvent(roomId, questionId);
   }
 }

@@ -46,6 +46,9 @@ public class MatchAnswer {
   @Column(name = "score_delta", nullable = false)
   private Integer scoreDelta;
 
+  @Column(name = "user_answer", columnDefinition = "TEXT")
+  private String userAnswer;
+
   @PrePersist
   void onSubmit() {
     if (submittedAt == null) {
