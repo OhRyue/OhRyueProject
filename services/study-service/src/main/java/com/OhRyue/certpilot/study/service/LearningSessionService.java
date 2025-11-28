@@ -3,14 +3,22 @@ package com.OhRyue.certpilot.study.service;
 import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.domain.LearningSession;
 import com.OhRyue.certpilot.study.domain.LearningStep;
+import com.OhRyue.certpilot.study.domain.Question;
+import com.OhRyue.certpilot.study.domain.StudySession;
+import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.domain.enums.QuestionType;
 import com.OhRyue.certpilot.study.dto.SessionDtos.*;
 import com.OhRyue.certpilot.study.repository.LearningSessionRepository;
 import com.OhRyue.certpilot.study.repository.LearningStepRepository;
+import com.OhRyue.certpilot.study.repository.QuestionRepository;
+import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
+import com.OhRyue.certpilot.study.repository.StudySessionRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +29,7 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +40,9 @@ public class LearningSessionService {
   private final StudySessionManager sessionManager;
   private final ObjectMapper objectMapper;
   private final TopicTreeService topicTreeService;
+  private final QuestionRepository questionRepository;
+  private final StudySessionRepository sessionRepository;
+  private final StudySessionItemRepository studySessionItemRepository;
 
   /** 필기(WRITTEN) 단계 순서 */
   private static final List<String> ORDER_WRITTEN = List.of(
@@ -40,9 +52,13 @@ public class LearningSessionService {
   private static final List<String> ORDER_PRACTICAL = List.of(
       "CONCEPT", "MINI", "PRACTICAL", "REVIEW_WRONG", "SUMMARY"
   );
-  /** 리뷰(REVIEW) 단계 순서 */
-  private static final List<String> ORDER_REVIEW = List.of(
+  /** 리뷰(REVIEW) 단계 순서 - 필기 */
+  private static final List<String> ORDER_REVIEW_WRITTEN = List.of(
       "MCQ", "REVIEW_WRONG", "SUMMARY"
+  );
+  /** 리뷰(REVIEW) 단계 순서 - 실기 */
+  private static final List<String> ORDER_REVIEW_PRACTICAL = List.of(
+      "PRACTICAL", "REVIEW_WRONG", "SUMMARY"
   );
 
   /** 모드에 따른 단계 순서 (ExamMode 버전) */
@@ -52,9 +68,9 @@ public class LearningSessionService {
 
   /** 모드에 따른 단계 순서 (String 버전 - 오버로드) */
   private List<String> orderOf(String modeStr) {
-    // REVIEW 모드는 특별 처리
+    // REVIEW 모드는 특별 처리 (기본값은 필기 Review)
     if ("REVIEW".equalsIgnoreCase(modeStr)) {
-      return ORDER_REVIEW;
+      return ORDER_REVIEW_WRITTEN;
     }
     return orderOf(parseMode(modeStr));
   }
@@ -120,14 +136,29 @@ public class LearningSessionService {
     
     // Review 모드일 경우 별도 처리
     if ("REVIEW".equals(modeStr)) {
+      // Review 모드: examMode 확인 (실기 Review는 PRACTICAL, 필기 Review는 WRITTEN)
+      ExamMode reviewExamMode = ExamMode.WRITTEN; // 기본값
+      if (req.examMode() != null && !req.examMode().isBlank()) {
+        try {
+          reviewExamMode = ExamMode.valueOf(req.examMode().trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+          reviewExamMode = ExamMode.WRITTEN; // 기본값
+        }
+      }
+      
       // Review 모드: 하위 토픽들 조회
       Set<Long> topicIds = topicTreeService.descendantsOf(req.topicId());
       if (topicIds.isEmpty()) {
         topicIds = Set.of(req.topicId());
       }
       
-      // 단계 초기화 및 문제 사전 할당 (REVIEW 모드: MCQ -> REVIEW_WRONG -> SUMMARY)
-      for (String stepCode : ORDER_REVIEW) {
+      // 단계 순서 결정 (실기 Review는 PRACTICAL 단계, 필기 Review는 MCQ 단계)
+      List<String> reviewOrder = (reviewExamMode == ExamMode.PRACTICAL) 
+          ? ORDER_REVIEW_PRACTICAL 
+          : ORDER_REVIEW_WRITTEN;
+      
+      // 단계 초기화 및 문제 사전 할당
+      for (String stepCode : reviewOrder) {
         LearningStep step = stepRepo.save(LearningStep.builder()
             .learningSession(s)
             .stepCode(stepCode)
@@ -138,20 +169,74 @@ public class LearningSessionService {
             .updatedAt(Instant.now())
             .build());
         
-        // MCQ 단계의 경우 문제 사전 할당 (rootTopicId와 하위 토픽들에서 선택)
-        if ("MCQ".equals(stepCode)) {
+        // 필기 Review: MCQ 단계의 경우 문제 사전 할당
+        if ("MCQ".equals(stepCode) && reviewExamMode == ExamMode.WRITTEN) {
           sessionManager.createAndAllocateSessionForReviewStep(
-              step, userId, req.topicId(), examMode, QuestionType.MCQ, 10, topicIds);
+              step, userId, req.topicId(), reviewExamMode, QuestionType.MCQ, 10, topicIds);
+        }
+        // 실기 Review: PRACTICAL 단계의 경우 문제 사전 할당 (SHORT 6 + LONG 4 = 10문제)
+        else if ("PRACTICAL".equals(stepCode) && reviewExamMode == ExamMode.PRACTICAL) {
+          try {
+            // SHORT 6문제 + LONG 4문제 = 총 10문제
+            List<Question> shortQuestions = questionRepository.pickRandomByTopicIn(
+                topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 6));
+            List<Question> longQuestions = questionRepository.pickRandomByTopicIn(
+                topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 4));
+            
+            List<Question> questions = Stream.concat(shortQuestions.stream(), longQuestions.stream())
+                .distinct()
+                .toList();
+            
+            if (questions.isEmpty()) {
+              throw new IllegalStateException("문제가 부족합니다. rootTopicId: " + req.topicId());
+            }
+            
+            // StudySession 생성 및 문제 할당
+            String scopeJson = objectMapper.writeValueAsString(Map.of("rootTopicId", req.topicId()));
+            StudySession studySession = StudySession.builder()
+                .userId(userId)
+                .mode("REVIEW")
+                .examMode(ExamMode.PRACTICAL)
+                .topicScopeJson(scopeJson)
+                .questionCount(10)
+                .status("OPEN")
+                .startedAt(Instant.now())
+                .learningStep(step)
+                .build();
+            studySession = sessionRepository.save(studySession);
+            
+            // LearningStep에 연결
+            step.setStudySession(studySession);
+            stepRepo.save(step);
+            
+            // 문제 할당
+            List<Long> questionIds = questions.stream().map(Question::getId).toList();
+            for (int i = 0; i < questionIds.size(); i++) {
+              Long questionId = questionIds.get(i);
+              studySessionItemRepository.save(StudySessionItem.builder()
+                  .sessionId(studySession.getId())
+                  .questionId(questionId)
+                  .orderNo(i + 1)
+                  .userAnswerJson(null)
+                  .correct(null)
+                  .score(null)
+                  .createdAt(Instant.now())
+                  .build());
+            }
+          } catch (JsonProcessingException e) {
+            throw new IllegalStateException("세션 생성 중 오류가 발생했습니다.", e);
+          }
         }
         // REVIEW_WRONG, SUMMARY는 문제 할당 없음
       }
       
-      // MCQ 단계를 첫 단계로 설정 (REVIEW 모드는 CONCEPT 없음)
-      LearningStep mcqStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), "MCQ")
+      // 첫 단계를 IN_PROGRESS로 설정
+      String firstStepCode = reviewOrder.get(0);
+      LearningStep firstStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), firstStepCode)
           .orElse(null);
-      if (mcqStep != null) {
-        mcqStep.setStatus("IN_PROGRESS");
-        stepRepo.save(mcqStep);
+      if (firstStep != null) {
+        firstStep.setStatus("IN_PROGRESS");
+        stepRepo.save(firstStep);
       }
     } else {
       // 일반 모드 (WRITTEN, PRACTICAL)
@@ -308,8 +393,8 @@ public class LearningSessionService {
     // 단계별 완료 조건 검증 (문제가 있는 단계만)
     // Review 모드와 일반 모드 구분
     if ("REVIEW".equals(s.getMode())) {
-      if (requiresCompletionCheckForReview(current.getStepCode())) {
-        validateStepCompletion(current, s);
+      if (requiresCompletionCheckForReview(current.getStepCode(), s)) {
+        validateStepCompletionForReview(current, s);
       }
     } else {
       if (requiresCompletionCheck(current.getStepCode())) {
@@ -327,7 +412,7 @@ public class LearningSessionService {
     // StudySession 종료 처리 (MINI, MCQ, PRACTICAL 단계 완료 시)
     boolean shouldCloseSession;
     if ("REVIEW".equals(s.getMode())) {
-      shouldCloseSession = hasStudySessionForReview(current);
+      shouldCloseSession = hasStudySessionForReview(current, s);
     } else {
       shouldCloseSession = hasStudySession(current);
     }
@@ -335,8 +420,9 @@ public class LearningSessionService {
     if (shouldCloseSession) {
       com.OhRyue.certpilot.study.domain.StudySession studySession;
       
-      // PRACTICAL 단계는 MINI 단계와 같은 StudySession을 공유하므로 MINI 단계에서 가져옴
-      if ("PRACTICAL".equals(current.getStepCode())) {
+      // Review 모드의 PRACTICAL 단계는 직접 StudySession을 가짐
+      // 일반 모드의 PRACTICAL 단계는 MINI 단계와 같은 StudySession을 공유
+      if ("PRACTICAL".equals(current.getStepCode()) && !"REVIEW".equals(s.getMode())) {
         var miniStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), "MINI")
             .orElseThrow(() -> new IllegalStateException("MINI 단계를 찾을 수 없습니다."));
         studySession = miniStep.getStudySession();
@@ -355,7 +441,7 @@ public class LearningSessionService {
 
     // 세션의 mode(String) 기준으로 다음 단계 탐색 및 활성화
     // 오답이 없으면 REVIEW_WRONG 단계를 건너뛰고 SUMMARY로 이동
-    String next = findNextStep(steps, s.getMode(), current);
+    String next = findNextStep(steps, s.getMode(), current, s);
     
     if (next != null) {
       var nextStep = steps.stream()
@@ -390,8 +476,18 @@ public class LearningSessionService {
   /**
    * Review 모드에서 단계별 완료 조건 검증이 필요한지 확인
    */
-  private boolean requiresCompletionCheckForReview(String stepCode) {
-    return "MCQ".equals(stepCode);  // Review 모드에서는 MCQ만 검증 필요
+  private boolean requiresCompletionCheckForReview(String stepCode, LearningSession session) {
+    // 필기 Review 모드: MCQ만 검증
+    // 실기 Review 모드: PRACTICAL만 검증
+    // 실기 Review 모드인지 확인 (PRACTICAL 단계가 있으면 실기 Review)
+    boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "PRACTICAL")
+        .isPresent();
+    
+    if (isPracticalReview) {
+      return "PRACTICAL".equals(stepCode);
+    } else {
+      return "MCQ".equals(stepCode);
+    }
   }
 
   /**
@@ -452,6 +548,38 @@ public class LearningSessionService {
   }
 
   /**
+   * Review 모드에서 단계별 완료 조건 검증
+   */
+  private void validateStepCompletionForReview(LearningStep step, LearningSession session) {
+    com.OhRyue.certpilot.study.domain.StudySession studySession = step.getStudySession();
+    
+    if (studySession == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다.");
+    }
+
+    var items = sessionManager.items(studySession.getId());
+    if (items.isEmpty()) {
+      throw new IllegalStateException("세션에 할당된 문제가 없습니다.");
+    }
+
+    // Review 모드에서는:
+    // - 필기 Review: MCQ 단계는 별도 StudySession이므로 모든 아이템
+    // - 실기 Review: PRACTICAL 단계는 별도 StudySession이므로 모든 아이템
+    List<com.OhRyue.certpilot.study.domain.StudySessionItem> stepItems = items;
+
+    // 모든 문제에 답변이 있는지 확인
+    long answeredCount = stepItems.stream()
+        .filter(item -> item.getUserAnswerJson() != null && !item.getUserAnswerJson().isBlank())
+        .count();
+
+    if (answeredCount < stepItems.size()) {
+      throw new IllegalStateException(
+          String.format("%s 단계의 모든 문제를 풀어야 합니다. (완료: %d/%d)", 
+              step.getStepCode(), answeredCount, stepItems.size()));
+    }
+  }
+
+  /**
    * 단계에 StudySession이 연결되어 있는지 확인
    */
   private boolean hasStudySession(LearningStep step) {
@@ -463,15 +591,34 @@ public class LearningSessionService {
   /**
    * Review 모드에서 단계에 StudySession이 연결되어 있는지 확인
    */
-  private boolean hasStudySessionForReview(LearningStep step) {
-    return "MCQ".equals(step.getStepCode());  // Review 모드에서는 MCQ만 StudySession 사용
+  private boolean hasStudySessionForReview(LearningStep step, LearningSession session) {
+    // 필기 Review 모드: MCQ만 StudySession 사용
+    // 실기 Review 모드: PRACTICAL만 StudySession 사용
+    // 실기 Review 모드인지 확인 (PRACTICAL 단계가 있으면 실기 Review)
+    boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "PRACTICAL")
+        .isPresent();
+    
+    if (isPracticalReview) {
+      return "PRACTICAL".equals(step.getStepCode());
+    } else {
+      return "MCQ".equals(step.getStepCode());
+    }
   }
 
   /**
    * 다음 단계 찾기 (오답이 없으면 REVIEW_WRONG 건너뛰기)
    */
-  private String findNextStep(List<LearningStep> steps, String mode, LearningStep currentStep) {
-    List<String> stepOrder = orderOf(mode);
+  private String findNextStep(List<LearningStep> steps, String mode, LearningStep currentStep, LearningSession session) {
+    // Review 모드인 경우 실기 Review인지 필기 Review인지 확인
+    List<String> stepOrder;
+    if ("REVIEW".equals(mode)) {
+      // 실기 Review 모드인지 확인 (PRACTICAL 단계가 있으면 실기 Review)
+      boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "PRACTICAL")
+          .isPresent();
+      stepOrder = isPracticalReview ? ORDER_REVIEW_PRACTICAL : ORDER_REVIEW_WRITTEN;
+    } else {
+      stepOrder = orderOf(mode);
+    }
     
     // 현재 단계의 오답 목록 확인
     // REVIEW_WRONG 단계를 완료할 때는 이전 단계(MCQ 또는 PRACTICAL)의 오답을 확인해야 함
@@ -681,7 +828,8 @@ public class LearningSessionService {
     }
 
     // 단계 초기화 및 문제 사전 할당 (REVIEW 모드: MCQ -> REVIEW_WRONG -> SUMMARY)
-    for (String stepCode : ORDER_REVIEW) {
+    // 필기 Review 모드용 (기본값)
+    for (String stepCode : ORDER_REVIEW_WRITTEN) {
       LearningStep step = stepRepo.save(LearningStep.builder()
           .learningSession(session)
           .stepCode(stepCode)

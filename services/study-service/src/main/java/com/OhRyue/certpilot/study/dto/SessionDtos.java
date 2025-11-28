@@ -8,8 +8,9 @@ public class SessionDtos {
   @Schema(description = "세션 시작/재개 요청")
   public record StartReq(
       Long topicId,
-      String mode,   // WRITTEN | PRACTICAL
-      Boolean resume // true면 최근 세션 재개
+      String mode,   // WRITTEN | PRACTICAL | REVIEW
+      Boolean resume, // true면 최근 세션 재개
+      String examMode // REVIEW 모드일 때 필수: WRITTEN | PRACTICAL (실기 Review는 PRACTICAL)
   ) {}
 
   @Schema(description = "세션 시작/재개 응답")

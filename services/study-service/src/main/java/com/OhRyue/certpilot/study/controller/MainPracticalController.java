@@ -77,11 +77,12 @@ public class MainPracticalController {
   }
 
   /* -------- 리뷰 -------- */
-  @Operation(summary = "실기 리뷰 세트(20문)", description = "루트 토픽의 모든 하위 토픽에서 선발")
+  @Operation(summary = "실기 리뷰 세트(10문)", description = "루트 토픽의 모든 하위 토픽에서 선발 (SHORT 6 + LONG 4)")
   @GetMapping("/review/{rootTopicId}")
-  public FlowDtos.StepEnvelope<PracticalSet> review(@PathVariable Long rootTopicId) {
-    String userId = AuthUserUtil.getCurrentUserId();
-    return practical.practicalReviewSet(rootTopicId);
+  public FlowDtos.StepEnvelope<PracticalSet> review(
+      @PathVariable Long rootTopicId,
+      @RequestParam Long sessionId) {
+    return practical.practicalReviewSet(rootTopicId, sessionId);
   }
 
   @Operation(summary = "실기 리뷰 제출/채점")
@@ -89,6 +90,14 @@ public class MainPracticalController {
   public FlowDtos.StepEnvelope<PracticalReviewSubmitResp> reviewSubmit(
       @RequestBody @Valid PracticalReviewSubmitReq req) {
     return practical.practicalReviewSubmit(req);
+  }
+
+  @Operation(summary = "실기 리뷰 단건 즉시 채점")
+  @PostMapping("/review/grade-one")
+  public PracticalReviewGradeOneResp gradeOnePracticalReview(
+      @RequestParam Long sessionId,
+      @RequestBody @Valid PracticalReviewGradeOneReq req) {
+    return practical.gradeOnePracticalReview(sessionId, req);
   }
 
   /* -------- 요약/즉시 채점 -------- */

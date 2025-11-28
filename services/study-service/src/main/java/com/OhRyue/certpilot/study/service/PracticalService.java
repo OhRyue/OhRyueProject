@@ -710,94 +710,80 @@ public class PracticalService {
   /* ========================= 실기 리뷰 (Review) ========================= */
 
   @Transactional
-  public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalReviewSet(Long rootTopicId) {
+  public FlowDtos.StepEnvelope<PracticalDtos.PracticalSet> practicalReviewSet(Long rootTopicId, Long learningSessionId) {
     String userId = AuthUserUtil.getCurrentUserId();
 
-    StudySession session = sessionManager.ensureReviewSession(
-        userId, rootTopicId, ExamMode.PRACTICAL, REVIEW_SIZE);
-
-    // 세션에 할당된 문제 조회
-    List<StudySessionItem> sessionItems = sessionManager.items(session.getId());
-    List<Long> questionIds;
-
-    if (sessionItems.isEmpty()) {
-      // 할당된 문제가 없으면 새로 할당
-      // rootTopicId 포함 + 모든 하위 토픽 id
-      Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
-      if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
-
-      // SHORT 6 + LONG 4 = 총 10문제
-      List<Question> shortQuestions = questionRepository.pickRandomByTopicIn(
-          topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 6));
-      List<Question> longQuestions = questionRepository.pickRandomByTopicIn(
-          topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 4));
-
-      List<Question> questions = Stream.concat(shortQuestions.stream(), longQuestions.stream())
-          .distinct()
-          .toList();
-
-      if (questions.isEmpty()) {
-        throw new IllegalStateException("문제가 부족합니다. rootTopicId: " + rootTopicId);
-      }
-
-      // 문제 할당
-      questionIds = questions.stream().map(Question::getId).toList();
-      for (int i = 0; i < questionIds.size(); i++) {
-        Long questionId = questionIds.get(i);
-        // 새로 생성 (답변은 아직 없음)
-        studySessionItemRepository.save(StudySessionItem.builder()
-            .sessionId(session.getId())
-            .questionId(questionId)
-            .orderNo(i + 1)
-            .userAnswerJson(null)
-            .correct(null)
-            .score(null)
-            .createdAt(Instant.now())
-            .build());
-      }
-    } else {
-      // 이미 할당된 문제 사용
-      questionIds = sessionItems.stream()
-          .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
-          .map(StudySessionItem::getQuestionId)
-          .toList();
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+    if (!learningSession.getTopicId().equals(rootTopicId)) {
+      throw new IllegalStateException("토픽이 일치하지 않습니다.");
+    }
+    if (!"REVIEW".equals(learningSession.getMode())) {
+      throw new IllegalStateException("Review 모드가 아닙니다.");
     }
 
-    // 문제 상세 정보 조회
+    // 2. PRACTICAL 단계 조회
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    StudySession studySession = practicalStep.getStudySession();
+    
+    if (studySession == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다. 세션을 먼저 시작해주세요.");
+    }
+
+    // 3. 세션에 할당된 문제 조회 (랜덤이 아님!)
+    List<StudySessionItem> items = sessionManager.items(studySession.getId());
+    List<Long> questionIds = items.stream()
+        .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
+        .map(StudySessionItem::getQuestionId)
+        .toList();
+
+    if (questionIds.isEmpty()) {
+      throw new IllegalStateException("세션에 할당된 문제가 없습니다.");
+    }
+
+    // 4. 문제 상세 정보 조회
     Map<Long, Question> questionMap = questionRepository.findByIdIn(questionIds).stream()
         .filter(q -> q.getMode() == ExamMode.PRACTICAL)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 순서대로 문제 반환
-    List<PracticalDtos.PracticalQuestion> items = (sessionItems.isEmpty() ?
-        questionIds.stream().map(questionMap::get).filter(Objects::nonNull).toList() :
-        sessionItems.stream()
-            .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
-            .map(item -> questionMap.get(item.getQuestionId()))
-            .filter(Objects::nonNull)
-            .toList())
-        .stream()
-        .map(q -> new PracticalDtos.PracticalQuestion(
-            q.getId(),
-            q.getType().name(),
-            Optional.ofNullable(q.getStem()).orElse(""),
-            q.getImageUrl()))
+    // 5. 순서대로 문제 반환
+    List<PracticalDtos.PracticalQuestion> practicalQuestions = items.stream()
+        .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
+        .map(item -> {
+          Question q = questionMap.get(item.getQuestionId());
+          if (q == null) {
+            throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
+          }
+          return new PracticalDtos.PracticalQuestion(
+              q.getId(),
+              q.getType().name(),
+              Optional.ofNullable(q.getStem()).orElse(""),
+              q.getImageUrl());
+        })
         .toList();
 
-    Map<String, Object> reviewMeta = sessionManager.loadStepMeta(session, "review");
-    boolean completed = Boolean.TRUE.equals(reviewMeta.get("completed"));
-    String status = completed ? "COMPLETE" : "IN_PROGRESS";
-    String next = completed ? "PRACTICAL_REVIEW_SUMMARY" : null;
+    // 6. 단계 상태 확인
+    String status = practicalStep.getStatus();
+    boolean completed = "COMPLETE".equals(status);
+    
+    // 상태 변경은 advance API를 통해 수행되어야 함
+    // 단계가 READY 상태이면 IN_PROGRESS로 표시만 함 (실제 변경은 advance에서)
+    if ("READY".equals(status)) {
+      status = "IN_PROGRESS";
+    }
 
     return new FlowDtos.StepEnvelope<>(
-        session.getId(),
+        studySession.getId(),
         "REVIEW",
         "PRACTICAL_REVIEW_SET",
-        status,
-        next,
-        sessionManager.loadMeta(session),
-        new PracticalDtos.PracticalSet(items),
-        null  // REVIEW는 LearningSession을 사용하지 않음
+        completed ? "COMPLETE" : "IN_PROGRESS",
+        completed ? "REVIEW_WRONG" : null,
+        sessionManager.loadMeta(studySession),
+        new PracticalDtos.PracticalSet(practicalQuestions),
+        learningSession.getId()
     );
   }
 
@@ -807,8 +793,25 @@ public class PracticalService {
 
     String userId = AuthUserUtil.getCurrentUserId();
 
-    StudySession session = sessionManager.ensureReviewSession(
-        userId, req.rootTopicId(), ExamMode.PRACTICAL, REVIEW_SIZE);
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(req.learningSessionId());
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+    if (!learningSession.getTopicId().equals(req.rootTopicId())) {
+      throw new IllegalStateException("토픽이 일치하지 않습니다.");
+    }
+    if (!"REVIEW".equals(learningSession.getMode())) {
+      throw new IllegalStateException("Review 모드가 아닙니다.");
+    }
+    
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    
+    // 2. StudySession 조회 (이미 할당되어 있어야 함)
+    StudySession session = practicalStep.getStudySession();
+    if (session == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다.");
+    }
 
     // 세션에 할당된 문제인지 검증
     List<StudySessionItem> sessionItems = sessionManager.items(session.getId());
@@ -899,63 +902,73 @@ public class PracticalService {
       updateProgress(userId, question.getTopicId(), correct);
     }
 
-    int total = items.size();
-    boolean allPassedNow = total > 0 && wrongIds.isEmpty();
+    boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
+    int scorePct = items.isEmpty() ? 0 : (correctCount * 100) / items.size();
+    boolean practicalCompleted = allCorrect;  // 모든 문제를 맞춰야 완료
 
-    // 이전 메타 불러와서 everCompleted 유지
-    Map<String, Object> prevReviewMeta = sessionManager.loadStepMeta(session, "review");
-    boolean everCompleted = Boolean.TRUE.equals(prevReviewMeta.get("completed"));
-    boolean finalCompleted = everCompleted || allPassedNow;
+    // 3. LearningStep (PRACTICAL) 업데이트 (이전 메타데이터 불러와서 누적)
+    Map<String, Object> prevPracticalMeta = parseJson(practicalStep.getMetadataJson());
+    Map<String, Object> practicalMeta = new HashMap<>(prevPracticalMeta);
+    
+    // 누적 로직
+    int prevTotal = readInt(prevPracticalMeta, "total");
+    int prevCorrect = readInt(prevPracticalMeta, "correct");
+    @SuppressWarnings("unchecked")
+    List<Long> prevWrongIds = prevPracticalMeta.get("wrongQuestionIds") instanceof List<?>
+        ? (List<Long>) prevPracticalMeta.get("wrongQuestionIds")
+        : new ArrayList<>();
+    
+    int newTotal = prevTotal + req.answers().size();
+    int newCorrect = prevCorrect + correctCount;
+    List<Long> allWrongIds = new ArrayList<>(prevWrongIds);
+    allWrongIds.addAll(wrongIds);
+    boolean prevCompleted = Boolean.TRUE.equals(prevPracticalMeta.get("completed"));
+    boolean finalCompleted = prevCompleted || practicalCompleted;
+    int accumulatedScorePct = newTotal > 0 ? (newCorrect * 100) / newTotal : 0;
+    
+    practicalMeta.put("total", newTotal);
+    practicalMeta.put("correct", newCorrect);
+    practicalMeta.put("completed", finalCompleted);
+    practicalMeta.put("scorePct", accumulatedScorePct);
+    practicalMeta.put("wrongQuestionIds", allWrongIds);
+    practicalMeta.put("lastSubmittedAt", Instant.now().toString());
+    
+    String metadataJson = toJson(practicalMeta);
 
-    Map<String, Object> reviewMeta = new HashMap<>(prevReviewMeta);
-    reviewMeta.put("total", total);
-    reviewMeta.put("correct", correctCount);
-    reviewMeta.put("completed", finalCompleted);
-    reviewMeta.put("wrongQuestionIds", wrongIds);
-    reviewMeta.put("lastSubmittedAt", Instant.now().toString());
-    sessionManager.saveStepMeta(session, "review", reviewMeta);
-
-    // 세션 상태: 한 번 COMPLETE 되면 다시 OPEN 으로 돌리지 않음
-    // 실기는 맞으면 passed
-    int scorePct = total == 0 ? 0 : (correctCount * 100) / total;  // 정확도 퍼센트 (하위 호환성)
-    if (!everCompleted && allPassedNow) {
-      sessionManager.closeSession(session, scorePct, true, Map.of("correct", correctCount));
-    } else if (!everCompleted) {
-      sessionManager.updateStatus(session, "OPEN");
+    // 4. 진정한 완료 설정 (PRACTICAL 완료 시)
+    if (finalCompleted && learningSession.getTrulyCompleted() == null) {
+      learningSession.setTrulyCompleted(true);
+      learningSessionService.saveLearningSession(learningSession);
     }
-    // everCompleted == true 인 경우는 상태 유지
 
-    // Review 세트 완주 시 Flow XP hook (PRACTICAL / REVIEW / rootTopicId)
-    // passed=true일 때만 XP 지급, 세션당 1회만
-    if (finalCompleted && allPassedNow && !Boolean.TRUE.equals(session.getXpGranted())) {
-      try {
-        progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-            userId,
-            ExamMode.PRACTICAL.name(),
-            "REVIEW",
-            req.rootTopicId()
-        ));
-        // XP 지급 성공 시 xpGranted 표시
-        sessionManager.markXpGranted(session);
-      } catch (Exception ignored) {
-        // XP hook 실패는 학습 흐름을 막지 않음
-      }
-    }
+    // 5. StudySession의 summaryJson에도 저장 (하위 호환성)
+    sessionManager.saveStepMeta(session, "practical", practicalMeta);
+
+    // 6. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
+    // PRACTICAL 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
+    practicalStep.setMetadataJson(metadataJson);
+    practicalStep.setScorePct(accumulatedScorePct);
+    practicalStep.setUpdatedAt(Instant.now());
+    learningStepRepository.save(practicalStep);
+
+    // 상태는 메타데이터 기반으로 판단 (실제 상태 변경은 advance에서)
+    String status = newTotal >= REVIEW_SIZE ? "COMPLETE" : "IN_PROGRESS";
+    String nextStep = newTotal >= REVIEW_SIZE ? "REVIEW_WRONG" : null;
 
     return new FlowDtos.StepEnvelope<>(
         session.getId(),
         "REVIEW",
         "PRACTICAL_REVIEW_SET",
-        finalCompleted ? "COMPLETE" : "IN_PROGRESS",
-        finalCompleted ? "PRACTICAL_REVIEW_SUMMARY" : "PRACTICAL_REVIEW_SET",
+        status,
+        nextStep,
         sessionManager.loadMeta(session),
         new PracticalDtos.PracticalReviewSubmitResp(
-            total,
-            correctCount,
+            newTotal,
+            newCorrect,
             items,
-            wrongIds
+            allWrongIds
         ),
-        null  // REVIEW는 LearningSession을 사용하지 않음
+        learningSession.getId()
     );
   }
 
@@ -1110,6 +1123,134 @@ public class PracticalService {
         item.baseExplanation(),
         item.aiExplanation(),
         result.aiFailed()
+    );
+  }
+
+  @Transactional
+  public PracticalDtos.PracticalReviewGradeOneResp gradeOnePracticalReview(Long learningSessionId, PracticalDtos.PracticalReviewGradeOneReq req) {
+    String userId = AuthUserUtil.getCurrentUserId();
+
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+    if (!learningSession.getTopicId().equals(req.rootTopicId())) {
+      throw new IllegalStateException("토픽이 일치하지 않습니다.");
+    }
+    if (!"REVIEW".equals(learningSession.getMode())) {
+      throw new IllegalStateException("Review 모드가 아닙니다.");
+    }
+    
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    
+    // 2. StudySession 조회 (이미 할당되어 있어야 함)
+    StudySession session = practicalStep.getStudySession();
+    if (session == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다.");
+    }
+    
+    // 3. 세션에 할당된 문제인지 검증
+    List<StudySessionItem> sessionItems = sessionManager.items(session.getId());
+    Set<Long> allocatedQuestionIds = sessionItems.stream()
+        .map(StudySessionItem::getQuestionId)
+        .collect(Collectors.toSet());
+    
+    if (!allocatedQuestionIds.contains(req.questionId())) {
+      throw new IllegalStateException("세션에 할당되지 않은 문제입니다: " + req.questionId());
+    }
+    
+    // 4. 문제 조회 및 AI 채점
+    Question question = questionRepository.findById(req.questionId())
+        .filter(q -> q.getMode() == ExamMode.PRACTICAL)
+        .orElseThrow(() -> new NoSuchElementException("Question not found: " + req.questionId()));
+
+    AIExplanationService.PracticalResult result = aiExplanationService.explainAndScorePractical(
+        question, req.userText());
+    boolean isCorrect = Optional.ofNullable(result.correct()).orElse(false);
+    String explanation = Optional.ofNullable(question.getSolutionText()).orElse("");
+
+    // 5. 세션에 아이템 저장 (순서는 세션에 할당된 순서 사용)
+    Map<Long, Integer> questionOrderMap = sessionItems.stream()
+        .collect(Collectors.toMap(StudySessionItem::getQuestionId, StudySessionItem::getOrderNo));
+    int orderNo = questionOrderMap.get(question.getId());
+    
+    Map<String, Object> answerJson = new HashMap<>();
+    answerJson.put("answer", Optional.ofNullable(req.userText()).orElse(""));
+    answerJson.put("correct", isCorrect);
+    answerJson.put("tips", result.tips());
+
+    StudySessionItem item = sessionManager.upsertItem(
+        session,
+        question.getId(),
+        orderNo,
+        toJson(answerJson),
+        isCorrect,
+        isCorrect ? 100 : 0,
+        toJson(Map.of("explain", result.explain(), "tips", result.tips()))
+    );
+
+    persistUserAnswer(userId, question, req.userText(), isCorrect, isCorrect ? 100 : 0, session, item, "PRACTICAL_REVIEW");
+    pushProgressHook(userId, question.getType(), isCorrect, isCorrect ? 100 : 0, question.getId());
+    updateProgress(userId, question.getTopicId(), isCorrect);
+
+    // 6. LearningStep 메타데이터 업데이트 (누적)
+    Map<String, Object> prevPracticalMeta = parseJson(practicalStep.getMetadataJson());
+    Map<String, Object> practicalMeta = new HashMap<>(prevPracticalMeta);
+    
+    int prevTotal = readInt(prevPracticalMeta, "total");
+    int prevCorrect = readInt(prevPracticalMeta, "correct");
+    @SuppressWarnings("unchecked")
+    List<Long> prevWrongIds = prevPracticalMeta.get("wrongQuestionIds") instanceof List<?>
+        ? (List<Long>) prevPracticalMeta.get("wrongQuestionIds")
+        : new ArrayList<>();
+    
+    int newTotal = prevTotal + 1;
+    int newCorrect = prevCorrect + (isCorrect ? 1 : 0);
+    List<Long> allWrongIds = new ArrayList<>(prevWrongIds);
+    if (!isCorrect) {
+      allWrongIds.add(question.getId());
+    }
+    boolean allCorrect = newCorrect == newTotal;
+    boolean prevCompleted = Boolean.TRUE.equals(prevPracticalMeta.get("completed"));
+    boolean finalCompleted = prevCompleted || allCorrect;
+    int accumulatedScorePct = newTotal > 0 ? (newCorrect * 100) / newTotal : 0;
+    
+    practicalMeta.put("total", newTotal);
+    practicalMeta.put("correct", newCorrect);
+    practicalMeta.put("completed", finalCompleted);
+    practicalMeta.put("scorePct", accumulatedScorePct);
+    practicalMeta.put("wrongQuestionIds", allWrongIds);
+    practicalMeta.put("lastSubmittedAt", Instant.now().toString());
+    
+    String metadataJson = toJson(practicalMeta);
+
+    // 7. 진정한 완료 설정 (PRACTICAL 완료 시)
+    if (finalCompleted && learningSession.getTrulyCompleted() == null) {
+      learningSession.setTrulyCompleted(true);
+      learningSessionService.saveLearningSession(learningSession);
+    }
+
+    // 8. StudySession의 summaryJson에도 저장 (하위 호환성)
+    sessionManager.saveStepMeta(session, "practical", practicalMeta);
+
+    // 9. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
+    // PRACTICAL 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
+    practicalStep.setMetadataJson(metadataJson);
+    practicalStep.setScorePct(accumulatedScorePct);
+    practicalStep.setUpdatedAt(Instant.now());
+    learningStepRepository.save(practicalStep);
+
+    // 실기 Review 모드는 AI 해설을 제공함 (일반 실기 모드와 동일)
+    String aiExplanation = Optional.ofNullable(result.explain()).orElse("");
+    Boolean aiExplanationFailed = Optional.ofNullable(result.aiFailed()).orElse(false);
+    
+    return new PracticalDtos.PracticalReviewGradeOneResp(
+        isCorrect,
+        Optional.ofNullable(question.getAnswerKey()).orElse(""),
+        explanation,
+        aiExplanation,
+        aiExplanationFailed
     );
   }
 
