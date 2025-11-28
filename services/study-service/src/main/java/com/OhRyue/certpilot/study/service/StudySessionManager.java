@@ -1,19 +1,27 @@
 package com.OhRyue.certpilot.study.service;
 
+import com.OhRyue.certpilot.study.domain.LearningStep;
+import com.OhRyue.certpilot.study.domain.Question;
 import com.OhRyue.certpilot.study.domain.StudySession;
 import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
+import com.OhRyue.certpilot.study.domain.enums.QuestionType;
+import com.OhRyue.certpilot.study.repository.LearningStepRepository;
+import com.OhRyue.certpilot.study.repository.QuestionRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.NoSuchElementException;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -21,11 +29,48 @@ public class StudySessionManager {
 
     private final StudySessionRepository sessionRepository;
     private final StudySessionItemRepository itemRepository;
+    private final QuestionRepository questionRepository;
+    private final LearningStepRepository learningStepRepository;
     private final ObjectMapper objectMapper;
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     /* ===================== 세션 생성/보장 (쓰기) ===================== */
+
+    /**
+     * LearningStep에 연결된 StudySession 조회 또는 생성
+     */
+    @Transactional
+    public StudySession ensureStudySessionForStep(LearningStep learningStep, 
+                                                   String userId, 
+                                                   Long topicId, 
+                                                   ExamMode examMode, 
+                                                   int expectedCount) {
+        // 이미 연결된 StudySession이 있으면 반환
+        if (learningStep.getStudySession() != null) {
+            return learningStep.getStudySession();
+        }
+
+        // 새 StudySession 생성
+        String scopeJson = stringify(Map.of("topicId", topicId));
+        StudySession session = StudySession.builder()
+                .userId(userId)
+                .mode("MICRO")  // MINI, MCQ 단계는 MICRO 모드
+                .examMode(examMode)
+                .topicScopeJson(scopeJson)
+                .questionCount(expectedCount)
+                .status("OPEN")
+                .startedAt(Instant.now())
+                .learningStep(learningStep)
+                .build();
+
+        session = sessionRepository.save(session);
+        
+        // LearningStep에 연결 (양방향 관계 설정)
+        learningStep.setStudySession(session);
+        
+        return session;
+    }
 
     @Transactional
     public StudySession ensureMicroSession(String userId, Long topicId, ExamMode examMode, int expectedCount) {
@@ -80,6 +125,135 @@ public class StudySessionManager {
                                                  String mode) {
         String scopeJson = stringify(scope);
         return sessionRepository.findFirstByUserIdAndTopicScopeJsonAndModeOrderByStartedAtDesc(userId, scopeJson, mode);
+    }
+
+    /* ===================== 세션 문제 할당 (쓰기) ===================== */
+
+    /**
+     * 세션에 문제 사전 할당 (세션 시작 시점에 호출)
+     * @param session StudySession
+     * @param questionIds 할당할 문제 ID 목록
+     */
+    @Transactional
+    public void allocateQuestions(StudySession session, List<Long> questionIds) {
+        // 이미 할당된 문제가 있으면 스킵
+        List<StudySessionItem> existingItems = itemRepository.findBySessionIdOrderByOrderNoAsc(session.getId());
+        if (!existingItems.isEmpty()) {
+            return; // 이미 할당됨
+        }
+
+        // 문제 할당
+        for (int i = 0; i < questionIds.size(); i++) {
+            Long questionId = questionIds.get(i);
+            itemRepository.save(StudySessionItem.builder()
+                    .sessionId(session.getId())
+                    .questionId(questionId)
+                    .orderNo(i + 1)
+                    .userAnswerJson(null)  // 아직 답변 안함
+                    .correct(null)
+                    .score(null)
+                    .createdAt(Instant.now())
+                    .build());
+        }
+    }
+
+    /**
+     * LearningStep에 연결된 StudySession 생성 및 문제 할당
+     */
+    @Transactional
+    public StudySession createAndAllocateSessionForStep(
+            LearningStep learningStep,
+            String userId,
+            Long topicId,
+            ExamMode examMode,
+            QuestionType questionType,
+            int questionCount) {
+        // 이미 연결된 StudySession이 있으면 반환
+        if (learningStep.getStudySession() != null) {
+            return learningStep.getStudySession();
+        }
+
+        // 문제 랜덤 선택 (세션 시작 시점에 고정)
+        List<Question> questions = questionRepository.pickRandomByTopic(
+                topicId, examMode, questionType, PageRequest.of(0, questionCount));
+
+        if (questions.isEmpty()) {
+            throw new IllegalStateException("문제가 부족합니다. topicId: " + topicId + ", type: " + questionType);
+        }
+
+        // StudySession 생성
+        String scopeJson = stringify(Map.of("topicId", topicId));
+        StudySession session = StudySession.builder()
+                .userId(userId)
+                .mode("MICRO")  // MINI, MCQ 단계는 MICRO 모드
+                .examMode(examMode)
+                .topicScopeJson(scopeJson)
+                .questionCount(questionCount)
+                .status("OPEN")
+                .startedAt(Instant.now())
+                .learningStep(learningStep)
+                .build();
+
+        session = sessionRepository.save(session);
+
+        // LearningStep에 연결
+        learningStep.setStudySession(session);
+
+        // 문제 할당
+        List<Long> questionIds = questions.stream().map(Question::getId).toList();
+        allocateQuestions(session, questionIds);
+
+        return session;
+    }
+
+    /**
+     * Review 모드용: LearningStep에 연결된 StudySession 생성 및 문제 할당 (rootTopicId 기반)
+     */
+    @Transactional
+    public StudySession createAndAllocateSessionForReviewStep(
+            LearningStep learningStep,
+            String userId,
+            Long rootTopicId,
+            ExamMode examMode,
+            QuestionType questionType,
+            int questionCount,
+            Set<Long> topicIds) {
+        // 이미 연결된 StudySession이 있으면 반환
+        if (learningStep.getStudySession() != null) {
+            return learningStep.getStudySession();
+        }
+
+        // 여러 토픽에서 문제 랜덤 선택 (세션 시작 시점에 고정)
+        List<Question> questions = questionRepository.pickRandomByTopicIn(
+                topicIds, examMode, questionType, PageRequest.of(0, questionCount));
+
+        if (questions.isEmpty()) {
+            throw new IllegalStateException("문제가 부족합니다. rootTopicId: " + rootTopicId + ", type: " + questionType);
+        }
+
+        // StudySession 생성
+        String scopeJson = stringify(Map.of("rootTopicId", rootTopicId));
+        StudySession session = StudySession.builder()
+                .userId(userId)
+                .mode("REVIEW")  // Review 모드
+                .examMode(examMode)
+                .topicScopeJson(scopeJson)
+                .questionCount(questionCount)
+                .status("OPEN")
+                .startedAt(Instant.now())
+                .learningStep(learningStep)
+                .build();
+
+        session = sessionRepository.save(session);
+
+        // LearningStep에 연결
+        learningStep.setStudySession(session);
+
+        // 문제 할당
+        List<Long> questionIds = questions.stream().map(Question::getId).toList();
+        allocateQuestions(session, questionIds);
+
+        return session;
     }
 
     /* ===================== 세션 Item upsert (쓰기) ===================== */
@@ -203,6 +377,28 @@ public class StudySessionManager {
     public void updateStatus(StudySession session, String status) {
         session.setStatus(status);
         sessionRepository.save(session);
+    }
+
+    /**
+     * LearningSession의 모든 StudySession을 CLOSED 처리
+     * "처음부터 하기" 시 기존 IN_PROGRESS 세션의 모든 StudySession을 종료하기 위해 사용
+     */
+    @Transactional
+    public void closeAllSessionsForLearningSession(com.OhRyue.certpilot.study.domain.LearningSession learningSession) {
+        // LearningSession의 모든 LearningStep을 조회
+        List<com.OhRyue.certpilot.study.domain.LearningStep> steps = learningStepRepository.findByLearningSessionIdOrderByIdAsc(learningSession.getId());
+        
+        // 각 LearningStep에 연결된 StudySession을 CLOSED 처리
+        for (com.OhRyue.certpilot.study.domain.LearningStep step : steps) {
+            com.OhRyue.certpilot.study.domain.StudySession studySession = step.getStudySession();
+            if (studySession != null && !"CLOSED".equals(studySession.getStatus())) {
+                studySession.setStatus("CLOSED");
+                if (studySession.getFinishedAt() == null) {
+                    studySession.setFinishedAt(Instant.now());
+                }
+                sessionRepository.save(studySession);
+            }
+        }
     }
 
     public StudySession getSession(Long sessionId) {

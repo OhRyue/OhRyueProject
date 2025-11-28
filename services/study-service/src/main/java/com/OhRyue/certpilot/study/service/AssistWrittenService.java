@@ -147,7 +147,8 @@ public class AssistWrittenService {
           "COMPLETE",
           null,
           fetchStats(userId, "WRITTEN"),
-          new AssistDtos.WrittenSubmitResp(0, 0, List.of())
+          new AssistDtos.WrittenSubmitResp(0, 0, List.of()),
+          null  // ASSIST는 LearningSession을 사용하지 않음
       );
     }
 
@@ -283,7 +284,8 @@ public class AssistWrittenService {
         "COMPLETE",
         null,
         fetchStats(userId, "WRITTEN"),
-        payload
+        payload,
+        null  // ASSIST는 LearningSession을 사용하지 않음
     );
   }
 
@@ -359,7 +361,8 @@ public class AssistWrittenService {
         "IN_PROGRESS",
         null,
         meta,
-        payload
+        payload,
+        null  // ASSIST는 LearningSession을 사용하지 않음
     );
   }
 

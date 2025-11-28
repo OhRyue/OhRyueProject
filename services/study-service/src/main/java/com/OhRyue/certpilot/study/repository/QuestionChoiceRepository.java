@@ -17,4 +17,7 @@ public interface QuestionChoiceRepository extends JpaRepository<QuestionChoice, 
 
     // 정답 보기 1개 찾기
     Optional<QuestionChoice> findFirstByQuestionIdAndCorrectTrue(Long questionId);
+
+    // 여러 문제의 선택지 일괄 조회
+    List<QuestionChoice> findByQuestionIdIn(List<Long> questionIds);
 }

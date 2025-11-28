@@ -40,8 +40,10 @@ public interface AiClient {
   ) {}
 
   record GradeResponse(
-      Integer score,
-      String explain,
+      Boolean correct,  // 맞음(true) / 틀림(false)
+      String explain,  // 하위 호환성을 위한 조합된 해설
+      String explainCorrect,  // 정답 및 채점 기준이 왜 맞는지 (최대 150자)
+      String explainUser,  // 사용자의 답안이 왜 맞거나 틀렸는지 (최대 150자)
       List<String> tips
   ) {}
 

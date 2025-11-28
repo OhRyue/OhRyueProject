@@ -66,6 +66,10 @@ public class StudySession {
   @Column(name = "xp_granted")
   private Boolean xpGranted; // XP가 이미 반영되었는지
 
+  @OneToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "learning_step_id")
+  private LearningStep learningStep; // 어떤 학습 단계의 문제 풀이 세션인지
+
   @PrePersist
   void onCreate() {
     if (startedAt == null) startedAt = Instant.now();

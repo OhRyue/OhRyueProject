@@ -1,23 +1,16 @@
 package com.OhRyue.certpilot.study.service;
 
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
-import org.springframework.stereotype.Service;
-
 import com.OhRyue.certpilot.study.domain.Question;
 import com.OhRyue.certpilot.study.domain.QuestionChoice;
 import com.OhRyue.certpilot.study.repository.QuestionChoiceRepository;
 import com.OhRyue.certpilot.study.service.llm.AiClient;
-
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -109,20 +102,26 @@ public class AIExplanationService {
 
     AiClient.GradeResponse response = aiClient.grade(request);
     if (response == null) {
-      int score = heuristicScore(question, userAnswerText);
-      return new PracticalResult(score, FALLBACK_GRADE_MSG, List.of());
+      boolean correct = heuristicGrade(question, userAnswerText);
+      return new PracticalResult(correct, FALLBACK_GRADE_MSG, "", "", List.of(), true);
     }
 
-    int score = Optional.ofNullable(response.score()).orElse(heuristicScore(question, userAnswerText));
+    boolean correct = Optional.ofNullable(response.correct()).orElse(heuristicGrade(question, userAnswerText));
     String explain = Optional.ofNullable(response.explain()).filter(s -> !s.isBlank()).orElse(FALLBACK_GRADE_MSG);
+    String explainCorrect = Optional.ofNullable(response.explainCorrect()).filter(s -> !s.isBlank()).orElse("");
+    String explainUser = Optional.ofNullable(response.explainUser()).filter(s -> !s.isBlank()).orElse("");
     List<String> tips = Optional.ofNullable(response.tips()).orElse(List.of());
+    
+    // AI 해설 실패 여부 판단: explain이 FALLBACK_GRADE_MSG이거나, explainCorrect와 explainUser가 모두 비어있으면 실패로 간주
+    boolean aiFailed = explain.equals(FALLBACK_GRADE_MSG) || 
+                       (explainCorrect.isBlank() && explainUser.isBlank());
 
-    return new PracticalResult(clamp(score), explain, tips);
+    return new PracticalResult(correct, explain, explainCorrect, explainUser, tips, aiFailed);
   }
 
   private PracticalResult fallbackGradePractical(Question question, String userAnswerText, Throwable throwable) {
-    int score = heuristicScore(question, userAnswerText);
-    return new PracticalResult(score, FALLBACK_GRADE_MSG, List.of());
+    boolean correct = heuristicGrade(question, userAnswerText);
+    return new PracticalResult(correct, FALLBACK_GRADE_MSG, "", "", List.of(), true);
   }
 
   /* ===================== 필기 요약 ===================== */
@@ -155,10 +154,11 @@ public class AIExplanationService {
   /* ===================== 실기 요약 ===================== */
   @Retry(name = CB, fallbackMethod = "fallbackPracticalSummary")
   @CircuitBreaker(name = CB, fallbackMethod = "fallbackPracticalSummary")
-  public String summarizePractical(String topicName, int total, int avgScore, List<String> mistakes) {
+  public String summarizePractical(String topicName, int total, int correct, List<String> mistakes) {
+    double acc = total == 0 ? 0.0 : (correct * 100.0) / total;
     AiClient.SummaryRequest request = new AiClient.SummaryRequest(
         topicName,
-        Map.of("total", total, "avgScore", avgScore),
+        Map.of("total", total, "correct", correct, "accPct", String.format(Locale.ROOT, "%.1f", acc)),
         List.of(),
         mistakes,
         Map.of("mode", "PRACTICAL")
@@ -166,7 +166,7 @@ public class AIExplanationService {
 
     AiClient.SummaryResponse response = aiClient.summary(request);
     if (response == null) {
-      return defaultPracticalSummary(total, avgScore);
+      return defaultPracticalSummary(total, correct);
     }
     String oneLiner = Optional.ofNullable(response.oneLiner()).orElse("");
     List<String> bullets = Optional.ofNullable(response.bullets()).orElse(List.of());
@@ -174,8 +174,8 @@ public class AIExplanationService {
     return assembleSummary(oneLiner, bullets, nextReco);
   }
 
-  private String fallbackPracticalSummary(String topicName, int total, int avgScore, List<String> mistakes, Throwable throwable) {
-    return defaultPracticalSummary(total, avgScore);
+  private String fallbackPracticalSummary(String topicName, int total, int correct, List<String> mistakes, Throwable throwable) {
+    return defaultPracticalSummary(total, correct);
   }
 
   /* ===================== 유틸 ===================== */
@@ -206,27 +206,46 @@ public class AIExplanationService {
         String.format(Locale.ROOT, "%.1f", acc) + "% 입니다. 오답 태그를 중심으로 복습을 이어가세요.";
   }
 
-  private static String defaultPracticalSummary(int total, int avgScore) {
-    return "실기 학습을 마쳤습니다. 총 " + total + "문제를 풀어 평균 " + avgScore + "점을 기록했습니다. " +
-        "핵심 키워드를 정리하고 재서술 훈련을 반복해보세요.";
+  private static String defaultPracticalSummary(int total, int correct) {
+    double acc = total == 0 ? 0.0 : (correct * 100.0) / total;
+    return "실기 학습을 마쳤습니다. 총 " + total + "문제 중 " + correct + "문제를 맞혀 정확도 " +
+        String.format(Locale.ROOT, "%.1f", acc) + "% 입니다. 핵심 키워드를 정리하고 재서술 훈련을 반복해보세요.";
   }
 
-  private static int heuristicScore(Question question, String userText) {
+  /**
+   * AI 장애 시 실기 문제 Fallback 채점
+   * 실기 서술형은 solution_text의 답안을 단어로 잘라 사용자의 답안과 비교
+   * - 키워드 3개 이상 겹침: 맞음 (true)
+   * - 키워드 1~2개 겹침: 틀림 (false)
+   * - 키워드 0개 겹침: 틀림 (false)
+   */
+  private static boolean heuristicGrade(Question question, String userText) {
     String reference = Optional.ofNullable(question.getSolutionText()).orElse("").toLowerCase(Locale.ROOT);
     String answer = Optional.ofNullable(userText).orElse("").toLowerCase(Locale.ROOT);
-    if (reference.isBlank() || answer.isBlank()) return 0;
-    String[] tokens = Arrays.stream(reference.split("[^a-zA-Z0-9가-힣]+"))
+    if (reference.isBlank() || answer.isBlank()) return false;
+
+    // solution_text를 단어로 분리 (한글, 영문, 숫자만, 최소 2자 이상)
+    Set<String> referenceKeywords = Arrays.stream(reference.split("[^a-zA-Z0-9가-힣]+"))
         .filter(s -> s.length() >= 2)
-        .limit(6)
-        .toArray(String[]::new);
-    if (tokens.length == 0) return 0;
-    long matches = Arrays.stream(tokens).filter(answer::contains).count();
-    return clamp((int) Math.round(matches * 100.0 / tokens.length));
+        .collect(Collectors.toSet());
+
+    if (referenceKeywords.isEmpty()) return false;
+
+    // 사용자 답안에서 매칭되는 키워드 개수 계산
+    long matchCount = referenceKeywords.stream()
+        .filter(answer::contains)
+        .count();
+
+    // 키워드 매칭 개수에 따른 판정: 3개 이상이면 맞음
+    return matchCount >= 3;
   }
 
-  private static int clamp(int value) {
-    return Math.max(0, Math.min(100, value));
-  }
-
-  public record PracticalResult(int score, String explain, List<String> tips) {}
+  public record PracticalResult(
+      boolean correct,
+      String explain,  // 하위 호환성을 위한 조합된 해설
+      String explainCorrect,  // 정답 및 채점 기준이 왜 맞는지
+      String explainUser,  // 사용자의 답안이 왜 맞거나 틀렸는지
+      List<String> tips,
+      boolean aiFailed  // AI 해설 생성 실패 여부
+  ) {}
 }

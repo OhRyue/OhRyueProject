@@ -40,7 +40,7 @@ public class PracticalDtos {
   @Schema(description = "실기 제출 결과 아이템")
   public record PracticalSubmitItem(
       Long questionId,       // 문제 ID
-      Integer score,         // 0~100 (AI 채점)
+      Boolean correct,       // 맞음(true) / 틀림(false) (AI 채점)
       String baseExplanation,// DB 기본 해설
       String aiExplanation   // LLM 맞춤 해설
   ) {}
@@ -49,21 +49,22 @@ public class PracticalDtos {
   @Schema(description = "실기 제출 응답")
   public record PracticalSubmitResp(
       int total,                          // 채점된 문항 수
-      int avgScore,                       // 평균 점수
+      int correct,                        // 맞은 문제 수
       List<PracticalSubmitItem> items,    // 결과 아이템 목록
-      List<Long> wrongQuestionIds         // 방금 세트의 오답 문제 ID들(score<60)
+      List<Long> wrongQuestionIds         // 방금 세트의 오답 문제 ID들 (correct=false)
   ) {}
 
   @Schema(description = "실기 리뷰 제출 요청")
   public record PracticalReviewSubmitReq(
       Long rootTopicId,
+      Long learningSessionId,
       List<PracticalAnswer> answers
   ) {}
 
   @Schema(description = "실기 리뷰 제출 응답")
   public record PracticalReviewSubmitResp(
       int total,
-      int avgScore,
+      int correct,
       List<PracticalSubmitItem> items,
       List<Long> wrongQuestionIds
   ) {}
@@ -81,8 +82,30 @@ public class PracticalDtos {
   // 실기 즉시 채점 응답
   @Schema(description = "실기 단건 즉시 채점 응답")
   public record PracticalGradeOneResp(
-      Integer score,         // 0~100 (AI 채점)
-      String baseExplanation,// DB 기본 해설
-      String aiExplanation   // LLM 맞춤 해설
+      Boolean correct,           // 맞음(true) / 틀림(false) (AI 채점)
+      String answerKey,          // 문제의 정답 (question.answer_key)
+      String baseExplanation,    // DB 기본 해설
+      String aiExplanation,      // LLM 맞춤 해설
+      Boolean aiExplanationFailed // AI 해설 생성 실패 여부 (true=실패, false=성공)
+  ) {}
+
+  /* ---------- Review 모드 즉시 채점 ---------- */
+
+  // 실기 Review 모드 즉시 채점 요청
+  @Schema(description = "실기 Review 모드 단건 즉시 채점 요청")
+  public record PracticalReviewGradeOneReq(
+      Long rootTopicId,   // 루트 토픽 ID
+      Long questionId,    // 문제 ID
+      String userText     // 사용자의 주관식 답변
+  ) {}
+
+  // 실기 Review 모드 즉시 채점 응답
+  @Schema(description = "실기 Review 모드 단건 즉시 채점 응답")
+  public record PracticalReviewGradeOneResp(
+      Boolean correct,           // 맞음(true) / 틀림(false) (AI 채점)
+      String answerKey,          // 문제의 정답 (question.answer_key)
+      String baseExplanation,    // DB 기본 해설
+      String aiExplanation,      // LLM 맞춤 해설
+      Boolean aiExplanationFailed // AI 해설 생성 실패 여부 (true=실패, false=성공)
   ) {}
 }

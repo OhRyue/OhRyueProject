@@ -151,8 +151,8 @@ public class WrittenDtos {
       int miniTotal,     // 미니체크 총 풀이 수
       int miniCorrect,   // 미니체크 정답 수
       boolean miniPassed,// 미니체크 전부 정답 여부
-      int mcqTotal,      // MCQ 총 풀이 수
-      int mcqCorrect,    // MCQ 정답 수
+      int mcqTotal,      // MCQ 총 풀이 수 (필기) 또는 실기 주관식 총 풀이 수 (실기)
+      int mcqCorrect,    // MCQ 정답 수 (필기) 또는 실기 주관식 통과 수 (실기)
       String aiSummary,  // AI 학습 요약(폴백 포함)
       boolean completed  // 완료 여부(최소 시도)
   ) {}
@@ -170,8 +170,9 @@ public class WrittenDtos {
   // OX 단건 즉시 채점 응답
   @Schema(name = "MiniGradeOneResp")
   public record MiniGradeOneResp(
-      boolean correct,  // 정오
-      String explanation// DB 기본 해설
+      boolean correct,        // 정오
+      String explanation,     // DB 기본 해설
+      Long learningSessionId // LearningSession ID (오답 조회용)
   ) {}
 
   /* ===================== 즉시 채점 - MCQ ===================== */
@@ -191,5 +192,24 @@ public class WrittenDtos {
       String correctLabel, // 정답 라벨
       String explanation,  // DB 기본 해설
       String aiExplanation // 오답 시 AI 해설
+  ) {}
+
+  /* ===================== 문제 상세 조회 ===================== */
+
+  // 필기 문제 상세 조회 응답
+  @Schema(name = "QuestionDetailResp")
+  public record QuestionDetailResp(
+      Long questionId,        // 문제 ID
+      String type,            // 문제 타입 (OX, MCQ)
+      String stem,            // 문제 본문
+      List<McqChoice> choices,// 선택지 (MCQ만, OX는 빈 배열)
+      String correctAnswer,   // 정답 (OX: "O"/"X", MCQ: "A"/"B"/"C"/"D")
+      String explanation      // 해설 (DB 기본 해설)
+  ) {}
+
+  // 여러 필기 문제 상세 조회 응답
+  @Schema(name = "QuestionDetailListResp")
+  public record QuestionDetailListResp(
+      List<QuestionDetailResp> questions  // 문제 상세 정보 목록
   ) {}
 }

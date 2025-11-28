@@ -96,14 +96,14 @@ public class AssistDtos {
   @Schema(description = "보조학습(실기) 제출 응답")
   public record PracticalSubmitResp(
       @Schema(description = "채점된 문항 수") int total,
-      @Schema(description = "평균 점수") int avgScore,
+      @Schema(description = "맞은 문제 수") int correct,
       @Schema(description = "결과 아이템 목록") List<PracticalResultItem> items
   ) {}
 
   @Schema(description = "보조학습(실기) 제출 결과 1개")
   public record PracticalResultItem(
       @Schema(description = "문항 ID") Long questionId,
-      @Schema(description = "점수(0~100)") Integer score,
+      @Schema(description = "맞음(true) / 틀림(false)") Boolean correct,
       @Schema(description = "DB 기본 해설") String baseExplanation,
       @Schema(description = "AI 해설") String aiExplanation
   ) {}

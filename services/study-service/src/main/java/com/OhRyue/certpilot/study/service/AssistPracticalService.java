@@ -152,7 +152,8 @@ public class AssistPracticalService {
           "COMPLETE",
           null,
           fetchStats(userId),
-          new AssistDtos.PracticalSubmitResp(0, 0, List.of())
+          new AssistDtos.PracticalSubmitResp(0, 0, List.of()),
+          null  // ASSIST는 LearningSession을 사용하지 않음
       );
     }
 
@@ -166,7 +167,7 @@ public class AssistPracticalService {
         .collect(java.util.stream.Collectors.toMap(Question::getId, q -> q));
 
     List<AssistDtos.PracticalResultItem> items = new ArrayList<>();
-    int totalScore = 0;
+    int correctCount = 0;
     int graded = 0;
 
     for (AssistDtos.PracticalAnswer ans : req.answers()) {
@@ -178,8 +179,10 @@ public class AssistPracticalService {
       AIExplanationService.PracticalResult result =
           aiExplanationService.explainAndScorePractical(q, ans.userText());
 
-      int score = Optional.ofNullable(result.score()).orElse(0);
-      totalScore += score;
+      boolean correct = Optional.ofNullable(result.correct()).orElse(false);
+      if (correct) {
+        correctCount++;
+      }
       graded++;
 
       String baseExplain = Optional.ofNullable(q.getSolutionText()).orElse("");
@@ -187,17 +190,16 @@ public class AssistPracticalService {
 
       items.add(new AssistDtos.PracticalResultItem(
           q.getId(),
-          score,
+          correct,
           baseExplain,
           aiExplain
       ));
     }
 
     int total = graded;
-    int avgScore = (total == 0 ? 0 : (int) Math.round(totalScore * 1.0 / total));
 
     AssistDtos.PracticalSubmitResp payload =
-        new AssistDtos.PracticalSubmitResp(total, avgScore, items);
+        new AssistDtos.PracticalSubmitResp(total, correctCount, items);
 
     return new FlowDtos.StepEnvelope<>(
         null,
@@ -206,7 +208,8 @@ public class AssistPracticalService {
         "COMPLETE",
         null,
         fetchStats(userId),
-        payload
+        payload,
+        null  // ASSIST는 LearningSession을 사용하지 않음
     );
   }
 
@@ -260,7 +263,8 @@ public class AssistPracticalService {
         "IN_PROGRESS",
         null,
         meta,
-        payload
+        payload,
+        null  // ASSIST는 LearningSession을 사용하지 않음
     );
   }
 

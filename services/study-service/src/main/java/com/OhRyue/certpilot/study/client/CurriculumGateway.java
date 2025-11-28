@@ -21,10 +21,18 @@ public class CurriculumGateway {
         CertCurriculumClient.TopicResponse topic = certCurriculumClient.getTopic(topicId);
         CertCurriculumClient.ConceptResponse concept = certCurriculumClient.getConcept(topicId);
 
+        // null 체크: cert-service가 null을 반환할 수 있음
+        if (topic == null) {
+            throw new RuntimeException("Topic 정보를 찾을 수 없습니다. topicId=" + topicId);
+        }
+        if (concept == null) {
+            throw new RuntimeException("Concept 정보를 찾을 수 없습니다. topicId=" + topicId);
+        }
+
         return new CurriculumConcept(
                 topicId,
-                topic.title(),
-                concept.sectionsJson()
+                topic.title() != null ? topic.title() : "",
+                concept.sectionsJson() != null ? concept.sectionsJson() : "{}"
         );
     }
 
