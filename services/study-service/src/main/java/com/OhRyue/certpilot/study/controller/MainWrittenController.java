@@ -109,19 +109,28 @@ public class MainWrittenController {
   }
 
   /* ========= 필기학습: 리뷰(총정리) ========= */
-  @Operation(summary = "필기 리뷰 세트(20문) - 루트 토픽 기준 하위 토픽 전체")
+  @Operation(summary = "필기 리뷰 세트(10문) - 루트 토픽 기준 하위 토픽 전체")
   @GetMapping("/review/{rootTopicId}")
   public FlowDtos.StepEnvelope<com.OhRyue.certpilot.study.dto.ReviewDtos.ReviewSet> review(
-      @PathVariable Long rootTopicId) {
-    String userId = AuthUserUtil.getCurrentUserId();
-    return written.reviewSet(rootTopicId);
+      @PathVariable Long rootTopicId,
+      @RequestParam Long sessionId) {
+    return written.reviewSet(rootTopicId, sessionId);
   }
 
   @Operation(summary = "필기 리뷰 제출(= 객관식 제출과 동일)")
   @PostMapping("/review/submit")
-  public FlowDtos.StepEnvelope<McqSubmitResp> reviewSubmit(@RequestParam Long rootTopicId,
-                                                           @RequestBody @Valid McqSubmitReq req) {
-    return written.reviewSubmitWritten(req, rootTopicId);
+  public FlowDtos.StepEnvelope<McqSubmitResp> reviewSubmit(
+      @RequestParam Long sessionId,
+      @RequestBody @Valid McqSubmitReq req) {
+    return written.reviewSubmitWritten(sessionId, req);
+  }
+
+  @Operation(summary = "필기 리뷰 요약", description = "Review 모드의 학습 결과를 요약하여 반환합니다. MCQ 결과를 바탕으로 완료 여부 및 AI 요약을 제공합니다.")
+  @GetMapping("/review/summary")
+  public FlowDtos.StepEnvelope<SummaryResp> reviewSummary(
+      @RequestParam Long rootTopicId,
+      @RequestParam Long sessionId) {
+    return written.reviewSummary(rootTopicId, sessionId);
   }
 
   /* ========= 필기학습: 문제 상세 조회 ========= */

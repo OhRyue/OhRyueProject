@@ -538,64 +538,124 @@ public class WrittenService {
   /* ========================= 리뷰 ========================= */
 
   @Transactional
-  public FlowDtos.StepEnvelope<ReviewDtos.ReviewSet> reviewSet(Long rootTopicId) {
+  public FlowDtos.StepEnvelope<ReviewDtos.ReviewSet> reviewSet(Long rootTopicId, Long learningSessionId) {
     String userId = AuthUserUtil.getCurrentUserId();
 
-    Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
-    if (topicIds.isEmpty()) topicIds = Set.of(rootTopicId);
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+    if (!learningSession.getTopicId().equals(rootTopicId)) {
+      throw new IllegalStateException("토픽이 일치하지 않습니다.");
+    }
+    if (!"REVIEW".equals(learningSession.getMode())) {
+      throw new IllegalStateException("Review 모드가 아닙니다.");
+    }
 
-    List<Question> questions = questionRepository.pickRandomByTopicIn(
-        topicIds, ExamMode.WRITTEN, QuestionType.MCQ, PageRequest.of(0, REVIEW_SIZE));
+    // 2. MCQ 단계 조회
+    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+    StudySession studySession = mcqStep.getStudySession();
+    
+    if (studySession == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다. 세션을 먼저 시작해주세요.");
+    }
 
-    List<ReviewDtos.ReviewQuestion> items = questions.stream()
-        .map(q -> new ReviewDtos.ReviewQuestion(
-            q.getId(),
-            Optional.ofNullable(q.getStem()).orElse(""),
-            loadReviewChoices(q.getId()),
-            q.getImageUrl()
-        )).toList();
+    // 3. 세션에 할당된 문제 조회 (랜덤이 아님!)
+    List<StudySessionItem> items = sessionManager.items(studySession.getId());
+    List<Long> questionIds = items.stream()
+        .map(StudySessionItem::getQuestionId)
+        .toList();
 
-    StudySession session = sessionManager.ensureReviewSession(
-        userId, rootTopicId, ExamMode.WRITTEN, REVIEW_SIZE);
-    Map<String, Object> reviewMeta = sessionManager.loadStepMeta(session, "review");
-    boolean completed = Boolean.TRUE.equals(reviewMeta.get("completed"));
+    if (questionIds.isEmpty()) {
+      throw new IllegalStateException("세션에 할당된 문제가 없습니다.");
+    }
 
-    String status = completed ? "COMPLETE" : "IN_PROGRESS";
-    String nextStep = completed ? "REVIEW_SUMMARY" : null;
+    // 4. 문제 상세 정보 조회
+    Map<Long, Question> questionMap = questionRepository.findByIdIn(questionIds).stream()
+        .collect(Collectors.toMap(Question::getId, q -> q));
+
+    // 5. 순서대로 문제 반환
+    List<ReviewDtos.ReviewQuestion> questions = items.stream()
+        .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
+        .map(item -> {
+          Question q = questionMap.get(item.getQuestionId());
+          if (q == null) {
+            throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
+          }
+          return new ReviewDtos.ReviewQuestion(
+              q.getId(),
+              Optional.ofNullable(q.getStem()).orElse(""),
+              loadReviewChoices(q.getId()),
+              q.getImageUrl()
+          );
+        })
+        .toList();
+
+    // 6. 단계 상태 확인
+    String status = mcqStep.getStatus();
+    boolean completed = "COMPLETE".equals(status);
+    
+    // 상태 변경은 advance API를 통해 수행되어야 함
+    // 단계가 READY 상태이면 IN_PROGRESS로 표시만 함 (실제 변경은 advance에서)
+    if ("READY".equals(status)) {
+      status = "IN_PROGRESS";
+    }
 
     return new FlowDtos.StepEnvelope<>(
-        session.getId(),
+        studySession.getId(),
         "REVIEW",
-        "REVIEW_SET",
-        status,
-        nextStep,
-        sessionManager.loadMeta(session),
-        new ReviewDtos.ReviewSet(items),
-        null  // REVIEW는 LearningSession을 사용하지 않음
+        "REVIEW_MCQ",
+        completed ? "COMPLETE" : "IN_PROGRESS",
+        completed ? "REVIEW_WRONG" : null,
+        sessionManager.loadMeta(studySession),
+        new ReviewDtos.ReviewSet(questions),
+        learningSession.getId()
     );
   }
 
   @Transactional
-  public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> reviewSubmitWritten(WrittenDtos.McqSubmitReq req,
-                                                                              Long rootTopicId) {
+  public FlowDtos.StepEnvelope<WrittenDtos.McqSubmitResp> reviewSubmitWritten(Long learningSessionId, WrittenDtos.McqSubmitReq req) {
     String userId = AuthUserUtil.getCurrentUserId();
 
-    Set<Long> rawIds = topicTreeService.descendantsOf(rootTopicId);
-    Set<Long> topicIds = new HashSet<>(rawIds);
-    if (topicIds.isEmpty()) {
-      topicIds.add(rootTopicId);
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
     }
-    final Set<Long> targetTopicIds = Set.copyOf(topicIds);
+    if (!learningSession.getTopicId().equals(req.topicId())) {
+      throw new IllegalStateException("토픽이 일치하지 않습니다.");
+    }
+    if (!"REVIEW".equals(learningSession.getMode())) {
+      throw new IllegalStateException("Review 모드가 아닙니다.");
+    }
+    
+    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+    
+    // 2. StudySession 조회 (이미 할당되어 있어야 함)
+    StudySession session = mcqStep.getStudySession();
+    if (session == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다.");
+    }
+    
+    // 3. 세션에 할당된 문제인지 검증
+    List<StudySessionItem> sessionItems = sessionManager.items(session.getId());
+    Set<Long> allocatedQuestionIds = sessionItems.stream()
+        .map(StudySessionItem::getQuestionId)
+        .collect(Collectors.toSet());
+    
+    for (WrittenDtos.McqAnswer answer : req.answers()) {
+      if (!allocatedQuestionIds.contains(answer.questionId())) {
+        throw new IllegalStateException("세션에 할당되지 않은 문제입니다: " + answer.questionId());
+      }
+    }
 
-    Map<Long, Question> questionMap = questionRepository.findByIdIn(
-            req.answers().stream().map(WrittenDtos.McqAnswer::questionId).toList())
-        .stream()
-        .filter(q -> q.getMode() == ExamMode.WRITTEN && targetTopicIds.contains(q.getTopicId()))
-        .collect(Collectors.toMap(Question::getId, q -> q));
+    Map<Long, Question> questionMap = fetchQuestions(req.answers().stream()
+        .map(WrittenDtos.McqAnswer::questionId).toList(), QuestionType.MCQ);
 
-    StudySession session = sessionManager.ensureReviewSession(
-        userId, rootTopicId, ExamMode.WRITTEN, REVIEW_SIZE);
-    int baseOrder = sessionManager.items(session.getId()).size();
+    // 순서는 세션에 할당된 순서 사용
+    Map<Long, Integer> questionOrderMap = sessionItems.stream()
+        .collect(Collectors.toMap(StudySessionItem::getQuestionId, StudySessionItem::getOrderNo));
 
     int correctCount = 0;
     List<WrittenDtos.McqSubmitItem> items = new ArrayList<>();
@@ -604,7 +664,7 @@ public class WrittenService {
     for (int idx = 0; idx < req.answers().size(); idx++) {
       WrittenDtos.McqAnswer answer = req.answers().get(idx);
       Question question = questionMap.get(answer.questionId());
-      if (question == null) continue;
+      if (question == null) throw new NoSuchElementException("Question not found: " + answer.questionId());
 
       String correctLabel = resolveCorrectChoice(question.getId());
       boolean isCorrect = Objects.equals(correctLabel, answer.label());
@@ -630,10 +690,11 @@ public class WrittenService {
       answerPayload.put("submittedAt", Instant.now().toString());
       if (!aiExplanation.isBlank()) answerPayload.put("aiExplain", aiExplanation);
 
+      int orderNo = questionOrderMap.get(question.getId());
       StudySessionItem item = sessionManager.upsertItem(
           session,
           question.getId(),
-          baseOrder + idx + 1,
+          orderNo,
           toJson(answerPayload),
           isCorrect,
           isCorrect ? 100 : 0,
@@ -646,52 +707,184 @@ public class WrittenService {
     }
 
     boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
+    int scorePct = items.isEmpty() ? 0 : (correctCount * 100) / items.size();
+    boolean mcqCompleted = allCorrect;  // 모든 문제를 맞춰야 완료
 
-    Map<String, Object> prevReviewMeta = sessionManager.loadStepMeta(session, "review");
-    boolean everCompleted = Boolean.TRUE.equals(prevReviewMeta.get("completed"));
-    boolean finalCompleted = everCompleted || allCorrect;
+    // 3. LearningStep (MCQ) 업데이트 (이전 메타데이터 불러와서 누적)
+    Map<String, Object> prevMcqMeta = parseJson(mcqStep.getMetadataJson());
+    Map<String, Object> mcqMeta = new HashMap<>(prevMcqMeta);
+    
+    // 누적 로직
+    int prevTotal = readInt(prevMcqMeta, "total");
+    int prevCorrect = readInt(prevMcqMeta, "correct");
+    @SuppressWarnings("unchecked")
+    List<Long> prevWrongIds = prevMcqMeta.get("wrongQuestionIds") instanceof List<?>
+        ? (List<Long>) prevMcqMeta.get("wrongQuestionIds")
+        : new ArrayList<>();
+    
+    int newTotal = prevTotal + req.answers().size();
+    int newCorrect = prevCorrect + correctCount;
+    List<Long> allWrongIds = new ArrayList<>(prevWrongIds);
+    allWrongIds.addAll(wrongIds);
+    boolean prevCompleted = Boolean.TRUE.equals(prevMcqMeta.get("completed"));
+    boolean finalCompleted = prevCompleted || mcqCompleted;
+    int accumulatedScorePct = newTotal > 0 ? (newCorrect * 100) / newTotal : 0;
+    
+    mcqMeta.put("total", newTotal);
+    mcqMeta.put("correct", newCorrect);
+    mcqMeta.put("completed", finalCompleted);
+    mcqMeta.put("scorePct", accumulatedScorePct);
+    mcqMeta.put("wrongQuestionIds", allWrongIds);
+    mcqMeta.put("lastSubmittedAt", Instant.now().toString());
+    
+    String metadataJson = toJson(mcqMeta);
 
-    Map<String, Object> reviewMeta = new HashMap<>(prevReviewMeta);
-    reviewMeta.put("total", req.answers().size());
-    reviewMeta.put("correct", correctCount);
-    reviewMeta.put("completed", finalCompleted);
-    reviewMeta.put("wrongQuestionIds", wrongIds);
-    reviewMeta.put("lastSubmittedAt", Instant.now().toString());
-    sessionManager.saveStepMeta(session, "review", reviewMeta);
-
-    if (!everCompleted && allCorrect) {
-      double scorePct = req.answers().isEmpty() ? 0.0 : (correctCount * 100.0) / req.answers().size();
-      sessionManager.closeSession(session, scorePct, true, Map.of("reviewScorePct", scorePct));
-    } else if (!everCompleted) {
-      sessionManager.updateStatus(session, "OPEN");
+    // 4. 진정한 완료 설정 (MCQ 완료 시)
+    if (finalCompleted && learningSession.getTrulyCompleted() == null) {
+      learningSession.setTrulyCompleted(true);
+      learningSessionService.saveLearningSession(learningSession);
     }
 
-    if (finalCompleted && allCorrect && !Boolean.TRUE.equals(session.getXpGranted())) {
-      try {
-        progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-            userId,
-            ExamMode.WRITTEN.name(),
-            "REVIEW",
-            rootTopicId
-        ));
-        sessionManager.markXpGranted(session);
-      } catch (Exception ignored) {
-      }
-    }
+    // 5. StudySession의 summaryJson에도 저장 (하위 호환성)
+    sessionManager.saveStepMeta(session, "mcq", mcqMeta);
+
+    // 6. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
+    // MCQ 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
+    mcqStep.setMetadataJson(metadataJson);
+    mcqStep.setScorePct(accumulatedScorePct);
+    mcqStep.setUpdatedAt(Instant.now());
+    learningStepRepository.save(mcqStep);
+
+    // 상태는 메타데이터 기반으로 판단 (실제 상태 변경은 advance에서)
+    String status = newTotal >= REVIEW_SIZE ? "COMPLETE" : "IN_PROGRESS";
+    String nextStep = newTotal >= REVIEW_SIZE ? "REVIEW_WRONG" : null;
 
     return new FlowDtos.StepEnvelope<>(
         session.getId(),
         "REVIEW",
-        "REVIEW_SET",
-        finalCompleted ? "COMPLETE" : "IN_PROGRESS",
-        finalCompleted ? "REVIEW_SUMMARY" : "REVIEW_SET",
+        "REVIEW_MCQ",
+        status,
+        nextStep,
         sessionManager.loadMeta(session),
         new WrittenDtos.McqSubmitResp(req.answers().size(), correctCount, items, wrongIds),
-        null  // REVIEW는 LearningSession을 사용하지 않음
+        learningSession.getId()
     );
   }
 
   /* ========================= 요약 ========================= */
+
+  @Transactional
+  public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> reviewSummary(Long rootTopicId, Long learningSessionId) {
+    String userId = AuthUserUtil.getCurrentUserId();
+
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+    if (!learningSession.getTopicId().equals(rootTopicId)) {
+      throw new IllegalStateException("토픽이 일치하지 않습니다.");
+    }
+    if (!"REVIEW".equals(learningSession.getMode())) {
+      throw new IllegalStateException("Review 모드가 아닙니다.");
+    }
+    
+    // 2. StudySession 조회 (MCQ 세션 사용)
+    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+    StudySession session = mcqStep.getStudySession();
+
+    // 3. LearningStep에서 메타데이터 추출
+    Map<String, Object> mcqMeta = parseJson(mcqStep.getMetadataJson());
+    
+    int mcqTotal = readInt(mcqMeta, "total");
+    int mcqCorrect = readInt(mcqMeta, "correct");
+    boolean mcqCompleted = Boolean.TRUE.equals(mcqMeta.get("completed"));
+    
+    // 4. 약점 태그 계산
+    List<String> weakTags = List.of();
+    Map<String, Object> meta = Map.of();
+    Long sessionId = null;
+    
+    if (session != null) {
+      sessionId = session.getId();
+      meta = sessionManager.loadMeta(session);
+
+      List<UserAnswer> sessionAnswers = userAnswerRepository.findByUserIdAndSessionId(userId, sessionId).stream()
+          .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
+          .toList();
+      Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
+      Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
+          .collect(Collectors.toMap(Question::getId, q -> q));
+      List<UserAnswer> answers = sessionAnswers.stream()
+          .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
+          .toList();
+      weakTags = computeWeakTags(answers, questionCache);
+    }
+
+    boolean completed = mcqCompleted;
+
+    String topicTitle = "";
+    try {
+      CurriculumGateway.CurriculumConcept curriculum = curriculumGateway.getConceptWithTopic(rootTopicId);
+      topicTitle = curriculum.topicTitle();
+    } catch (Exception ignored) {
+    }
+
+    String summaryText = aiExplanationService.summarizeWritten(
+        topicTitle,
+        mcqTotal,
+        mcqCorrect,
+        weakTags
+    );
+
+    WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
+        0,  // Review 모드에는 MINI 없음
+        0,
+        false,
+        mcqTotal,
+        mcqCorrect,
+        summaryText,
+        completed
+    );
+
+    String status = completed ? "COMPLETE" : "IN_PROGRESS";
+
+    // 진정한 완료(MCQ 완료)일 때만 XP 지급
+    boolean trulyCompleted = learningSession != null && Boolean.TRUE.equals(learningSession.getTrulyCompleted());
+    
+    if (trulyCompleted && sessionId != null && session != null) {
+      if (!Boolean.TRUE.equals(session.getXpGranted())) {
+        try {
+          progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+              userId,
+              ExamMode.WRITTEN.name(),
+              "REVIEW",
+              rootTopicId
+          ));
+          sessionManager.markXpGranted(session);
+          if (!Boolean.TRUE.equals(session.getCompleted())) {
+            double scorePct = mcqTotal == 0 ? 0.0 : (mcqCorrect * 100.0) / mcqTotal;
+            sessionManager.closeSession(session, scorePct, completed, Map.of());
+          }
+        } catch (Exception ignored) {
+        }
+      }
+    }
+
+    // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
+    // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
+    
+    return new FlowDtos.StepEnvelope<>(
+        sessionId,
+        "REVIEW",
+        "REVIEW_SUMMARY",
+        "COMPLETE",
+        null,
+        meta,
+        payload,
+        learningSession.getId()
+    );
+  }
 
   @Transactional
   public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> summary(Long topicId, Long learningSessionId) {
@@ -827,6 +1020,14 @@ public class WrittenService {
     // LearningSession 조회 및 소유자 확인
     LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
     
+    // 모드에 따라 적절한 단계 선택
+    String stepCode;
+    if ("REVIEW".equals(learningSession.getMode())) {
+      stepCode = "REVIEW_MCQ";
+    } else {
+      stepCode = "MICRO_MCQ";
+    }
+    
     // MCQ 단계의 LearningStep 조회
     LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
     
@@ -837,7 +1038,7 @@ public class WrittenService {
     }
     
     // 기존 wrongRecapBySession 로직 재사용
-    return wrongRecapBySession(session.getId(), "MICRO_MCQ");
+    return wrongRecapBySession(session.getId(), stepCode);
   }
 
   @Transactional(readOnly = true)
@@ -1130,7 +1331,10 @@ public class WrittenService {
         null  // AI 해설 없음
     );
 
-    persistUserAnswer(userId, question, req.label(), isCorrect, 100, session, item, "MICRO_MCQ");
+    // LearningSession 모드에 따라 source 결정
+    String source = "REVIEW".equals(learningSession.getMode()) ? "REVIEW_MCQ" : "MICRO_MCQ";
+    
+    persistUserAnswer(userId, question, req.label(), isCorrect, 100, session, item, source);
     pushProgressHook(userId, ExamMode.WRITTEN, QuestionType.MCQ, isCorrect, 100, question.getId());
     updateProgress(userId, question.getTopicId(), ExamMode.WRITTEN, isCorrect, 100);
 

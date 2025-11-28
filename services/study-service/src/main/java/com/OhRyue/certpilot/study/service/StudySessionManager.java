@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.*;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -185,6 +186,56 @@ public class StudySessionManager {
         StudySession session = StudySession.builder()
                 .userId(userId)
                 .mode("MICRO")  // MINI, MCQ 단계는 MICRO 모드
+                .examMode(examMode)
+                .topicScopeJson(scopeJson)
+                .questionCount(questionCount)
+                .status("OPEN")
+                .startedAt(Instant.now())
+                .learningStep(learningStep)
+                .build();
+
+        session = sessionRepository.save(session);
+
+        // LearningStep에 연결
+        learningStep.setStudySession(session);
+
+        // 문제 할당
+        List<Long> questionIds = questions.stream().map(Question::getId).toList();
+        allocateQuestions(session, questionIds);
+
+        return session;
+    }
+
+    /**
+     * Review 모드용: LearningStep에 연결된 StudySession 생성 및 문제 할당 (rootTopicId 기반)
+     */
+    @Transactional
+    public StudySession createAndAllocateSessionForReviewStep(
+            LearningStep learningStep,
+            String userId,
+            Long rootTopicId,
+            ExamMode examMode,
+            QuestionType questionType,
+            int questionCount,
+            Set<Long> topicIds) {
+        // 이미 연결된 StudySession이 있으면 반환
+        if (learningStep.getStudySession() != null) {
+            return learningStep.getStudySession();
+        }
+
+        // 여러 토픽에서 문제 랜덤 선택 (세션 시작 시점에 고정)
+        List<Question> questions = questionRepository.pickRandomByTopicIn(
+                topicIds, examMode, questionType, PageRequest.of(0, questionCount));
+
+        if (questions.isEmpty()) {
+            throw new IllegalStateException("문제가 부족합니다. rootTopicId: " + rootTopicId + ", type: " + questionType);
+        }
+
+        // StudySession 생성
+        String scopeJson = stringify(Map.of("rootTopicId", rootTopicId));
+        StudySession session = StudySession.builder()
+                .userId(userId)
+                .mode("REVIEW")  // Review 모드
                 .examMode(examMode)
                 .topicScopeJson(scopeJson)
                 .questionCount(questionCount)

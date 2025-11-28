@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +30,7 @@ public class LearningSessionService {
   private final LearningStepRepository stepRepo;
   private final StudySessionManager sessionManager;
   private final ObjectMapper objectMapper;
+  private final TopicTreeService topicTreeService;
 
   /** 필기(WRITTEN) 단계 순서 */
   private static final List<String> ORDER_WRITTEN = List.of(
@@ -38,6 +40,10 @@ public class LearningSessionService {
   private static final List<String> ORDER_PRACTICAL = List.of(
       "CONCEPT", "MINI", "PRACTICAL", "REVIEW_WRONG", "SUMMARY"
   );
+  /** 리뷰(REVIEW) 단계 순서 */
+  private static final List<String> ORDER_REVIEW = List.of(
+      "MCQ", "REVIEW_WRONG", "SUMMARY"
+  );
 
   /** 모드에 따른 단계 순서 (ExamMode 버전) */
   private List<String> orderOf(ExamMode mode) {
@@ -46,6 +52,10 @@ public class LearningSessionService {
 
   /** 모드에 따른 단계 순서 (String 버전 - 오버로드) */
   private List<String> orderOf(String modeStr) {
+    // REVIEW 모드는 특별 처리
+    if ("REVIEW".equalsIgnoreCase(modeStr)) {
+      return ORDER_REVIEW;
+    }
     return orderOf(parseMode(modeStr));
   }
 
@@ -108,35 +118,73 @@ public class LearningSessionService {
 
     ExamMode examMode = parseMode(modeStr);
     
-    // 요청 모드에 맞춰 단계 초기화 및 문제 사전 할당
-    for (String stepCode : orderOf(modeStr)) {
-      LearningStep step = stepRepo.save(LearningStep.builder()
-          .learningSession(s)
-          .stepCode(stepCode)
-          .status("READY")
-          .scorePct(null)
-          .metadataJson(null)
-          .createdAt(Instant.now())
-          .updatedAt(Instant.now())
-          .build());
-      
-      // MINI, MCQ 단계의 경우 문제 사전 할당
-      if ("MINI".equals(stepCode)) {
-        sessionManager.createAndAllocateSessionForStep(
-            step, userId, req.topicId(), examMode, QuestionType.OX, 4);
-      } else if ("MCQ".equals(stepCode)) {
-        sessionManager.createAndAllocateSessionForStep(
-            step, userId, req.topicId(), examMode, QuestionType.MCQ, 5);
+    // Review 모드일 경우 별도 처리
+    if ("REVIEW".equals(modeStr)) {
+      // Review 모드: 하위 토픽들 조회
+      Set<Long> topicIds = topicTreeService.descendantsOf(req.topicId());
+      if (topicIds.isEmpty()) {
+        topicIds = Set.of(req.topicId());
       }
-      // CONCEPT, REVIEW_WRONG, SUMMARY 등은 문제 할당 없음
-    }
-    
-    // CONCEPT 단계를 첫 단계로 설정
-    LearningStep conceptStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), "CONCEPT")
-        .orElse(null);
-    if (conceptStep != null) {
-      conceptStep.setStatus("IN_PROGRESS");
-      stepRepo.save(conceptStep);
+      
+      // 단계 초기화 및 문제 사전 할당 (REVIEW 모드: MCQ -> REVIEW_WRONG -> SUMMARY)
+      for (String stepCode : ORDER_REVIEW) {
+        LearningStep step = stepRepo.save(LearningStep.builder()
+            .learningSession(s)
+            .stepCode(stepCode)
+            .status("READY")
+            .scorePct(null)
+            .metadataJson(null)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .build());
+        
+        // MCQ 단계의 경우 문제 사전 할당 (rootTopicId와 하위 토픽들에서 선택)
+        if ("MCQ".equals(stepCode)) {
+          sessionManager.createAndAllocateSessionForReviewStep(
+              step, userId, req.topicId(), examMode, QuestionType.MCQ, 10, topicIds);
+        }
+        // REVIEW_WRONG, SUMMARY는 문제 할당 없음
+      }
+      
+      // MCQ 단계를 첫 단계로 설정 (REVIEW 모드는 CONCEPT 없음)
+      LearningStep mcqStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), "MCQ")
+          .orElse(null);
+      if (mcqStep != null) {
+        mcqStep.setStatus("IN_PROGRESS");
+        stepRepo.save(mcqStep);
+      }
+    } else {
+      // 일반 모드 (WRITTEN, PRACTICAL)
+      // 요청 모드에 맞춰 단계 초기화 및 문제 사전 할당
+      for (String stepCode : orderOf(modeStr)) {
+        LearningStep step = stepRepo.save(LearningStep.builder()
+            .learningSession(s)
+            .stepCode(stepCode)
+            .status("READY")
+            .scorePct(null)
+            .metadataJson(null)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .build());
+        
+        // MINI, MCQ 단계의 경우 문제 사전 할당
+        if ("MINI".equals(stepCode)) {
+          sessionManager.createAndAllocateSessionForStep(
+              step, userId, req.topicId(), examMode, QuestionType.OX, 4);
+        } else if ("MCQ".equals(stepCode)) {
+          sessionManager.createAndAllocateSessionForStep(
+              step, userId, req.topicId(), examMode, QuestionType.MCQ, 5);
+        }
+        // CONCEPT, REVIEW_WRONG, SUMMARY 등은 문제 할당 없음
+      }
+      
+      // CONCEPT 단계를 첫 단계로 설정
+      LearningStep conceptStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), "CONCEPT")
+          .orElse(null);
+      if (conceptStep != null) {
+        conceptStep.setStatus("IN_PROGRESS");
+        stepRepo.save(conceptStep);
+      }
     }
     
     return new StartResp(s.getId(), s.getStatus());
@@ -258,8 +306,15 @@ public class LearningSessionService {
     }
 
     // 단계별 완료 조건 검증 (문제가 있는 단계만)
-    if (requiresCompletionCheck(current.getStepCode())) {
-      validateStepCompletion(current, s);
+    // Review 모드와 일반 모드 구분
+    if ("REVIEW".equals(s.getMode())) {
+      if (requiresCompletionCheckForReview(current.getStepCode())) {
+        validateStepCompletion(current, s);
+      }
+    } else {
+      if (requiresCompletionCheck(current.getStepCode())) {
+        validateStepCompletion(current, s);
+      }
     }
 
     // 단계를 COMPLETE로 변경
@@ -270,7 +325,14 @@ public class LearningSessionService {
     stepRepo.save(current);
 
     // StudySession 종료 처리 (MINI, MCQ, PRACTICAL 단계 완료 시)
-    if (hasStudySession(current)) {
+    boolean shouldCloseSession;
+    if ("REVIEW".equals(s.getMode())) {
+      shouldCloseSession = hasStudySessionForReview(current);
+    } else {
+      shouldCloseSession = hasStudySession(current);
+    }
+    
+    if (shouldCloseSession) {
       com.OhRyue.certpilot.study.domain.StudySession studySession;
       
       // PRACTICAL 단계는 MINI 단계와 같은 StudySession을 공유하므로 MINI 단계에서 가져옴
@@ -326,6 +388,13 @@ public class LearningSessionService {
   }
 
   /**
+   * Review 모드에서 단계별 완료 조건 검증이 필요한지 확인
+   */
+  private boolean requiresCompletionCheckForReview(String stepCode) {
+    return "MCQ".equals(stepCode);  // Review 모드에서는 MCQ만 검증 필요
+  }
+
+  /**
    * 단계별 완료 조건 검증
    */
   private void validateStepCompletion(LearningStep step, LearningSession session) {
@@ -351,6 +420,7 @@ public class LearningSessionService {
 
     // MINI와 MCQ는 각각 별도의 StudySession을 가지므로 모든 아이템이 해당 단계의 문제
     // PRACTICAL은 MINI와 같은 StudySession을 공유하므로 orderNo > 4로 필터링
+    // Review 모드의 MCQ는 별도 StudySession이므로 모든 아이템
     List<com.OhRyue.certpilot.study.domain.StudySessionItem> stepItems;
     if ("MINI".equals(step.getStepCode())) {
       // MINI는 orderNo 1-4
@@ -358,7 +428,7 @@ public class LearningSessionService {
           .filter(item -> item.getOrderNo() <= 4)
           .toList();
     } else if ("MCQ".equals(step.getStepCode())) {
-      // MCQ는 별도 StudySession이므로 모든 아이템
+      // MCQ는 별도 StudySession이므로 모든 아이템 (일반 모드와 Review 모드 모두)
       stepItems = items;
     } else if ("PRACTICAL".equals(step.getStepCode())) {
       // PRACTICAL은 MINI와 같은 StudySession을 공유하므로 orderNo > 4
@@ -391,6 +461,13 @@ public class LearningSessionService {
   }
 
   /**
+   * Review 모드에서 단계에 StudySession이 연결되어 있는지 확인
+   */
+  private boolean hasStudySessionForReview(LearningStep step) {
+    return "MCQ".equals(step.getStepCode());  // Review 모드에서는 MCQ만 StudySession 사용
+  }
+
+  /**
    * 다음 단계 찾기 (오답이 없으면 REVIEW_WRONG 건너뛰기)
    */
   private String findNextStep(List<LearningStep> steps, String mode, LearningStep currentStep) {
@@ -401,7 +478,13 @@ public class LearningSessionService {
     boolean hasWrongAnswers;
     if ("REVIEW_WRONG".equals(currentStep.getStepCode())) {
       // REVIEW_WRONG 단계를 완료할 때는 이전 단계(MCQ 또는 PRACTICAL)의 오답을 확인
-      String previousStepCode = mode.equals("PRACTICAL") ? "PRACTICAL" : "MCQ";
+      String previousStepCode;
+      if ("REVIEW".equals(mode)) {
+        // Review 모드에서는 MCQ만 있음
+        previousStepCode = "MCQ";
+      } else {
+        previousStepCode = mode.equals("PRACTICAL") ? "PRACTICAL" : "MCQ";
+      }
       var previousStep = steps.stream()
           .filter(x -> x.getStepCode().equals(previousStepCode))
           .findFirst()
@@ -560,6 +643,70 @@ public class LearningSessionService {
   public void saveLearningSession(LearningSession session) {
     session.setUpdatedAt(Instant.now());
     sessionRepo.save(session);
+  }
+
+  /**
+   * Review 모드 학습 세션 조회 또는 생성
+   * - rootTopicId 기반으로 하위 토픽들을 포함하여 문제 선택
+   * - 단계 순서: MCQ -> REVIEW_WRONG -> SUMMARY
+   */
+  @Transactional
+  public LearningSession getOrCreateReviewLearningSession(String userId, Long rootTopicId, ExamMode examMode) {
+    String modeStr = "REVIEW";
+    
+    // IN_PROGRESS 상태인 세션만 재사용 (이어하기)
+    // Review 모드는 rootTopicId를 topicId에 저장
+    var existing = sessionRepo.findFirstByUserIdAndTopicIdAndModeOrderByIdDesc(userId, rootTopicId, modeStr)
+        .filter(s -> "IN_PROGRESS".equals(s.getStatus()));
+    
+    if (existing.isPresent()) {
+      return existing.get();
+    }
+    
+    // 없거나 DONE 상태면 새로 생성
+    var session = sessionRepo.save(LearningSession.builder()
+        .userId(userId)
+        .topicId(rootTopicId)  // Review 모드는 rootTopicId를 topicId에 저장
+        .mode(modeStr)
+        .status("IN_PROGRESS")
+        .trulyCompleted(null)  // 초기값 null (미완료)
+        .startedAt(Instant.now())
+        .updatedAt(Instant.now())
+        .build());
+
+    // 하위 토픽들 조회
+    Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
+    if (topicIds.isEmpty()) {
+      topicIds = Set.of(rootTopicId);
+    }
+
+    // 단계 초기화 및 문제 사전 할당 (REVIEW 모드: MCQ -> REVIEW_WRONG -> SUMMARY)
+    for (String stepCode : ORDER_REVIEW) {
+      LearningStep step = stepRepo.save(LearningStep.builder()
+          .learningSession(session)
+          .stepCode(stepCode)
+          .status("READY")
+          .createdAt(Instant.now())
+          .updatedAt(Instant.now())
+          .build());
+      
+      // MCQ 단계의 경우 문제 사전 할당 (rootTopicId와 하위 토픽들에서 선택)
+      if ("MCQ".equals(stepCode)) {
+        sessionManager.createAndAllocateSessionForReviewStep(
+            step, userId, rootTopicId, examMode, QuestionType.MCQ, 10, topicIds);
+      }
+      // REVIEW_WRONG, SUMMARY는 문제 할당 없음
+    }
+    
+    // MCQ 단계를 첫 단계로 설정 (REVIEW 모드는 CONCEPT 없음)
+    LearningStep mcqStep = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "MCQ")
+        .orElse(null);
+    if (mcqStep != null) {
+      mcqStep.setStatus("IN_PROGRESS");
+      stepRepo.save(mcqStep);
+    }
+    
+    return session;
   }
 }
 
