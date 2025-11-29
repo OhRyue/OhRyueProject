@@ -972,6 +972,121 @@ public class PracticalService {
     );
   }
 
+  @Transactional(readOnly = true)
+  public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> practicalReviewSummary(Long rootTopicId, Long learningSessionId) {
+    String userId = AuthUserUtil.getCurrentUserId();
+
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+    if (!learningSession.getTopicId().equals(rootTopicId)) {
+      throw new IllegalStateException("토픽이 일치하지 않습니다.");
+    }
+    if (!"REVIEW".equals(learningSession.getMode())) {
+      throw new IllegalStateException("Review 모드가 아닙니다.");
+    }
+
+    // 2. StudySession 조회 (실기 리뷰는 PRACTICAL 단계를 사용)
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    StudySession session = practicalStep.getStudySession();
+
+    // 3. LearningStep에서 메타데이터 추출
+    Map<String, Object> practicalMeta = parseJson(practicalStep.getMetadataJson());
+
+    int practicalTotal = readInt(practicalMeta, "total");
+    int practicalCorrect = readInt(practicalMeta, "correct");
+    boolean practicalCompleted = Boolean.TRUE.equals(practicalMeta.get("completed"));
+
+    // 4. 약점 태그 계산 (실기 오답 태그 기반)
+    List<String> mistakes = List.of();
+    Map<String, Object> meta = Map.of();
+    Long sessionId = null;
+
+    if (session != null) {
+      sessionId = session.getId();
+      meta = sessionManager.loadMeta(session);
+
+      List<UserAnswer> sessionAnswers = userAnswerRepository.findByUserIdAndSessionId(userId, sessionId).stream()
+          .filter(ans -> ans.getExamMode() == ExamMode.PRACTICAL)
+          .toList();
+      Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
+      Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
+          .collect(Collectors.toMap(Question::getId, q -> q));
+      List<UserAnswer> answers = sessionAnswers.stream()
+          .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
+          .toList();
+      mistakes = collectMistakes(answers, questionCache);
+    }
+
+    boolean completed = practicalCompleted;
+
+    String topicTitle = "";
+    try {
+      var curriculum = curriculumGateway.getConceptWithTopic(rootTopicId);
+      topicTitle = curriculum.topicTitle();
+    } catch (Exception ignored) {
+      // 커리큘럼 장애 시에도 요약은 진행
+    }
+
+    String summaryText = aiExplanationService.summarizePractical(
+        topicTitle,
+        practicalTotal,
+        practicalCorrect,
+        mistakes
+    );
+
+    WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
+        0,              // Review 모드에는 MINI 없음
+        0,
+        false,
+        practicalTotal,
+        practicalCorrect,
+        summaryText,
+        completed
+    );
+
+    String status = completed ? "COMPLETE" : "IN_PROGRESS";
+
+    // 진정한 완료(PRACTICAL 완료)일 때만 XP 지급
+    boolean trulyCompleted = learningSession != null && Boolean.TRUE.equals(learningSession.getTrulyCompleted());
+
+    if (trulyCompleted && sessionId != null && session != null) {
+      if (!Boolean.TRUE.equals(session.getXpGranted())) {
+        try {
+          progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+              userId,
+              ExamMode.PRACTICAL.name(),
+              "REVIEW",
+              rootTopicId
+          ));
+          sessionManager.markXpGranted(session);
+          if (!Boolean.TRUE.equals(session.getCompleted())) {
+            int scorePct = practicalTotal == 0 ? 0 : (practicalCorrect * 100) / practicalTotal;
+            sessionManager.closeSession(session, scorePct, completed, Map.of());
+          }
+        } catch (Exception ignored) {
+          // XP hook 실패는 학습 흐름을 막지 않음
+        }
+      }
+    }
+
+    // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
+    // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
+
+    return new FlowDtos.StepEnvelope<>(
+        sessionId,
+        "REVIEW",
+        "REVIEW_SUMMARY",
+        status,
+        null,
+        meta,
+        payload,
+        learningSession.getId()
+    );
+  }
+
   /* ========================= 요약 (Micro Practical Summary) ========================= */
 
   @Transactional(readOnly = true)
@@ -1322,18 +1437,30 @@ public class PracticalService {
     
     // LearningSession 조회 및 소유자 확인
     LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
-    
-    // 실기는 MINI 단계와 PRACTICAL 단계가 같은 StudySession을 공유하므로 MINI 단계에서 조회
-    LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
-    
-    // StudySession 조회
-    StudySession session = miniStep.getStudySession();
+
+    // 모드에 따라 적절한 단계/소스를 선택
+    String stepCode;
+    StudySession session;
+
+    if ("REVIEW".equals(learningSession.getMode())) {
+      // 실기 REVIEW 모드: PRACTICAL 단계의 StudySession 사용
+      LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+      session = practicalStep.getStudySession();
+      // REVIEW 모드의 실기 소스는 PRACTICAL_REVIEW
+      stepCode = "PRACTICAL_REVIEW";
+    } else {
+      // Micro 실기 모드: MINI 단계와 PRACTICAL 단계가 같은 StudySession을 공유하므로 MINI 단계에서 조회
+      LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
+      session = miniStep.getStudySession();
+      stepCode = "PRACTICAL_SET";
+    }
+
     if (session == null) {
       return new WrongRecapDtos.WrongRecapSet(List.of());
     }
     
     // 기존 wrongRecapBySession 로직 재사용
-    return wrongRecapBySession(session.getId(), "PRACTICAL_SET");
+    return wrongRecapBySession(session.getId(), stepCode);
   }
 
   /* ========================= Wrong Recap (토픽/전체 기준) ========================= */
