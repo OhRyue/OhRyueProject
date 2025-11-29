@@ -327,7 +327,7 @@ public class VersusController {
 
   /* -------- 실시간 매칭 -------- */
   @Operation(
-      summary = "실시간 매칭 요청",
+      summary = "실시간 매칭 요청 (실사용자 매칭)",
       description = "1:1 배틀 또는 토너먼트 실시간 매칭을 요청합니다.\n\n" +
           "**매칭 모드:**\n" +
           "- CATEGORY: 같은 2레벨 토픽을 선택한 사람끼리 매칭 (topicId 필수)\n" +
@@ -337,7 +337,8 @@ public class VersusController {
           "- 토너먼트: 8명 모이면 자동으로 방 생성 및 시작\n\n" +
           "**주의사항:**\n" +
           "- JWT 토큰에서 현재 로그인한 사용자 ID를 자동으로 가져옵니다.\n" +
-          "- 매칭 중에는 다른 매칭 요청을 할 수 없습니다."
+          "- 매칭 중에는 다른 매칭 요청을 할 수 없습니다.\n" +
+          "- **실사용자 매칭**: 더미 플레이어 없이 실제 사용자만 매칭됩니다."
   )
   @ApiResponses(value = {
       @ApiResponse(responseCode = "200", description = "매칭 요청 성공"),
@@ -352,8 +353,8 @@ public class VersusController {
       )
       @Valid @RequestBody MatchingDtos.MatchRequest request) {
     String userId = AuthUserUtil.getCurrentUserId();
-    // 시연 모드가 활성화되어 있으면 더미 플레이어 자동 생성
-    return demoMatchingService.requestMatchWithDemo(userId, request);
+    // 실사용자 매칭: 더미 플레이어 없이 순수하게 매칭 큐만 사용
+    return matchingQueueService.requestMatch(userId, request);
   }
 
   @Operation(

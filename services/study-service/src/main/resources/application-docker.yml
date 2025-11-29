@@ -109,7 +109,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,prometheus,metrics,mappings
   endpoint:
     health:
       probes:
@@ -118,3 +118,10 @@ management:
   metrics:
     tags:
       application: study-service
+
+# === 로깅 설정 ===
+logging:
+  level:
+    com.OhRyue.certpilot.study.controller.VersusQuestionController: INFO
+    org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping: DEBUG
+    org.springframework.boot.actuate.web.mappings: DEBUG

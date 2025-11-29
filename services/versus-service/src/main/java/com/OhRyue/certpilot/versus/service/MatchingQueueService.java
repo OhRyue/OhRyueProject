@@ -1,18 +1,27 @@
 package com.OhRyue.certpilot.versus.service;
 
-import com.OhRyue.certpilot.versus.domain.MatchMode;
-import com.OhRyue.certpilot.versus.dto.MatchingDtos;
-import com.OhRyue.certpilot.versus.dto.VersusDtos;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
-
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+import com.OhRyue.certpilot.versus.domain.MatchMode;
+import com.OhRyue.certpilot.versus.domain.MatchStatus;
+import com.OhRyue.certpilot.versus.dto.MatchingDtos;
+import com.OhRyue.certpilot.versus.dto.VersusDtos;
+import com.OhRyue.certpilot.versus.repository.MatchParticipantRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 실시간 매칭 큐 서비스
@@ -25,6 +34,7 @@ public class MatchingQueueService {
 
     private final VersusService versusService;
     private final ObjectMapper objectMapper;
+    private final MatchParticipantRepository participantRepository;
     
     // 매칭 풀: mode -> matchingKey -> 대기자 리스트
     private final Map<String, Map<String, Queue<WaitingPlayer>>> matchingPools = new ConcurrentHashMap<>();
@@ -35,9 +45,10 @@ public class MatchingQueueService {
     // 매칭 풀별 락
     private final Map<String, ReentrantLock> poolLocks = new ConcurrentHashMap<>();
     
-    public MatchingQueueService(VersusService versusService, ObjectMapper objectMapper) {
+    public MatchingQueueService(VersusService versusService, ObjectMapper objectMapper, MatchParticipantRepository participantRepository) {
         this.versusService = versusService;
         this.objectMapper = objectMapper;
+        this.participantRepository = participantRepository;
     }
 
     /**
@@ -84,11 +95,59 @@ public class MatchingQueueService {
             log.info("매칭 요청: userId={}, mode={}, matchingKey={}, queueSize={}", 
                 userId, request.mode(), matchingKey, queue.size());
             
-            // 매칭 시도
-            tryMatch(poolKey, matchingKey, request.mode());
+            // 즉시 매칭 시도 (동기 처리)
+            int requiredCount = request.mode() == MatchMode.DUEL ? 2 : 8;
+            Long roomId = null;
+            
+            if (queue.size() >= requiredCount) {
+                // 매칭 성공: 필요한 인원만큼 추출
+                List<WaitingPlayer> matched = new ArrayList<>();
+                for (int i = 0; i < requiredCount && !queue.isEmpty(); i++) {
+                    WaitingPlayer p = queue.poll();
+                    if (p != null) {
+                        matched.add(p);
+                        userMatchingInfo.remove(p.userId());
+                    }
+                }
+                
+                if (matched.size() == requiredCount) {
+                    log.info("즉시 매칭 성공: mode={}, players={}", request.mode(), 
+                        matched.stream().map(WaitingPlayer::userId).collect(Collectors.toList()));
+                    
+                    // 방 생성 및 시작 (동기 처리)
+                    try {
+                        roomId = createAndStartRoomSync(matched, request.mode());
+                        if (roomId != null) {
+                            // 매칭 완료: roomId 반환
+                            return new MatchingDtos.MatchStatusResp(
+                                false, // 매칭 완료
+                                roomId,
+                                0,
+                                player.joinedAt()
+                            );
+                        }
+                    } catch (Exception e) {
+                        log.error("방 생성 실패, 플레이어들을 다시 큐에 추가: error={}", e.getMessage(), e);
+                        // 실패 시 플레이어들을 다시 큐에 넣기
+                        matched.forEach(queue::offer);
+                        // 매칭 정보 복구
+                        matched.forEach(p -> userMatchingInfo.put(p.userId(), 
+                            new MatchingInfo(poolKey, matchingKey, request.mode())));
+                    }
+                } else {
+                    // 인원 부족: 다시 큐에 넣기
+                    matched.forEach(queue::offer);
+                    matched.forEach(p -> userMatchingInfo.put(p.userId(), 
+                        new MatchingInfo(poolKey, matchingKey, request.mode())));
+                }
+            }
+            
+            // 매칭 대기 중 또는 즉시 매칭 실패
+            // 비동기로 추가 매칭 시도 (다른 사용자가 들어올 수 있음)
+            tryMatchAsync(poolKey, matchingKey, request.mode());
             
             return new MatchingDtos.MatchStatusResp(
-                true,
+                true, // 매칭 대기 중
                 null,
                 queue.size(),
                 player.joinedAt()
@@ -133,37 +192,104 @@ public class MatchingQueueService {
      * 매칭 상태 조회
      */
     public MatchingDtos.MatchStatusResp getMatchStatus(String userId) {
+        // 1. 먼저 활성 방이 있는지 확인 (매칭 완료 후)
+        List<Long> activeRoomIds = participantRepository.findActiveRoomIdsByUserId(userId, MatchStatus.ONGOING);
+        if (!activeRoomIds.isEmpty()) {
+            Long roomId = activeRoomIds.get(0); // 가장 최근 방
+            // 활성 방이 있으면 매칭 정보 정리 (이미 매칭 완료된 상태)
+            userMatchingInfo.remove(userId);
+            return new MatchingDtos.MatchStatusResp(
+                false, // 매칭 완료
+                roomId,
+                0,
+                null
+            );
+        }
+        
+        // 2. 매칭 대기 중인지 확인
         MatchingInfo info = userMatchingInfo.get(userId);
-        if (info == null) {
-            return new MatchingDtos.MatchStatusResp(false, null, 0, null);
+        if (info != null) {
+            Map<String, Queue<WaitingPlayer>> pool = matchingPools.get(info.poolKey());
+            if (pool != null) {
+                Queue<WaitingPlayer> queue = pool.get(info.matchingKey());
+                if (queue != null) {
+                    int waitingCount = queue.size();
+                    boolean isWaiting = queue.stream().anyMatch(p -> p.userId().equals(userId));
+                    if (isWaiting) {
+                        return new MatchingDtos.MatchStatusResp(
+                            true, // 매칭 대기 중
+                            null,
+                            waitingCount,
+                            null
+                        );
+                    } else {
+                        // 큐에 없는데 매칭 정보가 남아있으면 정리
+                        userMatchingInfo.remove(userId);
+                    }
+                }
+            }
         }
         
-        Map<String, Queue<WaitingPlayer>> pool = matchingPools.get(info.poolKey());
-        if (pool == null) {
-            return new MatchingDtos.MatchStatusResp(false, null, 0, null);
+        // 3. 매칭 중이 아니고 활성 방도 없음
+        return new MatchingDtos.MatchStatusResp(false, null, 0, null);
+    }
+
+    /**
+     * 방 생성 및 자동 시작 (동기)
+     */
+    private Long createAndStartRoomSync(List<WaitingPlayer> players, MatchMode mode) {
+        try {
+            WaitingPlayer firstPlayer = players.get(0);
+            MatchingDtos.MatchRequest request = firstPlayer.request();
+            
+            // scopeJson 생성
+            String scopeJson = buildScopeJson(request);
+            
+            // participants 리스트 생성 (첫 번째 플레이어 제외)
+            List<String> participants = players.stream()
+                .skip(1)
+                .map(WaitingPlayer::userId)
+                .collect(Collectors.toList());
+            
+            // 방 생성 요청
+            VersusDtos.CreateRoomReq createReq = new VersusDtos.CreateRoomReq(
+                mode,
+                scopeJson,
+                participants,
+                null,  // questions는 자동 생성
+                null,  // tournamentBracketJson
+                null,  // tournamentBracketRound
+                null,  // goldenbellRuleJson
+                null   // scheduledAt
+            );
+            
+            // 방 생성 (첫 번째 플레이어가 생성자)
+            VersusDtos.RoomDetailResp room = versusService.createRoom(
+                createReq, 
+                firstPlayer.userId()
+            );
+            
+            Long roomId = room.room().roomId();
+            
+            // 자동 시작
+            versusService.startRoom(roomId);
+            
+            log.info("매칭 완료 및 방 시작: roomId={}, mode={}, players={}", 
+                roomId, mode, 
+                players.stream().map(WaitingPlayer::userId).collect(Collectors.toList()));
+            
+            return roomId;
+        } catch (Exception e) {
+            log.error("방 생성 및 시작 실패: mode={}, error={}", mode, e.getMessage(), e);
+            return null;
         }
-        
-        Queue<WaitingPlayer> queue = pool.get(info.matchingKey());
-        if (queue == null) {
-            return new MatchingDtos.MatchStatusResp(false, null, 0, null);
-        }
-        
-        int waitingCount = queue.size();
-        boolean isWaiting = queue.stream().anyMatch(p -> p.userId().equals(userId));
-        
-        return new MatchingDtos.MatchStatusResp(
-            isWaiting,
-            null,
-            waitingCount,
-            null
-        );
     }
 
     /**
      * 매칭 시도 (비동기)
      */
     @Async
-    public void tryMatch(String poolKey, String matchingKey, MatchMode mode) {
+    public void tryMatchAsync(String poolKey, String matchingKey, MatchMode mode) {
         Map<String, Queue<WaitingPlayer>> pool = matchingPools.get(poolKey);
         if (pool == null) {
             return;
@@ -208,8 +334,8 @@ public class MatchingQueueService {
             log.info("매칭 성공: mode={}, players={}", mode, 
                 matched.stream().map(WaitingPlayer::userId).collect(Collectors.toList()));
             
-            // 방 생성 및 시작
-            createAndStartRoom(matched, mode);
+            // 방 생성 및 시작 (비동기)
+            createAndStartRoomAsync(matched, mode);
             
         } finally {
             lock.unlock();
@@ -217,9 +343,9 @@ public class MatchingQueueService {
     }
 
     /**
-     * 방 생성 및 자동 시작
+     * 방 생성 및 자동 시작 (비동기)
      */
-    private void createAndStartRoom(List<WaitingPlayer> players, MatchMode mode) {
+    private void createAndStartRoomAsync(List<WaitingPlayer> players, MatchMode mode) {
         try {
             WaitingPlayer firstPlayer = players.get(0);
             MatchingDtos.MatchRequest request = firstPlayer.request();
@@ -252,16 +378,6 @@ public class MatchingQueueService {
             );
             
             Long roomId = room.room().roomId();
-            
-            // 나머지 플레이어들 참가
-            for (int i = 1; i < players.size(); i++) {
-                try {
-                    versusService.joinRoom(roomId, players.get(i).userId());
-                } catch (Exception e) {
-                    log.error("플레이어 참가 실패: userId={}, roomId={}, error={}", 
-                        players.get(i).userId(), roomId, e.getMessage());
-                }
-            }
             
             // 자동 시작
             versusService.startRoom(roomId);

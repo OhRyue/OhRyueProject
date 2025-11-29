@@ -14,17 +14,27 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @Tag(name = "Versus Question", description = "Versus 모드용 문제 생성 및 검증 API")
+@Slf4j
 @RestController
 @RequestMapping("/api/study/versus")
 @RequiredArgsConstructor
 public class VersusQuestionController {
 
     private final VersusQuestionService versusQuestionService;
+    
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        log.info("=== VersusQuestionController 초기화 완료 ===");
+        log.info("basePath=/api/study/versus");
+        log.info("endpoints=[POST /questions, GET /questions/{questionId}, POST /questions/{questionId}/validate]");
+        log.info("Service bean: {}", versusQuestionService != null ? versusQuestionService.getClass().getName() : "NULL");
+    }
 
     @Operation(
         summary = "Versus 모드용 문제 세트 생성",
@@ -93,7 +103,17 @@ public class VersusQuestionController {
         )
         @Valid @RequestBody VersusDtos.VersusQuestionRequest request
     ) {
-        return versusQuestionService.generateVersusQuestions(request);
+        log.info("generateVersusQuestions 호출됨: examMode={}, topicScope={}, topicId={}, difficulty={}, count={}, questionTypes={}",
+                request.examMode(), request.topicScope(), request.topicId(), request.difficulty(), 
+                request.count(), request.questionTypes());
+        try {
+            List<VersusDtos.QuestionDto> result = versusQuestionService.generateVersusQuestions(request);
+            log.info("generateVersusQuestions 성공: 문제 개수={}", result.size());
+            return result;
+        } catch (Exception e) {
+            log.error("generateVersusQuestions 실패: error={}", e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Operation(

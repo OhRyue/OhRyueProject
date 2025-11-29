@@ -8,6 +8,7 @@ import com.OhRyue.certpilot.study.domain.enums.QuestionType;
 import com.OhRyue.certpilot.study.dto.VersusDtos;
 import com.OhRyue.certpilot.study.repository.QuestionChoiceRepository;
 import com.OhRyue.certpilot.study.repository.QuestionRepository;
+import com.OhRyue.certpilot.study.service.TopicTreeService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class VersusQuestionService {
 
     private final QuestionRepository questionRepository;
     private final QuestionChoiceRepository choiceRepository;
+    private final TopicTreeService topicTreeService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -155,8 +157,13 @@ public class VersusQuestionService {
         List<Question> questions;
 
         if ("SPECIFIC".equals(topicScope) && topicId != null) {
-            // 특정 토픽에서 선택
-            questions = questionRepository.findByTopicIdAndModeAndType(topicId, examMode, questionType);
+            // 특정 토픽 + 하위 토픽 전체에서 선택 (난이도 필터링 없음 - 카테고리 모드)
+            // - rootTopicId = 11001 이면, 111xx, 112xx 등 모든 자식 토픽까지 포함
+            var topicIds = topicTreeService.descendantsOf(topicId);
+            if (topicIds.isEmpty()) {
+                topicIds = java.util.Set.of(topicId);
+            }
+            questions = questionRepository.findByTopicIdInAndModeAndType(topicIds, examMode, questionType);
         } else {
             // 전체 범위에서 선택
             questions = questionRepository.findByModeAndTypeAndDifficulty(examMode, questionType, difficulty);

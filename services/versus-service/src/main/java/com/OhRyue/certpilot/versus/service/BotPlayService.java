@@ -627,7 +627,11 @@ public class BotPlayService {
     @Transactional
     private void generateQuestionsForRoom(MatchRoom room) {
         try {
-            log.info("문제 자동 생성 시작: roomId={}", room.getId());
+            log.info("문제 자동 생성 시작: roomId={}, scopeJson={}", room.getId(), room.getScopeJson());
+            
+            if (room.getScopeJson() == null || room.getScopeJson().isBlank()) {
+                throw new IllegalStateException("scopeJson is null or empty for roomId=" + room.getId());
+            }
             
             List<VersusDtos.QuestionInfo> questionInfos = versusService.generateQuestionsFromScope(room, room.getScopeJson());
             
@@ -656,8 +660,9 @@ public class BotPlayService {
             log.info("문제 자동 생성 완료 (study-service): roomId={}, count={}", room.getId(), questions.size());
             
         } catch (Exception e) {
-            log.warn("study-service 연동 실패, 더미 문제로 대체합니다. roomId={}, error={}", 
-                    room.getId(), e.getMessage());
+            log.error("study-service 연동 실패, 더미 문제로 대체합니다. roomId={}, scopeJson={}, error={}, stackTrace={}", 
+                    room.getId(), room.getScopeJson(), e.getMessage(), 
+                    java.util.Arrays.toString(e.getStackTrace()).substring(0, Math.min(500, java.util.Arrays.toString(e.getStackTrace()).length())));
             createDummyQuestionsForRoom(room.getId(), room.getMode());
         }
     }

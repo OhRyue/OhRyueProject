@@ -143,6 +143,8 @@ services:
 logging:
   level:
     com.OhRyue.certpilot.versus.client: DEBUG
+    com.OhRyue.certpilot.versus.config.FeignClientConfig: INFO
     io.github.resilience4j: INFO
     org.springframework.cloud.openfeign: DEBUG
+    feign: DEBUG
     com.OhRyue.certpilot.versus.service.DemoMatchingService: INFO

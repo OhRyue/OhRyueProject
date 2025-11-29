@@ -62,10 +62,11 @@ public class FeignClientConfig {
                     
                     if (authorization != null && !authorization.isBlank()) {
                         template.header("Authorization", authorization);
-                        log.debug("Feign Client에 JWT 토큰 전달: {}", authorization.substring(0, Math.min(20, authorization.length())) + "...");
+                        log.info("Feign Client에 JWT 토큰 전달: url={}, method={}, token={}...", 
+                                template.url(), template.method(), authorization.substring(0, Math.min(30, authorization.length())));
                     } else {
-                        log.warn("Feign Client 요청에 Authorization 헤더가 없습니다. (RequestContextHolder: {}, ThreadLocal: {})", 
-                                attributes != null, AsyncConfig.getJwtToken() != null);
+                        log.warn("Feign Client 요청에 Authorization 헤더가 없습니다. url={}, method={}, RequestContextHolder: {}, ThreadLocal: {}", 
+                                template.url(), template.method(), attributes != null, AsyncConfig.getJwtToken() != null);
                     }
                 } catch (Exception e) {
                     log.error("Feign Client에 JWT 토큰 전달 중 오류 발생: {}", e.getMessage(), e);
