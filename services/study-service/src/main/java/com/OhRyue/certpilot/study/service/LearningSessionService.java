@@ -69,6 +69,14 @@ public class LearningSessionService {
       "ASSIST_PRACTICAL_DIFFICULTY", "REVIEW_WRONG", "SUMMARY"
   );
 
+  private static final List<String> ORDER_ASSIST_WRITTEN_WEAKNESS = List.of(
+      "ASSIST_WRITTEN_WEAKNESS", "REVIEW_WRONG", "SUMMARY"
+  );
+
+  private static final List<String> ORDER_ASSIST_PRACTICAL_WEAKNESS = List.of(
+      "ASSIST_PRACTICAL_WEAKNESS", "REVIEW_WRONG", "SUMMARY"
+  );
+
   /** 모드에 따른 단계 순서 (ExamMode 버전) */
   private List<String> orderOf(ExamMode mode) {
     return (mode == ExamMode.PRACTICAL) ? ORDER_PRACTICAL : ORDER_WRITTEN;
@@ -86,6 +94,13 @@ public class LearningSessionService {
     }
     if ("ASSIST_PRACTICAL_DIFFICULTY".equals(modeStr)) {
       return ORDER_ASSIST_PRACTICAL_DIFFICULTY;
+    }
+    // weakness 기반 보조학습 모드 처리
+    if ("ASSIST_WRITTEN_WEAKNESS".equals(modeStr)) {
+      return ORDER_ASSIST_WRITTEN_WEAKNESS;
+    }
+    if ("ASSIST_PRACTICAL_WEAKNESS".equals(modeStr)) {
+      return ORDER_ASSIST_PRACTICAL_WEAKNESS;
     }
     return orderOf(parseMode(modeStr));
   }
@@ -611,7 +626,9 @@ public class LearningSessionService {
            "MCQ".equals(step.getStepCode()) || 
            "PRACTICAL".equals(step.getStepCode()) ||
            "ASSIST_WRITTEN_DIFFICULTY".equals(step.getStepCode()) ||
-           "ASSIST_PRACTICAL_DIFFICULTY".equals(step.getStepCode());
+           "ASSIST_PRACTICAL_DIFFICULTY".equals(step.getStepCode()) ||
+           "ASSIST_WRITTEN_WEAKNESS".equals(step.getStepCode()) ||
+           "ASSIST_PRACTICAL_WEAKNESS".equals(step.getStepCode());
   }
 
   /**

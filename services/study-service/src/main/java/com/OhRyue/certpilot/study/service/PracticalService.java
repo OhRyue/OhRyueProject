@@ -1110,6 +1110,10 @@ public class PracticalService {
       // difficulty 기반 보조학습: MINI 단계가 없고 ASSIST_PRACTICAL_DIFFICULTY 단계만 있음
       practicalStepName = "ASSIST_PRACTICAL_DIFFICULTY";
       miniStepName = null;
+    } else if ("ASSIST_PRACTICAL_WEAKNESS".equals(learningSession.getMode())) {
+      // weakness 기반 보조학습: MINI 단계가 없고 ASSIST_PRACTICAL_WEAKNESS 단계만 있음
+      practicalStepName = "ASSIST_PRACTICAL_WEAKNESS";
+      miniStepName = null;
     } else {
       // 일반 학습: MINI와 PRACTICAL 단계 사용
       practicalStepName = "PRACTICAL";
@@ -1478,6 +1482,12 @@ public class PracticalService {
       stepCode = "ASSIST_PRACTICAL_DIFFICULTY";
       LearningStep difficultyStep = learningSessionService.getStep(learningSession, stepName);
       session = difficultyStep.getStudySession();
+    } else if ("ASSIST_PRACTICAL_WEAKNESS".equals(learningSession.getMode())) {
+      // weakness 기반 보조학습
+      stepName = "ASSIST_PRACTICAL_WEAKNESS";
+      stepCode = "ASSIST_PRACTICAL_WEAKNESS";
+      LearningStep weaknessStep = learningSessionService.getStep(learningSession, stepName);
+      session = weaknessStep.getStudySession();
     } else if ("REVIEW".equals(learningSession.getMode())) {
       // 실기 REVIEW 모드: PRACTICAL 단계의 StudySession 사용
       stepName = "PRACTICAL";
@@ -1794,7 +1804,7 @@ public class PracticalService {
       case "MICRO_OX", "PRACTICAL_MINI" -> "PRACTICAL_MINI";              // 실기 OX
       case "PRACTICAL_SET", "MICRO_PRACTICAL" -> "MICRO_PRACTICAL";       // 실기 Micro 세트
       case "REVIEW", "PRACTICAL_REVIEW_SET", "PRACTICAL_REVIEW" -> "PRACTICAL_REVIEW"; // 실기 Review
-      case "ASSIST_PRACTICAL_DIFFICULTY" -> "ASSIST_PRACTICAL"; // difficulty 기반 보조학습
+      case "ASSIST_PRACTICAL_DIFFICULTY", "ASSIST_PRACTICAL_WEAKNESS" -> "ASSIST_PRACTICAL"; // 보조학습 (difficulty/weakness)
       default -> stepCode; // 다른 source 를 그대로 사용하고 싶을 때
     };
   }
