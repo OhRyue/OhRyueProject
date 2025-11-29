@@ -503,8 +503,8 @@ public class WrittenService {
     
     String metadataJson = toJson(mcqMeta);
 
-    // 4. 진정한 완료 설정 (MCQ 완료 시)
-    if (finalCompleted && learningSession.getTrulyCompleted() == null) {
+    // 4. 진정한 완료 설정 (MCQ 완료 시 - 모든 문제를 맞춰야 완료)
+    if (finalCompleted && allWrongIds.isEmpty() && learningSession.getTrulyCompleted() == null) {
       learningSession.setTrulyCompleted(true);
       learningSessionService.saveLearningSession(learningSession);
     }
@@ -1369,8 +1369,8 @@ public class WrittenService {
     
     String metadataJson = toJson(mcqMeta);
 
-    // 6. 진정한 완료 설정 (MCQ 완료 시)
-    if (finalCompleted && learningSession.getTrulyCompleted() == null) {
+    // 6. 진정한 완료 설정 (MCQ 완료 시 - 모든 문제를 맞춰야 완료)
+    if (finalCompleted && allWrongIds.isEmpty() && learningSession.getTrulyCompleted() == null) {
       learningSession.setTrulyCompleted(true);
       learningSessionService.saveLearningSession(learningSession);
     }
