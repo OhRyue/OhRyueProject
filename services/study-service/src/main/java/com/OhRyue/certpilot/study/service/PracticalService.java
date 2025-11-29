@@ -1114,6 +1114,10 @@ public class PracticalService {
       // weakness 기반 보조학습: MINI 단계가 없고 ASSIST_PRACTICAL_WEAKNESS 단계만 있음
       practicalStepName = "ASSIST_PRACTICAL_WEAKNESS";
       miniStepName = null;
+    } else if ("ASSIST_PRACTICAL_CATEGORY".equals(learningSession.getMode())) {
+      // category 기반 보조학습: MINI 단계가 없고 ASSIST_PRACTICAL_CATEGORY 단계만 있음
+      practicalStepName = "ASSIST_PRACTICAL_CATEGORY";
+      miniStepName = null;
     } else {
       // 일반 학습: MINI와 PRACTICAL 단계 사용
       practicalStepName = "PRACTICAL";
@@ -1185,7 +1189,11 @@ public class PracticalService {
         // 커리큘럼 장애 시에도 요약은 진행
       }
     } else {
-      topicTitle = "난이도 기반 보조학습";
+      if ("ASSIST_PRACTICAL_CATEGORY".equals(learningSession.getMode())) {
+        topicTitle = "카테고리 기반 보조학습";
+      } else {
+        topicTitle = "난이도 기반 보조학습";
+      }
     }
 
     String summary = aiExplanationService.summarizePractical(
@@ -1488,6 +1496,12 @@ public class PracticalService {
       stepCode = "ASSIST_PRACTICAL_WEAKNESS";
       LearningStep weaknessStep = learningSessionService.getStep(learningSession, stepName);
       session = weaknessStep.getStudySession();
+    } else if ("ASSIST_PRACTICAL_CATEGORY".equals(learningSession.getMode())) {
+      // category 기반 보조학습
+      stepName = "ASSIST_PRACTICAL_CATEGORY";
+      stepCode = "ASSIST_PRACTICAL_CATEGORY";
+      LearningStep categoryStep = learningSessionService.getStep(learningSession, stepName);
+      session = categoryStep.getStudySession();
     } else if ("REVIEW".equals(learningSession.getMode())) {
       // 실기 REVIEW 모드: PRACTICAL 단계의 StudySession 사용
       stepName = "PRACTICAL";
@@ -1804,7 +1818,7 @@ public class PracticalService {
       case "MICRO_OX", "PRACTICAL_MINI" -> "PRACTICAL_MINI";              // 실기 OX
       case "PRACTICAL_SET", "MICRO_PRACTICAL" -> "MICRO_PRACTICAL";       // 실기 Micro 세트
       case "REVIEW", "PRACTICAL_REVIEW_SET", "PRACTICAL_REVIEW" -> "PRACTICAL_REVIEW"; // 실기 Review
-      case "ASSIST_PRACTICAL_DIFFICULTY", "ASSIST_PRACTICAL_WEAKNESS" -> "ASSIST_PRACTICAL"; // 보조학습 (difficulty/weakness)
+      case "ASSIST_PRACTICAL_DIFFICULTY", "ASSIST_PRACTICAL_WEAKNESS", "ASSIST_PRACTICAL_CATEGORY" -> "ASSIST_PRACTICAL"; // 보조학습 (difficulty/weakness/category)
       default -> stepCode; // 다른 source 를 그대로 사용하고 싶을 때
     };
   }

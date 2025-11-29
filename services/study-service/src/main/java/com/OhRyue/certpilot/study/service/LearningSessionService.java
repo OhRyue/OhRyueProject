@@ -73,6 +73,14 @@ public class LearningSessionService {
       "ASSIST_WRITTEN_WEAKNESS", "REVIEW_WRONG", "SUMMARY"
   );
 
+  private static final List<String> ORDER_ASSIST_WRITTEN_CATEGORY = List.of(
+      "ASSIST_WRITTEN_CATEGORY", "REVIEW_WRONG", "SUMMARY"
+  );
+
+  private static final List<String> ORDER_ASSIST_PRACTICAL_CATEGORY = List.of(
+      "ASSIST_PRACTICAL_CATEGORY", "REVIEW_WRONG", "SUMMARY"
+  );
+
   private static final List<String> ORDER_ASSIST_PRACTICAL_WEAKNESS = List.of(
       "ASSIST_PRACTICAL_WEAKNESS", "REVIEW_WRONG", "SUMMARY"
   );
@@ -98,6 +106,13 @@ public class LearningSessionService {
     // weakness 기반 보조학습 모드 처리
     if ("ASSIST_WRITTEN_WEAKNESS".equals(modeStr)) {
       return ORDER_ASSIST_WRITTEN_WEAKNESS;
+    }
+    // category 기반 보조학습 모드 처리
+    if ("ASSIST_WRITTEN_CATEGORY".equals(modeStr)) {
+      return ORDER_ASSIST_WRITTEN_CATEGORY;
+    }
+    if ("ASSIST_PRACTICAL_CATEGORY".equals(modeStr)) {
+      return ORDER_ASSIST_PRACTICAL_CATEGORY;
     }
     if ("ASSIST_PRACTICAL_WEAKNESS".equals(modeStr)) {
       return ORDER_ASSIST_PRACTICAL_WEAKNESS;
@@ -504,7 +519,9 @@ public class LearningSessionService {
            "MCQ".equals(stepCode) || 
            "PRACTICAL".equals(stepCode) ||
            "ASSIST_WRITTEN_DIFFICULTY".equals(stepCode) ||
-           "ASSIST_PRACTICAL_DIFFICULTY".equals(stepCode);
+           "ASSIST_PRACTICAL_DIFFICULTY".equals(stepCode) ||
+           "ASSIST_WRITTEN_CATEGORY".equals(stepCode) ||
+           "ASSIST_PRACTICAL_CATEGORY".equals(stepCode);
   }
 
   /**
@@ -567,8 +584,12 @@ public class LearningSessionService {
           .filter(item -> item.getOrderNo() > 4)
           .toList();
     } else if ("ASSIST_WRITTEN_DIFFICULTY".equals(step.getStepCode()) || 
-               "ASSIST_PRACTICAL_DIFFICULTY".equals(step.getStepCode())) {
-      // ASSIST_*_DIFFICULTY는 별도 StudySession이므로 모든 아이템
+               "ASSIST_WRITTEN_WEAKNESS".equals(step.getStepCode()) ||
+               "ASSIST_WRITTEN_CATEGORY".equals(step.getStepCode()) ||
+               "ASSIST_PRACTICAL_DIFFICULTY".equals(step.getStepCode()) ||
+               "ASSIST_PRACTICAL_WEAKNESS".equals(step.getStepCode()) ||
+               "ASSIST_PRACTICAL_CATEGORY".equals(step.getStepCode())) {
+      // ASSIST_*는 별도 StudySession이므로 모든 아이템
       stepItems = items;
     } else {
       return; // 검증 불필요
@@ -628,7 +649,9 @@ public class LearningSessionService {
            "ASSIST_WRITTEN_DIFFICULTY".equals(step.getStepCode()) ||
            "ASSIST_PRACTICAL_DIFFICULTY".equals(step.getStepCode()) ||
            "ASSIST_WRITTEN_WEAKNESS".equals(step.getStepCode()) ||
-           "ASSIST_PRACTICAL_WEAKNESS".equals(step.getStepCode());
+           "ASSIST_WRITTEN_CATEGORY".equals(step.getStepCode()) ||
+           "ASSIST_PRACTICAL_WEAKNESS".equals(step.getStepCode()) ||
+           "ASSIST_PRACTICAL_CATEGORY".equals(step.getStepCode());
   }
 
   /**
@@ -676,6 +699,14 @@ public class LearningSessionService {
         previousStepCode = "ASSIST_WRITTEN_DIFFICULTY";
       } else if ("ASSIST_PRACTICAL_DIFFICULTY".equals(mode)) {
         previousStepCode = "ASSIST_PRACTICAL_DIFFICULTY";
+      } else if ("ASSIST_WRITTEN_WEAKNESS".equals(mode)) {
+        previousStepCode = "ASSIST_WRITTEN_WEAKNESS";
+      } else if ("ASSIST_PRACTICAL_WEAKNESS".equals(mode)) {
+        previousStepCode = "ASSIST_PRACTICAL_WEAKNESS";
+      } else if ("ASSIST_WRITTEN_CATEGORY".equals(mode)) {
+        previousStepCode = "ASSIST_WRITTEN_CATEGORY";
+      } else if ("ASSIST_PRACTICAL_CATEGORY".equals(mode)) {
+        previousStepCode = "ASSIST_PRACTICAL_CATEGORY";
       } else {
         previousStepCode = mode.equals("PRACTICAL") ? "PRACTICAL" : "MCQ";
       }

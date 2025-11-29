@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,14 +26,23 @@ public class AssistPracticalController {
 
   private final AssistPracticalService practicalService;
 
-  @Operation(summary = "실기: 카테고리 기반 보조학습 세트 시작")
-  @GetMapping("/category/{rootTopicId}")
+  @Operation(summary = "실기: 카테고리 기반 보조학습 세트 시작 (토픽 배열 선택)")
+  @GetMapping("/category")
   public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(
-      @PathVariable Long rootTopicId,
+      @RequestParam List<Long> topicIds,
       @RequestParam(required = false) Integer count
   ) {
     // userId는 서비스 내부에서 AuthUserUtil로 조회
-    return practicalService.startByCategory(rootTopicId, count);
+    // 세션 생성 및 문제 반환 (learningSessionId 포함)
+    return practicalService.startByCategory(topicIds, count);
+  }
+
+  @Operation(summary = "실기: 카테고리 기반 보조학습 문제 가져오기 (세션 기반)")
+  @GetMapping("/category/{learningSessionId}")
+  public FlowDtos.StepEnvelope<AssistDtos.QuizSet> getCategorySet(
+      @PathVariable Long learningSessionId
+  ) {
+    return practicalService.getCategorySet(learningSessionId);
   }
 
   @Operation(summary = "실기: 난이도 기반 보조학습 세트 시작 (세션 기반)")
@@ -94,6 +104,17 @@ public class AssistPracticalController {
   @Operation(summary = "실기: 약점 보완 보조학습 단건 즉시 채점")
   @PostMapping("/weakness/grade-one")
   public AssistDtos.PracticalGradeOneResp gradeOneWeakness(
+      @RequestParam Long learningSessionId,
+      @RequestParam Long questionId,
+      @RequestBody Map<String, String> body
+  ) {
+    String userText = body.getOrDefault("userText", "");
+    return practicalService.gradeOneDifficulty(learningSessionId, questionId, userText);
+  }
+
+  @Operation(summary = "실기: 카테고리 기반 보조학습 단건 즉시 채점")
+  @PostMapping("/category/grade-one")
+  public AssistDtos.PracticalGradeOneResp gradeOneCategory(
       @RequestParam Long learningSessionId,
       @RequestParam Long questionId,
       @RequestBody Map<String, String> body

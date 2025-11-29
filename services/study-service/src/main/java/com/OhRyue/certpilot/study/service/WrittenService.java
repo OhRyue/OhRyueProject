@@ -911,6 +911,10 @@ public class WrittenService {
       // weakness 기반 보조학습: MINI 단계가 없고 ASSIST_WRITTEN_WEAKNESS 단계만 있음
       mcqStepName = "ASSIST_WRITTEN_WEAKNESS";
       miniStepName = null;
+    } else if ("ASSIST_WRITTEN_CATEGORY".equals(learningSession.getMode())) {
+      // category 기반 보조학습: MINI 단계가 없고 ASSIST_WRITTEN_CATEGORY 단계만 있음
+      mcqStepName = "ASSIST_WRITTEN_CATEGORY";
+      miniStepName = null;
     } else {
       // 일반 학습: MINI와 MCQ 단계 사용
       mcqStepName = "MCQ";
@@ -970,14 +974,18 @@ public class WrittenService {
     boolean completed = miniPassed && mcqCompleted;
 
     String topicTitle = "";
-    if (topicId != 0L) { // difficulty 기반 보조학습(topicId=0)은 토픽 제목 조회 생략
+    if (topicId != 0L) { // difficulty/category 기반 보조학습(topicId=0)은 토픽 제목 조회 생략
       try {
         CurriculumGateway.CurriculumConcept curriculum = curriculumGateway.getConceptWithTopic(topicId);
         topicTitle = curriculum.topicTitle();
       } catch (Exception ignored) {
       }
     } else {
-      topicTitle = "난이도 기반 보조학습";
+      if ("ASSIST_WRITTEN_CATEGORY".equals(learningSession.getMode())) {
+        topicTitle = "카테고리 기반 보조학습";
+      } else {
+        topicTitle = "난이도 기반 보조학습";
+      }
     }
 
     String summaryText = aiExplanationService.summarizeWritten(
@@ -1062,6 +1070,10 @@ public class WrittenService {
       // weakness 기반 보조학습
       stepName = "ASSIST_WRITTEN_WEAKNESS";
       stepCode = "ASSIST_WRITTEN_WEAKNESS";
+    } else if ("ASSIST_WRITTEN_CATEGORY".equals(learningSession.getMode())) {
+      // category 기반 보조학습
+      stepName = "ASSIST_WRITTEN_CATEGORY";
+      stepCode = "ASSIST_WRITTEN_CATEGORY";
     } else if ("REVIEW".equals(learningSession.getMode())) {
       stepName = "MCQ";
       stepCode = "REVIEW_MCQ";
@@ -1787,7 +1799,7 @@ public class WrittenService {
       case "MICRO_OX", "MICRO_MINI" -> "MICRO_MINI";    // 필기 Micro OX
       case "MICRO_MCQ" -> "MICRO_MCQ";                  // 필기 Micro MCQ
       case "REVIEW", "REVIEW_SET", "REVIEW_MCQ" -> "REVIEW_MCQ"; // 필기 Review
-      case "ASSIST_WRITTEN_DIFFICULTY", "ASSIST_WRITTEN_WEAKNESS" -> "ASSIST_WRITTEN"; // 보조학습 (difficulty/weakness)
+      case "ASSIST_WRITTEN_DIFFICULTY", "ASSIST_WRITTEN_WEAKNESS", "ASSIST_WRITTEN_CATEGORY" -> "ASSIST_WRITTEN"; // 보조학습 (difficulty/weakness/category)
       default -> stepCode; // 혹시 다른 모드(source)를 그대로 넘기고 싶을 때
     };
   }

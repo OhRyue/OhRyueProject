@@ -59,34 +59,222 @@ public class AssistPracticalService {
   private final com.OhRyue.certpilot.study.client.ProgressHookClient progressHookClient;
   private final ObjectMapper objectMapper;
 
-  /* ================= 카테고리: rootTopicId 기준 하위 토픽 전체 ================= */
+  /* ================= 카테고리: 토픽 배열 선택 → 해당 토픽들에서 출제 ================= */
 
-  public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(Long rootTopicId,
+  @Transactional
+  public FlowDtos.StepEnvelope<AssistDtos.QuizSet> startByCategory(List<Long> topicIds,
                                                                    Integer count) {
     String userId = AuthUserUtil.getCurrentUserId();
     int want = sanitizeCount(count);
 
-    Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
-    if (topicIds.isEmpty()) {
-      topicIds = Set.of(rootTopicId);
+    // 프론트엔드에서 받은 토픽 배열을 그대로 사용
+    if (topicIds == null || topicIds.isEmpty()) {
+      throw new IllegalArgumentException("토픽 ID 배열이 비어있습니다.");
     }
 
+    Set<Long> topicIdSet = new HashSet<>(topicIds);
+
+    // 1. 문제 풀 생성
     List<Question> pool = new ArrayList<>();
     pool.addAll(questionRepository
-        .findByTopicIdInAndModeAndType(topicIds, ExamMode.PRACTICAL, QuestionType.SHORT));
+        .findByTopicIdInAndModeAndType(topicIdSet, ExamMode.PRACTICAL, QuestionType.SHORT));
     pool.addAll(questionRepository
-        .findByTopicIdInAndModeAndType(topicIds, ExamMode.PRACTICAL, QuestionType.LONG));
+        .findByTopicIdInAndModeAndType(topicIdSet, ExamMode.PRACTICAL, QuestionType.LONG));
 
     pool = pool.stream()
         .distinct()
         .sorted(Comparator.comparingLong(Question::getId))
         .toList();
 
-    log.debug("[assist/practical/category] rootTopicId={}, topicIds={}, poolSize={}, count={}",
-        rootTopicId, topicIds, pool.size(), want);
+    log.debug("[assist/practical/category] topicIds={}, poolSize={}, count={}",
+        topicIdSet, pool.size(), want);
 
-    AssistDtos.QuizSet set = pickPractical(pool, want);
-    return wrap("ASSIST_PRACTICAL", "ASSIST_PRACTICAL_CATEGORY", userId, set);
+    if (pool.isEmpty()) {
+      throw new IllegalStateException("선택한 토픽에 문제가 없습니다.");
+    }
+
+    // 2. 문제 선택 (랜덤 셔플 후 want 개수만큼)
+    List<Question> copy = new ArrayList<>(new LinkedHashSet<>(pool));
+    Collections.shuffle(copy);
+    int lim = Math.min(copy.size(), Math.max(1, want));
+    List<Question> selectedQuestions = copy.subList(0, lim);
+
+    // 3. LearningSession 생성 (topicId는 0 사용, mode는 ASSIST_PRACTICAL_CATEGORY)
+    LearningSession learningSession = learningSessionRepository.save(LearningSession.builder()
+        .userId(userId)
+        .topicId(ASSIST_TOPIC_ID)
+        .mode("ASSIST_PRACTICAL_CATEGORY")
+        .status("IN_PROGRESS")
+        .trulyCompleted(null)
+        .startedAt(Instant.now())
+        .updatedAt(Instant.now())
+        .build());
+
+    // 4. 여러 LearningStep 생성 (문제 풀기 -> 오답 -> 결과)
+    // 4-1. 문제 풀기 단계
+    LearningStep categoryStep = learningStepRepository.save(LearningStep.builder()
+        .learningSession(learningSession)
+        .stepCode("ASSIST_PRACTICAL_CATEGORY")
+        .status("IN_PROGRESS")
+        .scorePct(null)
+        .metadataJson(null)
+        .createdAt(Instant.now())
+        .updatedAt(Instant.now())
+        .build());
+
+    // 4-2. 오답 정리 단계
+    learningStepRepository.save(LearningStep.builder()
+        .learningSession(learningSession)
+        .stepCode("REVIEW_WRONG")
+        .status("READY")
+        .scorePct(null)
+        .metadataJson(null)
+        .createdAt(Instant.now())
+        .updatedAt(Instant.now())
+        .build());
+
+    // 4-3. 결과 요약 단계
+    learningStepRepository.save(LearningStep.builder()
+        .learningSession(learningSession)
+        .stepCode("SUMMARY")
+        .status("READY")
+        .scorePct(null)
+        .metadataJson(null)
+        .createdAt(Instant.now())
+        .updatedAt(Instant.now())
+        .build());
+
+    // 5. StudySession 생성 (topicScopeJson에 topicIds 저장)
+    Map<String, Object> scopeMap = new HashMap<>();
+    scopeMap.put("topicIds", new ArrayList<>(topicIdSet));
+    String scopeJson;
+    try {
+      scopeJson = objectMapper.writeValueAsString(scopeMap);
+    } catch (JsonProcessingException e) {
+      scopeJson = "{}";
+    }
+
+    StudySession studySession = StudySession.builder()
+        .userId(userId)
+        .mode("ASSIST_PRACTICAL_CATEGORY")
+        .examMode(ExamMode.PRACTICAL)
+        .topicScopeJson(scopeJson)
+        .questionCount(selectedQuestions.size())
+        .status("OPEN")
+        .startedAt(Instant.now())
+        .learningStep(categoryStep)
+        .build();
+
+    studySession = studySessionRepository.save(studySession);
+
+    // LearningStep에 연결
+    categoryStep.setStudySession(studySession);
+
+    // 6. 문제 할당
+    List<Long> questionIds = selectedQuestions.stream()
+        .map(Question::getId)
+        .toList();
+    sessionManager.allocateQuestions(studySession, questionIds);
+
+    // 7. 문제 반환
+    List<AssistDtos.QuizQ> items = selectedQuestions.stream()
+        .map(q -> new AssistDtos.QuizQ(
+            q.getId(),
+            Optional.ofNullable(q.getStem()).orElse(""),
+            List.of(), // 실기는 선택지 없음
+            q.getImageUrl()
+        ))
+        .toList();
+
+    AssistDtos.QuizSet set = new AssistDtos.QuizSet(items);
+
+    return new FlowDtos.StepEnvelope<>(
+        studySession.getId(),
+        "ASSIST_PRACTICAL",
+        "ASSIST_PRACTICAL_CATEGORY",
+        "IN_PROGRESS",
+        null,
+        fetchStats(userId),
+        set,
+        learningSession.getId()
+    );
+  }
+
+  /* ================= 카테고리 문제 가져오기 ================= */
+
+  @Transactional(readOnly = true)
+  public FlowDtos.StepEnvelope<AssistDtos.QuizSet> getCategorySet(Long learningSessionId) {
+    String userId = AuthUserUtil.getCurrentUserId();
+
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+    if (!"ASSIST_PRACTICAL_CATEGORY".equals(learningSession.getMode())) {
+      throw new IllegalStateException("카테고리 기반 보조학습 세션이 아닙니다.");
+    }
+
+    // 2. LearningStep 조회 (문제 풀기 단계)
+    LearningStep categoryStep = learningSessionService.getStep(learningSession, "ASSIST_PRACTICAL_CATEGORY");
+    StudySession studySession = categoryStep.getStudySession();
+
+    if (studySession == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다. 세션을 먼저 시작해주세요.");
+    }
+
+    // 3. 세션에 할당된 문제 조회 (랜덤이 아님!)
+    List<StudySessionItem> items = sessionManager.items(studySession.getId());
+    List<Long> questionIds = items.stream()
+        .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
+        .map(StudySessionItem::getQuestionId)
+        .toList();
+
+    if (questionIds.isEmpty()) {
+      throw new IllegalStateException("세션에 할당된 문제가 없습니다.");
+    }
+
+    // 4. 문제 상세 정보 조회
+    Map<Long, Question> questionMap = questionRepository.findByIdIn(questionIds).stream()
+        .filter(q -> q.getMode() == ExamMode.PRACTICAL)
+        .collect(Collectors.toMap(Question::getId, q -> q));
+
+    // 5. 순서대로 문제 반환
+    List<AssistDtos.QuizQ> quizItems = items.stream()
+        .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
+        .map(item -> {
+          Question q = questionMap.get(item.getQuestionId());
+          if (q == null) {
+            throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
+          }
+          return new AssistDtos.QuizQ(
+              q.getId(),
+              Optional.ofNullable(q.getStem()).orElse(""),
+              List.of(), // 실기는 선택지 없음
+              q.getImageUrl()
+          );
+        })
+        .toList();
+
+    AssistDtos.QuizSet set = new AssistDtos.QuizSet(quizItems);
+
+    // 6. 단계 상태 확인
+    String status = categoryStep.getStatus();
+    boolean completed = "COMPLETE".equals(status);
+    if ("READY".equals(status)) {
+      status = "IN_PROGRESS";
+    }
+
+    return new FlowDtos.StepEnvelope<>(
+        studySession.getId(),
+        "ASSIST_PRACTICAL",
+        "ASSIST_PRACTICAL_CATEGORY",
+        completed ? "COMPLETE" : "IN_PROGRESS",
+        null,
+        sessionManager.loadMeta(studySession),
+        set,
+        learningSession.getId()
+    );
   }
 
   /* ================= 난이도 ================= */
@@ -572,12 +760,19 @@ public class AssistPracticalService {
       throw new IllegalStateException("세션 소유자가 아닙니다.");
     }
     String mode = learningSession.getMode();
-    if (!"ASSIST_PRACTICAL_DIFFICULTY".equals(mode) && !"ASSIST_PRACTICAL_WEAKNESS".equals(mode)) {
+    if (!"ASSIST_PRACTICAL_DIFFICULTY".equals(mode) && !"ASSIST_PRACTICAL_WEAKNESS".equals(mode) && !"ASSIST_PRACTICAL_CATEGORY".equals(mode)) {
       throw new IllegalStateException("보조학습 세션이 아닙니다.");
     }
 
     // 2. LearningStep 조회 (문제 풀기 단계)
-    String stepCode = "ASSIST_PRACTICAL_DIFFICULTY".equals(mode) ? "ASSIST_PRACTICAL_DIFFICULTY" : "ASSIST_PRACTICAL_WEAKNESS";
+    String stepCode;
+    if ("ASSIST_PRACTICAL_DIFFICULTY".equals(mode)) {
+      stepCode = "ASSIST_PRACTICAL_DIFFICULTY";
+    } else if ("ASSIST_PRACTICAL_WEAKNESS".equals(mode)) {
+      stepCode = "ASSIST_PRACTICAL_WEAKNESS";
+    } else {
+      stepCode = "ASSIST_PRACTICAL_CATEGORY";
+    }
     LearningStep difficultyStep = learningSessionService.getStep(learningSession, stepCode);
     StudySession studySession = difficultyStep.getStudySession();
 
@@ -726,7 +921,7 @@ public class AssistPracticalService {
       throw new IllegalStateException("세션 소유자가 아닙니다.");
     }
     String mode = learningSession.getMode();
-    if (!"ASSIST_PRACTICAL_DIFFICULTY".equals(mode) && !"ASSIST_PRACTICAL_WEAKNESS".equals(mode)) {
+    if (!"ASSIST_PRACTICAL_DIFFICULTY".equals(mode) && !"ASSIST_PRACTICAL_WEAKNESS".equals(mode) && !"ASSIST_PRACTICAL_CATEGORY".equals(mode)) {
       throw new IllegalStateException("보조학습 세션이 아닙니다.");
     }
 
@@ -747,7 +942,14 @@ public class AssistPracticalService {
     String aiExplain = result.explain();
 
     // 4. StudySessionItem에 답변 저장
-    String stepCode = "ASSIST_PRACTICAL_DIFFICULTY".equals(mode) ? "ASSIST_PRACTICAL_DIFFICULTY" : "ASSIST_PRACTICAL_WEAKNESS";
+    String stepCode;
+    if ("ASSIST_PRACTICAL_DIFFICULTY".equals(mode)) {
+      stepCode = "ASSIST_PRACTICAL_DIFFICULTY";
+    } else if ("ASSIST_PRACTICAL_WEAKNESS".equals(mode)) {
+      stepCode = "ASSIST_PRACTICAL_WEAKNESS";
+    } else {
+      stepCode = "ASSIST_PRACTICAL_CATEGORY";
+    }
     LearningStep difficultyStep = learningSessionService.getStep(learningSession, stepCode);
     StudySession studySession = difficultyStep.getStudySession();
 
