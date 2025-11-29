@@ -1102,19 +1102,44 @@ public class PracticalService {
       throw new IllegalStateException("토픽이 일치하지 않습니다.");
     }
 
-    // MINI 단계에서 StudySession 가져오기
-    LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
-    StudySession session = miniStep.getStudySession();
-
-    // 4. LearningStep에서 메타데이터 추출
-    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
-
-    Map<String, Object> miniMeta = parseJson(miniStep.getMetadataJson());
-    Map<String, Object> practicalMeta = parseJson(practicalStep.getMetadataJson());
+    // 모드에 따라 적절한 단계 선택
+    String practicalStepName;
+    String miniStepName;
     
-    int miniTotal = readInt(miniMeta, "total");
-    int miniCorrect = readInt(miniMeta, "correct");
-    boolean miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+    if ("ASSIST_PRACTICAL_DIFFICULTY".equals(learningSession.getMode())) {
+      // difficulty 기반 보조학습: MINI 단계가 없고 ASSIST_PRACTICAL_DIFFICULTY 단계만 있음
+      practicalStepName = "ASSIST_PRACTICAL_DIFFICULTY";
+      miniStepName = null;
+    } else {
+      // 일반 학습: MINI와 PRACTICAL 단계 사용
+      practicalStepName = "PRACTICAL";
+      miniStepName = "MINI";
+    }
+    
+    // StudySession 가져오기
+    StudySession session;
+    Map<String, Object> miniMeta;
+    
+    int miniTotal = 0;
+    int miniCorrect = 0;
+    boolean miniPassed = true; // difficulty 기반 보조학습은 MINI가 없으므로 항상 통과로 간주
+    
+    if (miniStepName != null) {
+      LearningStep miniStep = learningSessionService.getStep(learningSession, miniStepName);
+      session = miniStep.getStudySession();
+      miniMeta = parseJson(miniStep.getMetadataJson());
+      miniTotal = readInt(miniMeta, "total");
+      miniCorrect = readInt(miniMeta, "correct");
+      miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+    } else {
+      LearningStep practicalStep = learningSessionService.getStep(learningSession, practicalStepName);
+      session = practicalStep.getStudySession();
+      miniMeta = Map.of();
+    }
+
+    // LearningStep에서 메타데이터 추출
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, practicalStepName);
+    Map<String, Object> practicalMeta = parseJson(practicalStep.getMetadataJson());
 
     int practicalTotal = readInt(practicalMeta, "total");
     int practicalCorrect = readInt(practicalMeta, "correct");
@@ -1134,7 +1159,7 @@ public class PracticalService {
           .toList();
       Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
       Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
-          .filter(q -> Objects.equals(q.getTopicId(), topicId))
+          .filter(q -> topicId == 0L || Objects.equals(q.getTopicId(), topicId)) // difficulty 기반 보조학습은 topicId=0
           .collect(Collectors.toMap(Question::getId, q -> q));
       List<UserAnswer> topicAnswers = sessionAnswers.stream()
           .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
@@ -1148,11 +1173,15 @@ public class PracticalService {
 
     // 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
     String topicTitle = "";
-    try {
-      var curriculum = curriculumGateway.getConceptWithTopic(topicId);
-      topicTitle = curriculum.topicTitle();
-    } catch (Exception ignored) {
-      // 커리큘럼 장애 시에도 요약은 진행
+    if (topicId != 0L) { // difficulty 기반 보조학습(topicId=0)은 토픽 제목 조회 생략
+      try {
+        var curriculum = curriculumGateway.getConceptWithTopic(topicId);
+        topicTitle = curriculum.topicTitle();
+      } catch (Exception ignored) {
+        // 커리큘럼 장애 시에도 요약은 진행
+      }
+    } else {
+      topicTitle = "난이도 기반 보조학습";
     }
 
     String summary = aiExplanationService.summarizePractical(
@@ -1440,19 +1469,27 @@ public class PracticalService {
 
     // 모드에 따라 적절한 단계/소스를 선택
     String stepCode;
+    String stepName;
     StudySession session;
 
-    if ("REVIEW".equals(learningSession.getMode())) {
+    if ("ASSIST_PRACTICAL_DIFFICULTY".equals(learningSession.getMode())) {
+      // difficulty 기반 보조학습
+      stepName = "ASSIST_PRACTICAL_DIFFICULTY";
+      stepCode = "ASSIST_PRACTICAL_DIFFICULTY";
+      LearningStep difficultyStep = learningSessionService.getStep(learningSession, stepName);
+      session = difficultyStep.getStudySession();
+    } else if ("REVIEW".equals(learningSession.getMode())) {
       // 실기 REVIEW 모드: PRACTICAL 단계의 StudySession 사용
-      LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
-      session = practicalStep.getStudySession();
-      // REVIEW 모드의 실기 소스는 PRACTICAL_REVIEW
+      stepName = "PRACTICAL";
       stepCode = "PRACTICAL_REVIEW";
+      LearningStep practicalStep = learningSessionService.getStep(learningSession, stepName);
+      session = practicalStep.getStudySession();
     } else {
       // Micro 실기 모드: MINI 단계와 PRACTICAL 단계가 같은 StudySession을 공유하므로 MINI 단계에서 조회
-      LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
-      session = miniStep.getStudySession();
+      stepName = "MINI";
       stepCode = "PRACTICAL_SET";
+      LearningStep miniStep = learningSessionService.getStep(learningSession, stepName);
+      session = miniStep.getStudySession();
     }
 
     if (session == null) {
@@ -1757,6 +1794,7 @@ public class PracticalService {
       case "MICRO_OX", "PRACTICAL_MINI" -> "PRACTICAL_MINI";              // 실기 OX
       case "PRACTICAL_SET", "MICRO_PRACTICAL" -> "MICRO_PRACTICAL";       // 실기 Micro 세트
       case "REVIEW", "PRACTICAL_REVIEW_SET", "PRACTICAL_REVIEW" -> "PRACTICAL_REVIEW"; // 실기 Review
+      case "ASSIST_PRACTICAL_DIFFICULTY" -> "ASSIST_PRACTICAL"; // difficulty 기반 보조학습
       default -> stepCode; // 다른 source 를 그대로 사용하고 싶을 때
     };
   }

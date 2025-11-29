@@ -56,6 +56,7 @@ public class AssistDtos {
 
   @Schema(description = "보조학습(필기) 제출 요청")
   public record WrittenSubmitReq(
+      @Schema(description = "학습 세션 ID (세션 기반 제출 시 필수)") Long learningSessionId,
       @Schema(description = "답안 목록") List<WrittenAnswer> answers
   ) {}
 
@@ -80,10 +81,21 @@ public class AssistDtos {
       @Schema(description = "DB 기본 해설") String explanation
   ) {}
 
+  /* ===================== Written Assist – 단건 즉시 채점 ===================== */
+
+  @Schema(description = "보조학습(필기) 단건 즉시 채점 응답")
+  public record WrittenGradeOneResp(
+      @Schema(description = "정오 여부") Boolean correct,
+      @Schema(description = "정답 라벨") String correctLabel,
+      @Schema(description = "DB 기본 해설") String explanation,
+      @Schema(description = "AI 해설 (오답인 경우)") String aiExplanation
+  ) {}
+
   /* ===================== Practical Assist – 제출 DTO ===================== */
 
   @Schema(description = "보조학습(실기) 제출 요청")
   public record PracticalSubmitReq(
+      @Schema(description = "학습 세션 ID (세션 기반 제출 시 필수)") Long learningSessionId,
       @Schema(description = "답안 목록") List<PracticalAnswer> answers
   ) {}
 
@@ -106,5 +118,16 @@ public class AssistDtos {
       @Schema(description = "맞음(true) / 틀림(false)") Boolean correct,
       @Schema(description = "DB 기본 해설") String baseExplanation,
       @Schema(description = "AI 해설") String aiExplanation
+  ) {}
+
+  /* ===================== Practical Assist – 단건 즉시 채점 ===================== */
+
+  @Schema(description = "보조학습(실기) 단건 즉시 채점 응답")
+  public record PracticalGradeOneResp(
+      @Schema(description = "맞음(true) / 틀림(false)") Boolean correct,
+      @Schema(description = "정답") String answerKey,
+      @Schema(description = "DB 기본 해설") String baseExplanation,
+      @Schema(description = "AI 해설") String aiExplanation,
+      @Schema(description = "AI 해설 생성 실패 여부") Boolean aiFailed
   ) {}
 }

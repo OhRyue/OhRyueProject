@@ -61,6 +61,14 @@ public class LearningSessionService {
       "PRACTICAL", "REVIEW_WRONG", "SUMMARY"
   );
 
+  private static final List<String> ORDER_ASSIST_WRITTEN_DIFFICULTY = List.of(
+      "ASSIST_WRITTEN_DIFFICULTY", "REVIEW_WRONG", "SUMMARY"
+  );
+
+  private static final List<String> ORDER_ASSIST_PRACTICAL_DIFFICULTY = List.of(
+      "ASSIST_PRACTICAL_DIFFICULTY", "REVIEW_WRONG", "SUMMARY"
+  );
+
   /** 모드에 따른 단계 순서 (ExamMode 버전) */
   private List<String> orderOf(ExamMode mode) {
     return (mode == ExamMode.PRACTICAL) ? ORDER_PRACTICAL : ORDER_WRITTEN;
@@ -71,6 +79,13 @@ public class LearningSessionService {
     // REVIEW 모드는 특별 처리 (기본값은 필기 Review)
     if ("REVIEW".equalsIgnoreCase(modeStr)) {
       return ORDER_REVIEW_WRITTEN;
+    }
+    // difficulty 기반 보조학습 모드 처리
+    if ("ASSIST_WRITTEN_DIFFICULTY".equals(modeStr)) {
+      return ORDER_ASSIST_WRITTEN_DIFFICULTY;
+    }
+    if ("ASSIST_PRACTICAL_DIFFICULTY".equals(modeStr)) {
+      return ORDER_ASSIST_PRACTICAL_DIFFICULTY;
     }
     return orderOf(parseMode(modeStr));
   }
@@ -470,7 +485,11 @@ public class LearningSessionService {
    * 단계별 완료 조건 검증이 필요한지 확인
    */
   private boolean requiresCompletionCheck(String stepCode) {
-    return "MINI".equals(stepCode) || "MCQ".equals(stepCode) || "PRACTICAL".equals(stepCode);
+    return "MINI".equals(stepCode) || 
+           "MCQ".equals(stepCode) || 
+           "PRACTICAL".equals(stepCode) ||
+           "ASSIST_WRITTEN_DIFFICULTY".equals(stepCode) ||
+           "ASSIST_PRACTICAL_DIFFICULTY".equals(stepCode);
   }
 
   /**
@@ -517,6 +536,7 @@ public class LearningSessionService {
     // MINI와 MCQ는 각각 별도의 StudySession을 가지므로 모든 아이템이 해당 단계의 문제
     // PRACTICAL은 MINI와 같은 StudySession을 공유하므로 orderNo > 4로 필터링
     // Review 모드의 MCQ는 별도 StudySession이므로 모든 아이템
+    // ASSIST_*_DIFFICULTY는 별도 StudySession이므로 모든 아이템
     List<com.OhRyue.certpilot.study.domain.StudySessionItem> stepItems;
     if ("MINI".equals(step.getStepCode())) {
       // MINI는 orderNo 1-4
@@ -531,6 +551,10 @@ public class LearningSessionService {
       stepItems = items.stream()
           .filter(item -> item.getOrderNo() > 4)
           .toList();
+    } else if ("ASSIST_WRITTEN_DIFFICULTY".equals(step.getStepCode()) || 
+               "ASSIST_PRACTICAL_DIFFICULTY".equals(step.getStepCode())) {
+      // ASSIST_*_DIFFICULTY는 별도 StudySession이므로 모든 아이템
+      stepItems = items;
     } else {
       return; // 검증 불필요
     }
@@ -585,7 +609,9 @@ public class LearningSessionService {
   private boolean hasStudySession(LearningStep step) {
     return "MINI".equals(step.getStepCode()) || 
            "MCQ".equals(step.getStepCode()) || 
-           "PRACTICAL".equals(step.getStepCode());
+           "PRACTICAL".equals(step.getStepCode()) ||
+           "ASSIST_WRITTEN_DIFFICULTY".equals(step.getStepCode()) ||
+           "ASSIST_PRACTICAL_DIFFICULTY".equals(step.getStepCode());
   }
 
   /**
@@ -621,14 +647,18 @@ public class LearningSessionService {
     }
     
     // 현재 단계의 오답 목록 확인
-    // REVIEW_WRONG 단계를 완료할 때는 이전 단계(MCQ 또는 PRACTICAL)의 오답을 확인해야 함
+    // REVIEW_WRONG 단계를 완료할 때는 이전 단계(MCQ, PRACTICAL, 또는 ASSIST_*_DIFFICULTY)의 오답을 확인해야 함
     boolean hasWrongAnswers;
     if ("REVIEW_WRONG".equals(currentStep.getStepCode())) {
-      // REVIEW_WRONG 단계를 완료할 때는 이전 단계(MCQ 또는 PRACTICAL)의 오답을 확인
+      // REVIEW_WRONG 단계를 완료할 때는 이전 단계의 오답을 확인
       String previousStepCode;
       if ("REVIEW".equals(mode)) {
         // Review 모드에서는 MCQ만 있음
         previousStepCode = "MCQ";
+      } else if ("ASSIST_WRITTEN_DIFFICULTY".equals(mode)) {
+        previousStepCode = "ASSIST_WRITTEN_DIFFICULTY";
+      } else if ("ASSIST_PRACTICAL_DIFFICULTY".equals(mode)) {
+        previousStepCode = "ASSIST_PRACTICAL_DIFFICULTY";
       } else {
         previousStepCode = mode.equals("PRACTICAL") ? "PRACTICAL" : "MCQ";
       }

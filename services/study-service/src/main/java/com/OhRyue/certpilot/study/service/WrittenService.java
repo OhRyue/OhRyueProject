@@ -899,19 +899,41 @@ public class WrittenService {
       throw new IllegalStateException("토픽이 일치하지 않습니다.");
     }
     
-    // 2. StudySession 조회 (MCQ 세션 사용)
-    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+    // 2. 모드에 따라 적절한 단계 선택
+    String mcqStepName;
+    String miniStepName;
+    
+    if ("ASSIST_WRITTEN_DIFFICULTY".equals(learningSession.getMode())) {
+      // difficulty 기반 보조학습: MINI 단계가 없고 ASSIST_WRITTEN_DIFFICULTY 단계만 있음
+      mcqStepName = "ASSIST_WRITTEN_DIFFICULTY";
+      miniStepName = null;
+    } else {
+      // 일반 학습: MINI와 MCQ 단계 사용
+      mcqStepName = "MCQ";
+      miniStepName = "MINI";
+    }
+    
+    // 3. StudySession 조회
+    LearningStep mcqStep = learningSessionService.getStep(learningSession, mcqStepName);
     StudySession session = mcqStep.getStudySession();
 
-    // 3. LearningStep에서 메타데이터 추출
-    LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
-    
-    Map<String, Object> miniMeta = parseJson(miniStep.getMetadataJson());
+    // 4. LearningStep에서 메타데이터 추출
+    Map<String, Object> miniMeta;
     Map<String, Object> mcqMeta = parseJson(mcqStep.getMetadataJson());
     
-    int miniTotal = readInt(miniMeta, "total");
-    int miniCorrect = readInt(miniMeta, "correct");
-    boolean miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+    int miniTotal = 0;
+    int miniCorrect = 0;
+    boolean miniPassed = true; // difficulty 기반 보조학습은 MINI가 없으므로 항상 통과로 간주
+    
+    if (miniStepName != null) {
+      LearningStep miniStep = learningSessionService.getStep(learningSession, miniStepName);
+      miniMeta = parseJson(miniStep.getMetadataJson());
+      miniTotal = readInt(miniMeta, "total");
+      miniCorrect = readInt(miniMeta, "correct");
+      miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+    } else {
+      miniMeta = Map.of();
+    }
     
     int mcqTotal = readInt(mcqMeta, "total");
     int mcqCorrect = readInt(mcqMeta, "correct");
@@ -931,7 +953,7 @@ public class WrittenService {
           .toList();
       Set<Long> questionIds = sessionAnswers.stream().map(UserAnswer::getQuestionId).collect(Collectors.toSet());
       Map<Long, Question> questionCache = questionRepository.findByIdIn(questionIds).stream()
-          .filter(q -> Objects.equals(q.getTopicId(), topicId))
+          .filter(q -> topicId == 0L || Objects.equals(q.getTopicId(), topicId)) // difficulty 기반 보조학습은 topicId=0
           .collect(Collectors.toMap(Question::getId, q -> q));
       List<UserAnswer> answers = sessionAnswers.stream()
           .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
@@ -944,10 +966,14 @@ public class WrittenService {
     boolean completed = miniPassed && mcqCompleted;
 
     String topicTitle = "";
-    try {
-      CurriculumGateway.CurriculumConcept curriculum = curriculumGateway.getConceptWithTopic(topicId);
-      topicTitle = curriculum.topicTitle();
-    } catch (Exception ignored) {
+    if (topicId != 0L) { // difficulty 기반 보조학습(topicId=0)은 토픽 제목 조회 생략
+      try {
+        CurriculumGateway.CurriculumConcept curriculum = curriculumGateway.getConceptWithTopic(topicId);
+        topicTitle = curriculum.topicTitle();
+      } catch (Exception ignored) {
+      }
+    } else {
+      topicTitle = "난이도 기반 보조학습";
     }
 
     String summaryText = aiExplanationService.summarizeWritten(
@@ -1022,17 +1048,25 @@ public class WrittenService {
     
     // 모드에 따라 적절한 단계 선택
     String stepCode;
-    if ("REVIEW".equals(learningSession.getMode())) {
+    String stepName;
+    
+    if ("ASSIST_WRITTEN_DIFFICULTY".equals(learningSession.getMode())) {
+      // difficulty 기반 보조학습
+      stepName = "ASSIST_WRITTEN_DIFFICULTY";
+      stepCode = "ASSIST_WRITTEN_DIFFICULTY";
+    } else if ("REVIEW".equals(learningSession.getMode())) {
+      stepName = "MCQ";
       stepCode = "REVIEW_MCQ";
     } else {
+      stepName = "MCQ";
       stepCode = "MICRO_MCQ";
     }
     
-    // MCQ 단계의 LearningStep 조회
-    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+    // 해당 단계의 LearningStep 조회
+    LearningStep step = learningSessionService.getStep(learningSession, stepName);
     
     // StudySession 조회
-    StudySession session = mcqStep.getStudySession();
+    StudySession session = step.getStudySession();
     if (session == null) {
       return new WrongRecapDtos.WrongRecapSet(List.of());
     }
@@ -1745,6 +1779,7 @@ public class WrittenService {
       case "MICRO_OX", "MICRO_MINI" -> "MICRO_MINI";    // 필기 Micro OX
       case "MICRO_MCQ" -> "MICRO_MCQ";                  // 필기 Micro MCQ
       case "REVIEW", "REVIEW_SET", "REVIEW_MCQ" -> "REVIEW_MCQ"; // 필기 Review
+      case "ASSIST_WRITTEN_DIFFICULTY" -> "ASSIST_WRITTEN"; // difficulty 기반 보조학습
       default -> stepCode; // 혹시 다른 모드(source)를 그대로 넘기고 싶을 때
     };
   }

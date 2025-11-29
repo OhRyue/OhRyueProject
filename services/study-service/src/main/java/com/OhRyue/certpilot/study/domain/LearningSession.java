@@ -26,8 +26,8 @@ public class LearningSession {
   @Column(name = "topic_id", nullable = false)
   private Long topicId;
 
-  @Column(nullable = false, length = 20)
-  private String mode; // WRITTEN | PRACTICAL
+  @Column(nullable = false, length = 50)
+  private String mode; // WRITTEN | PRACTICAL | REVIEW | ASSIST_PRACTICAL_DIFFICULTY | ASSIST_WRITTEN_DIFFICULTY
 
   @Column(nullable = false, length = 20)
   private String status; // IN_PROGRESS | DONE (과정 완료)
