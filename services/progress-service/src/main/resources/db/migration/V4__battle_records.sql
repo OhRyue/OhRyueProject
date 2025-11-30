@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS battle_record (
   mode         ENUM('DUEL','TOURNAMENT','GOLDENBELL') NOT NULL,
   exam_mode    ENUM('WRITTEN','PRACTICAL') NULL,
   score        INT NOT NULL DEFAULT 0,
-  rank         INT NOT NULL,
+  player_rank         INT NOT NULL,
   correct_count INT NOT NULL DEFAULT 0,
   total_count  INT NOT NULL DEFAULT 0,
   total_time_ms BIGINT NOT NULL DEFAULT 0,
