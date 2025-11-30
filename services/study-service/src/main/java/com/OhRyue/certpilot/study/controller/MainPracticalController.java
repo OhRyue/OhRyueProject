@@ -100,6 +100,14 @@ public class MainPracticalController {
     return practical.gradeOnePracticalReview(sessionId, req);
   }
 
+  @Operation(summary = "실기 리뷰 요약", description = "Review 모드의 실기 학습 결과를 요약하여 반환합니다.")
+  @GetMapping("/review/summary")
+  public FlowDtos.StepEnvelope<WrittenDtos.SummaryResp> practicalReviewSummary(
+      @RequestParam Long rootTopicId,
+      @RequestParam Long sessionId) {
+    return practical.practicalReviewSummary(rootTopicId, sessionId);
+  }
+
   /* -------- 요약/즉시 채점 -------- */
   @Operation(summary = "실기 진행 요약", description = "평균 점수/풀이 수/AI 요약 제공")
   @GetMapping("/summary")

@@ -2,6 +2,7 @@ package com.OhRyue.certpilot.study.controller;
 
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.dto.TopicProgressDtos.BatchTopicStatusResp;
+import com.OhRyue.certpilot.study.dto.TopicProgressDtos.BatchTopicReviewStatusResp;
 import com.OhRyue.certpilot.study.dto.TopicProgressDtos.MicroLearningStatsResp;
 import com.OhRyue.certpilot.study.service.TopicProgressService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,6 +53,25 @@ public class TopicProgressController {
   @GetMapping("/micro-stats")
   public MicroLearningStatsResp getMicroStats(@RequestParam ExamMode mode) {
     return topicProgressService.getMicroLearningStats(mode);
+  }
+
+  @Operation(
+      summary = "여러 토픽의 review 총정리 완료 상태 조회",
+      description = """
+          여러 rootTopicId에 대한 review 총정리 완료 상태를 일괄 조회합니다.
+          - rootTopicIds: 조회할 루트 토픽 ID 목록 (쉼표로 구분 또는 List)
+          - mode: WRITTEN 또는 PRACTICAL (현재는 사용하지 않지만 향후 확장 가능)
+          - 응답의 status 값:
+            - NOT_STARTED: 시작 안함
+            - COMPLETED: 완료함 (전체 과정 완료했지만 문제를 틀림)
+            - TRULY_COMPLETED: 진정한 완료 (모든 문제를 맞춤)
+          """
+  )
+  @GetMapping("/review-status")
+  public BatchTopicReviewStatusResp getBatchReviewStatus(
+      @RequestParam List<Long> rootTopicIds,
+      @RequestParam ExamMode mode) {
+    return topicProgressService.getBatchTopicReviewStatus(rootTopicIds, mode);
   }
 }
 

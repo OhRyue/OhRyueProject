@@ -125,5 +125,60 @@ public class TopicProgressService {
 
     return new MicroLearningStatsResp(totalCount, completedCount, completionRate);
   }
+
+  @Transactional(readOnly = true)
+  public BatchTopicReviewStatusResp getBatchTopicReviewStatus(List<Long> rootTopicIds, ExamMode examMode) {
+    String userId = AuthUserUtil.getCurrentUserId();
+    String modeStr = "REVIEW";  // Review 모드는 항상 "REVIEW" 문자열
+
+    // 여러 rootTopicId의 학습 세션을 한 번에 조회 (mode="REVIEW")
+    List<LearningSession> allSessions = learningSessionRepository
+        .findByUserIdAndTopicIdInAndMode(userId, rootTopicIds, modeStr);
+
+    // rootTopicId별로 세션 그룹화
+    Map<Long, List<LearningSession>> sessionsByRootTopic = allSessions.stream()
+        .collect(Collectors.groupingBy(LearningSession::getTopicId));
+
+    // 각 rootTopicId에 대한 상태 결정
+    // 완료 상태(status)와 이어서 하기 가능 여부(resumable)는 독립적으로 결정
+    List<TopicReviewStatus> statuses = rootTopicIds.stream()
+        .map(rootTopicId -> {
+          List<LearningSession> topicSessions = sessionsByRootTopic.getOrDefault(rootTopicId, List.of());
+          
+          if (topicSessions.isEmpty()) {
+            // 시작 안함
+            return new TopicReviewStatus(rootTopicId, "NOT_STARTED", false);
+          }
+          
+          // 완료 상태 결정: DONE 세션 중 가장 최근 것 찾기
+          LearningSession completedSession = topicSessions.stream()
+              .filter(s -> "DONE".equals(s.getStatus()))
+              .max((s1, s2) -> s1.getUpdatedAt().compareTo(s2.getUpdatedAt()))
+              .orElse(null);
+          
+          // 이어서 하기 가능 여부: IN_PROGRESS 세션 존재 여부
+          boolean hasInProgress = topicSessions.stream()
+              .anyMatch(s -> "IN_PROGRESS".equals(s.getStatus()));
+          
+          // 완료 상태 결정 (DONE 세션의 완료 기록 기반)
+          String status;
+          if (completedSession == null) {
+            // 완료된 세션이 없으면 시작 안함
+            status = "NOT_STARTED";
+          } else if (Boolean.TRUE.equals(completedSession.getTrulyCompleted())) {
+            // 진정한 완료 (모든 문제를 맞춤)
+            status = "TRULY_COMPLETED";
+          } else {
+            // 일반 완료 (전체 과정 완료했지만 문제를 틀림)
+            status = "COMPLETED";
+          }
+          
+          // resumable은 IN_PROGRESS 세션 존재 여부로만 결정 (완료 상태와 독립적)
+          return new TopicReviewStatus(rootTopicId, status, hasInProgress);
+        })
+        .collect(Collectors.toList());
+
+    return new BatchTopicReviewStatusResp(statuses);
+  }
 }
 
