@@ -41,11 +41,12 @@ class VersusResultControllerTest {
             123L,
             "user1",
             List.of(
-                new VersusDtos.ParticipantResult("user1", 8500, 1, 8, 10, 45000L),
-                new VersusDtos.ParticipantResult("user2", 7200, 2, 7, 10, 50000L)
+                new VersusDtos.ParticipantResult("user1", 8500, 1, 8, 10, 45000L, null),
+                new VersusDtos.ParticipantResult("user2", 7200, 2, 7, 10, 50000L, null)
             ),
             10,
-            120000L
+            120000L,
+            "WRITTEN"
         );
 
         doNothing().when(versusResultService).recordVersusResult(any());
@@ -66,11 +67,12 @@ class VersusResultControllerTest {
             124L,
             "user1",
             List.of(
-                new VersusDtos.ParticipantResult("user1", 15000, 1, 9, 9, 60000L),
-                new VersusDtos.ParticipantResult("user2", 12000, 2, 7, 9, 70000L)
+                new VersusDtos.ParticipantResult("user1", 15000, 1, 9, 9, 60000L, null),
+                new VersusDtos.ParticipantResult("user2", 12000, 2, 7, 9, 70000L, null)
             ),
             9,
-            180000L
+            180000L,
+            "WRITTEN"
         );
 
         doNothing().when(versusResultService).recordVersusResult(any());
@@ -91,10 +93,11 @@ class VersusResultControllerTest {
             125L,
             "user1",
             List.of(
-                new VersusDtos.ParticipantResult("user1", 20000, 1, 6, 6, 55000L)
+                new VersusDtos.ParticipantResult("user1", 20000, 1, 6, 6, 55000L, null)
             ),
             6,
-            60000L
+            60000L,
+            "WRITTEN"
         );
 
         doNothing().when(versusResultService).recordVersusResult(any());

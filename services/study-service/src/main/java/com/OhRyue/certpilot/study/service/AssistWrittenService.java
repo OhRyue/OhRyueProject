@@ -1001,22 +1001,8 @@ public class AssistWrittenService {
       }
     }
 
-    // passed=true일 때만 XP 지급, 세션당 1회만
-    if (allCorrect && !Boolean.TRUE.equals(studySession.getXpGranted())) {
-      try {
-        progressHookClient.flowComplete(
-            new com.OhRyue.certpilot.study.client.ProgressHookClient.FlowCompletePayload(
-                userId,
-                ExamMode.WRITTEN.name(),
-                "ASSIST",
-                null // Assist는 topicId 없음
-            )
-        );
-        sessionManager.markXpGranted(studySession);
-      } catch (Exception e) {
-        log.debug("XP grant failed for assist session {}: {}", studySession.getId(), e.getMessage());
-      }
-    }
+    // 보조학습은 각 문제 제출 시 이미 progressHookClient.submit()을 통해 XP가 지급됨
+    // flowComplete는 메인학습(MICRO/REVIEW)용이므로 호출하지 않음
 
     AssistDtos.WrittenSubmitResp payload =
         new AssistDtos.WrittenSubmitResp(total, correct, items);
@@ -1271,7 +1257,7 @@ public class AssistWrittenService {
       }
     }
 
-    // 세션 완료 처리 및 XP 지급
+    // 세션 완료 처리
     boolean allCorrect = !items.isEmpty() && wrongQuestionIds.isEmpty();
     double scorePct = items.isEmpty() ? 0.0 : (correct * 100.0) / items.size();
     sessionManager.closeSession(session, scorePct, allCorrect, Map.of(
@@ -1280,22 +1266,8 @@ public class AssistWrittenService {
         "wrongQuestionIds", wrongQuestionIds
     ));
 
-    // passed=true일 때만 XP 지급, 세션당 1회만
-    if (allCorrect && !Boolean.TRUE.equals(session.getXpGranted())) {
-      try {
-        progressHookClient.flowComplete(
-            new com.OhRyue.certpilot.study.client.ProgressHookClient.FlowCompletePayload(
-                userId,
-                ExamMode.WRITTEN.name(),
-                "ASSIST",
-                null // Assist는 topicId 없음
-            )
-        );
-        sessionManager.markXpGranted(session);
-      } catch (Exception e) {
-        log.debug("XP grant failed for assist session {}: {}", session.getId(), e.getMessage());
-      }
-    }
+    // 보조학습은 각 문제 제출 시 이미 progressHookClient.submit()을 통해 XP가 지급됨
+    // flowComplete는 메인학습(MICRO/REVIEW)용이므로 호출하지 않음
 
     AssistDtos.WrittenSubmitResp payload =
         new AssistDtos.WrittenSubmitResp(req.answers().size(), correct, items);

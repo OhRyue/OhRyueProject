@@ -13,6 +13,8 @@ import com.OhRyue.certpilot.progress.repository.UserXpLedgerRepository;
 import com.OhRyue.certpilot.progress.repository.UserXpWalletRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,18 +36,20 @@ public class XpService {
     /**
      * 레벨 계산 규칙: 300 + 레벨 × 50
      * 
-     * 레벨별 요구 XP:
-     * Lv1 → 2: 350 XP (300 + 1 × 50)
-     * Lv2 → 3: 400 XP (300 + 2 × 50)
-     * Lv3 → 4: 450 XP (300 + 3 × 50)
+     * 레벨별 요구 XP 및 누적 XP:
+     * Lv1 → 2: 350 XP (누적 350)
+     * Lv2 → 3: 400 XP (누적 750)
+     * Lv3 → 4: 450 XP (누적 1200)
+     * Lv4 → 5: 500 XP (누적 1700)
+     * Lv5 → 6: 550 XP (누적 2250)
+     * Lv6 → 7: 600 XP (누적 2850)
+     * Lv7 → 8: 650 XP (누적 3500)
+     * Lv8 → 9: 700 XP (누적 4200)
+     * Lv9 → 10: 750 XP (누적 4950)
      * ...
      * 
-     * 누적 XP:
-     * Lv1: 0 XP
-     * Lv2: 350 XP
-     * Lv3: 750 XP (350 + 400)
-     * Lv4: 1200 XP (750 + 450)
-     * ...
+     * 공식: 각 레벨에서 다음 레벨까지 필요한 XP = 300 + 현재 레벨 × 50
+     * 예: Lv1 → 2 = 300 + 1 × 50 = 350 XP
      */
     private int calcLevel(long xpTotal) {
         if (xpTotal < 350) {
@@ -141,6 +145,10 @@ public class XpService {
                 .createdAt(Instant.now())
                 .build());
 
+        // 경험치 지급 로그
+        log.info("XP granted: userId={}, delta={}, reason={}, refId={}, beforeXp={}, afterXp={}, level={}", 
+                userId, delta, reason, refId, before, w.getXpTotal(), w.getLevel());
+
         return w;
     }
 
@@ -188,5 +196,10 @@ public class XpService {
                         .level(1)
                         .build()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserXpLedger> getLedger(String userId, Pageable pageable) {
+        return ledgerRepo.findByUserIdOrderByCreatedAtDesc(userId, pageable);
     }
 }

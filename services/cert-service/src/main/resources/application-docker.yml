@@ -6,7 +6,7 @@ spring:
     name: cert-service
 
   datasource:
-    url: jdbc:mysql://mysql:3306/certpilot_cert?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://mysql:3306/certpilot_cert?useSSL=floalse&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
     username: cert
     password: certpw
 

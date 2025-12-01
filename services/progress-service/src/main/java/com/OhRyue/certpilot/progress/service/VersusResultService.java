@@ -48,7 +48,8 @@ public class VersusResultService {
             request.questionCount(), request.durationMs());
 
         String mode = request.mode().toUpperCase();
-        String refId = "versus:" + request.roomId() + ":" + mode;
+        // Assist/Duel/Tournament/Goldenbell은 매번 지급되므로 refId를 null로 설정
+        String refId = null;
 
         int successCount = 0;
         int failCount = 0;

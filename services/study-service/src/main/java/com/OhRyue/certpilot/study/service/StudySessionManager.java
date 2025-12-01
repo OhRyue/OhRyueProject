@@ -339,6 +339,94 @@ public class StudySessionManager {
         }
     }
 
+    /**
+     * 세션의 passed 상태 업데이트
+     */
+    @Transactional
+    public void updatePassed(StudySession session, boolean passed) {
+        session.setPassed(passed);
+        sessionRepository.save(session);
+    }
+
+    /**
+     * 세션 종료 공통 처리 (finalizeStudySession)
+     * study_session_item 기준으로 total, correct, score_pct 계산
+     * completed = 1, passed = (correct == total)
+     * finished_at, summary_json 업데이트
+     * learning_step도 업데이트 (status, score_pct, metadata_json)
+     * 
+     * @param session 완료할 StudySession
+     * @return finalize 결과 정보 (total, correct, scorePct, passed)
+     */
+    @Transactional
+    public FinalizeResult finalizeStudySession(StudySession session) {
+        // 1. study_session_item 전체 조회
+        List<StudySessionItem> allItems = items(session.getId());
+        
+        // 2. total, correct 계산
+        int total = allItems.size();
+        long correctCount = allItems.stream()
+                .filter(item -> Boolean.TRUE.equals(item.getCorrect()))
+                .count();
+        int correct = (int) correctCount;
+        
+        // 3. score_pct 계산 (반올림하여 소수점 2자리)
+        double scorePct = total > 0 ? Math.round((correct * 100.0) / total * 100.0) / 100.0 : 0.0;
+        
+        // 4. passed 계산: 모든 문제를 맞았는지
+        boolean passed = (correct == total) && total > 0;
+        
+        // 5. summary_json 업데이트
+        Map<String, Object> summary = loadMeta(session);
+        summary.put("total", total);
+        summary.put("correct", correct);
+        summary.put("scorePct", scorePct);
+        summary.put("passed", passed);
+        summary.put("lastSubmittedAt", Instant.now().toString());
+        
+        // 6. StudySession 업데이트
+        session.setScorePct(scorePct);
+        session.setSummaryJson(stringify(summary));
+        session.setFinishedAt(Instant.now());
+        session.setStatus("SUBMITTED");
+        session.setCompleted(true);
+        session.setPassed(passed);
+        sessionRepository.save(session);
+        
+        // 7. LearningStep 업데이트 (연결되어 있는 경우)
+        LearningStep learningStep = session.getLearningStep();
+        if (learningStep != null) {
+            Map<String, Object> stepMetadata = new HashMap<>();
+            try {
+                if (learningStep.getMetadataJson() != null && !learningStep.getMetadataJson().isBlank()) {
+                    stepMetadata = objectMapper.readValue(learningStep.getMetadataJson(), MAP_TYPE);
+                }
+            } catch (JsonProcessingException e) {
+                // 기존 메타데이터가 없거나 파싱 실패 시 빈 맵 사용
+            }
+            
+            stepMetadata.put("total", total);
+            stepMetadata.put("correct", correct);
+            stepMetadata.put("scorePct", (int) Math.round(scorePct));
+            stepMetadata.put("passed", passed);
+            stepMetadata.put("completed", true);
+            stepMetadata.put("lastSubmittedAt", Instant.now().toString());
+            
+            learningStep.setScorePct((int) Math.round(scorePct));
+            learningStep.setMetadataJson(stringify(stepMetadata));
+            learningStep.setStatus("COMPLETE");
+            learningStep.setUpdatedAt(Instant.now());
+            learningStepRepository.save(learningStep);
+        }
+        
+        return new FinalizeResult(total, correct, scorePct, passed);
+    }
+    
+    /**
+     * finalizeStudySession 결과를 담는 레코드
+     */
+    public record FinalizeResult(int total, int correct, double scorePct, boolean passed) {}
+
     public List<StudySessionItem> items(Long sessionId) {
         return itemRepository.findBySessionIdOrderByOrderNoAsc(sessionId);
     }

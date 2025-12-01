@@ -12,6 +12,9 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
       String userId, String topicScopeJson, String mode);
 
   List<StudySession> findByUserIdOrderByStartedAtDesc(String userId);
+  
+  // MICRO 세션 조회: userId, mode="MICRO", examMode, topic_scope_json에 topicId 포함
+  List<StudySession> findByUserIdAndModeAndExamMode(String userId, String mode, com.OhRyue.certpilot.study.domain.enums.ExamMode examMode);
 }
 
 

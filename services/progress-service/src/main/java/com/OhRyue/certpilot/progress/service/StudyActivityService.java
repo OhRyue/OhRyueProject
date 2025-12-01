@@ -1,8 +1,20 @@
 package com.OhRyue.certpilot.progress.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.WeekFields;
+import java.util.List;
+import java.util.Locale;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.OhRyue.certpilot.progress.domain.ReportDaily;
 import com.OhRyue.certpilot.progress.domain.ReportTagSkill;
 import com.OhRyue.certpilot.progress.domain.ReportWeekly;
+import com.OhRyue.certpilot.progress.domain.UserXpWallet;
 import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
 import com.OhRyue.certpilot.progress.domain.enums.QuestionType;
 import com.OhRyue.certpilot.progress.domain.enums.XpReason;
@@ -10,17 +22,11 @@ import com.OhRyue.certpilot.progress.dto.HookDtos.StudySubmitReq;
 import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
 import com.OhRyue.certpilot.progress.repository.ReportTagSkillRepository;
 import com.OhRyue.certpilot.progress.repository.ReportWeeklyRepository;
+
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.*;
-import java.time.temporal.WeekFields;
-import java.util.List;
-import java.util.Locale;
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StudyActivityService {
@@ -43,9 +49,24 @@ public class StudyActivityService {
         int xpDelta = 0;
         int timeSpent = DEFAULT_TIME_PER_PROBLEM_SEC;
 
-        // XP Reason & refId (idempotent)
+        // XP Reason & refId
         XpReason reason = mapReason(payload.source());
         String refId = buildRefId(payload, examMode, questionType);
+
+        // 보조학습(ASSIST): 매번 지급되도록 refId를 null로 설정, 정답일 때만 5 XP
+        if (reason == XpReason.ASSIST) {
+            refId = null; // ASSIST는 매번 지급되므로 idempotency 체크 비활성화
+            xpDelta = computeXpDelta(examMode, questionType, isCorrect);
+            if (xpDelta > 0) {
+                UserXpWallet walletBefore = xpService.getWallet(payload.userId());
+                UserXpWallet walletAfter = xpService.addXp(payload.userId(), xpDelta, reason, refId);
+                long actualXpGained = walletAfter.getXpTotal() - walletBefore.getXpTotal();
+                log.info(
+                    "Assist answer - XP granted: userId={}, correct={}, xpGained={}, newTotal={}, level={}",
+                    payload.userId(), isCorrect, actualXpGained, walletAfter.getXpTotal(), walletAfter.getLevel()
+                );
+            }
+        }
 
         // XP & Rank (XP는 (userId, reason, refId) 기준으로 한 번만 지급)
         rankService.recomputeForUser(payload.userId());
@@ -56,15 +77,15 @@ public class StudyActivityService {
         // Daily report (문항 단위로 계속 누적)
         LocalDate today = LocalDate.now(KST);
         ReportDaily daily = dailyRepository.findByUserIdAndDate(payload.userId(), today)
-                .orElse(ReportDaily.builder()
-                        .userId(payload.userId())
-                        .date(today)
-                        .solvedCount(0)
-                        .correctCount(0)
-                        .timeSpentSec(0)
-                        .accuracy(BigDecimal.ZERO)
-                        .xpGained(0)
-                        .build());
+            .orElse(ReportDaily.builder()
+                .userId(payload.userId())
+                .date(today)
+                .solvedCount(0)
+                .correctCount(0)
+                .timeSpentSec(0)
+                .accuracy(BigDecimal.ZERO)
+                .xpGained(0)
+                .build());
         daily.setSolvedCount(daily.getSolvedCount() + 1);
         if (isCorrect) {
             daily.setCorrectCount(daily.getCorrectCount() + 1);
@@ -77,15 +98,15 @@ public class StudyActivityService {
         // Weekly report (마찬가지로 문항 단위)
         String weekIso = isoWeek(today);
         ReportWeekly weekly = weeklyRepository.findByUserIdAndWeekIso(payload.userId(), weekIso)
-                .orElse(ReportWeekly.builder()
-                        .userId(payload.userId())
-                        .weekIso(weekIso)
-                        .solvedCount(0)
-                        .correctCount(0)
-                        .timeSpentSec(0)
-                        .accuracy(BigDecimal.ZERO)
-                        .xpGained(0)
-                        .build());
+            .orElse(ReportWeekly.builder()
+                .userId(payload.userId())
+                .weekIso(weekIso)
+                .solvedCount(0)
+                .correctCount(0)
+                .timeSpentSec(0)
+                .accuracy(BigDecimal.ZERO)
+                .xpGained(0)
+                .build());
         weekly.setSolvedCount(weekly.getSolvedCount() + 1);
         if (isCorrect) {
             weekly.setCorrectCount(weekly.getCorrectCount() + 1);
@@ -97,21 +118,21 @@ public class StudyActivityService {
 
         // Tag skill (문항 단위, 태그별 능력치 누적)
         List<String> tags = payload.tags() == null ? List.of() : payload.tags().stream()
-                .filter(tag -> tag != null && !tag.isBlank())
-                .distinct()
-                .toList();
+            .filter(tag -> tag != null && !tag.isBlank())
+            .distinct()
+            .toList();
         if (!tags.isEmpty()) {
             for (String tag : tags) {
                 ReportTagSkill skill = tagSkillRepository
-                        .findByUserIdAndTagAndExamMode(payload.userId(), tag, examMode)
-                        .orElse(ReportTagSkill.builder()
-                                .userId(payload.userId())
-                                .tag(tag)
-                                .examMode(examMode)
-                                .correct(0)
-                                .total(0)
-                                .accuracy(BigDecimal.ZERO)
-                                .build());
+                    .findByUserIdAndTagAndExamMode(payload.userId(), tag, examMode)
+                    .orElse(ReportTagSkill.builder()
+                        .userId(payload.userId())
+                        .tag(tag)
+                        .examMode(examMode)
+                        .correct(0)
+                        .total(0)
+                        .accuracy(BigDecimal.ZERO)
+                        .build());
                 skill.setTotal(skill.getTotal() + 1);
                 if (isCorrect) {
                     skill.setCorrect(skill.getCorrect() + 1);
@@ -153,7 +174,7 @@ public class StudyActivityService {
     private int computeXpDelta(ExamMode mode, QuestionType type, boolean correct) {
         // 보조학습: 정답만 경험치 지급, 오답은 0 XP
         if (!correct) {
-            return 0; // 오답은 경험치 지급 안함
+            return 0;
         }
         return 5; // 정답 5 XP
     }
@@ -177,25 +198,16 @@ public class StudyActivityService {
      *
      * 예시:
      *  study:ohryue:WRITTEN:MICRO:MCQ:2025-11-17
-     *
-     *  - userId
-     *  - ExamMode (WRITTEN / PRACTICAL)
-     *  - flow (MICRO / REVIEW / ASSIST / BATTLE / ETC)  ← source 기준
-     *  - QuestionType (MCQ / OX / SHORT / LONG ...)
-     *  - 날짜(yyyy-MM-dd)
-     *
-     *  이렇게 만들면, 같은 날에 같은 흐름/모드/문제타입으로 몇 문제를 풀든
-     *  XP는 한 번만 지급됩니다.
      */
     private String buildRefId(StudySubmitReq payload, ExamMode mode, QuestionType type) {
         String flow = normalizeFlowFromSource(payload.source());
         LocalDate today = LocalDate.now(KST);
         return "study:"
-                + payload.userId() + ":"
-                + mode.name().toUpperCase(Locale.ROOT) + ":"
-                + flow + ":"
-                + type.name().toUpperCase(Locale.ROOT) + ":"
-                + today;
+            + payload.userId() + ":"
+            + mode.name().toUpperCase(Locale.ROOT) + ":"
+            + flow + ":"
+            + type.name().toUpperCase(Locale.ROOT) + ":"
+            + today;
     }
 
     private String normalizeFlowFromSource(String source) {

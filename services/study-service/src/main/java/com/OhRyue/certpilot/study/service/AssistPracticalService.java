@@ -843,9 +843,42 @@ public class AssistPracticalService {
               correct ? 100 : 0,
               aiExplainJson
           );
+
+          // UserAnswer 저장
+          com.OhRyue.certpilot.study.domain.UserAnswer userAnswer =
+              com.OhRyue.certpilot.study.domain.UserAnswer.builder()
+                  .userId(userId)
+                  .questionId(ans.questionId())
+                  .examMode(ExamMode.PRACTICAL)
+                  .questionType(q.getType())
+                  .userAnswerJson(answerJson)
+                  .correct(correct)
+                  .score(correct ? 100 : 0)
+                  .source("ASSIST_PRACTICAL")
+                  .sessionId(studySession.getId())
+                  .sessionItemId(sessionItem.getId())
+                  .build();
+          userAnswerRepository.save(userAnswer);
         } catch (JsonProcessingException e) {
           log.warn("Failed to serialize answer for question {}: {}", ans.questionId(), e.getMessage());
         }
+      }
+
+      // Progress hook (각 문제 제출 시 XP 지급: 정답 5 XP, 오답 0 XP)
+      try {
+        progressHookClient.submit(
+            new com.OhRyue.certpilot.study.client.ProgressHookClient.SubmitPayload(
+                userId,
+                ExamMode.PRACTICAL.name(),
+                q.getType().name(),
+                correct,
+                correct ? 100 : 0,
+                List.of(),
+                "ASSIST_PRACTICAL"
+            )
+        );
+      } catch (Exception e) {
+        log.debug("Progress hook failed: {}", e.getMessage());
       }
     }
 

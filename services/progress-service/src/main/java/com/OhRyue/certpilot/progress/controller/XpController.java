@@ -6,6 +6,9 @@ import com.OhRyue.certpilot.progress.service.XpService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.*;
 
 import static com.OhRyue.common.auth.AuthUserUtil.getCurrentUserId;
@@ -32,5 +35,15 @@ public class XpController {
                            @RequestParam(required = false) String refId) {
     String userId = getCurrentUserId();
     return xp.addXp(userId, delta, reason, refId);
+  }
+
+  @Operation(summary = "XP 기록 조회 (최근 N개)")
+  @GetMapping("/ledger")
+  public Page<com.OhRyue.certpilot.progress.domain.UserXpLedger> ledger(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+    String userId = getCurrentUserId();
+    Pageable pageable = PageRequest.of(page, size);
+    return xp.getLedger(userId, pageable);
   }
 }

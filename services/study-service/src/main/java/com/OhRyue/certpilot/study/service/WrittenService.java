@@ -31,7 +31,7 @@ public class WrittenService {
 
   private static final int MINI_SIZE = 4;
   private static final int MCQ_SIZE = 5;
-  private static final int REVIEW_SIZE = 10;
+  private static final int REVIEW_SIZE = 20; // REVIEW는 20문제
 
   private final QuestionRepository questionRepository;
   private final QuestionChoiceRepository choiceRepository;
@@ -248,7 +248,6 @@ public class WrittenService {
     }
 
     boolean passedNow = correctCount == req.answers().size();
-    int scorePct = req.answers().isEmpty() ? 0 : (correctCount * 100) / req.answers().size();
 
     // 3. LearningStep 업데이트 (이전 메타데이터 불러와서 누적)
     Map<String, Object> prevMiniMeta = parseJson(miniStep.getMetadataJson());
@@ -282,12 +281,37 @@ public class WrittenService {
     // 4. StudySession의 summaryJson에도 저장 (하위 호환성)
     sessionManager.saveStepMeta(session, "mini", miniMeta);
 
-    // 5. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
-    // MINI 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
-    miniStep.setMetadataJson(metadataJson);
-    miniStep.setScorePct(accumulatedScorePct);
-    miniStep.setUpdatedAt(Instant.now());
-    learningStepRepository.save(miniStep);
+    // 5. 세션이 완료되었는지 확인 (모든 문제를 제출했는지)
+    // study_session_item 기준으로 실제 제출된 문제 수 확인
+    List<StudySessionItem> allItems = sessionManager.items(session.getId());
+    long answeredCount = allItems.stream()
+        .filter(item -> item.getUserAnswerJson() != null && !item.getUserAnswerJson().isBlank())
+        .count();
+    boolean allQuestionsAnswered = answeredCount >= MINI_SIZE && answeredCount == allItems.size();
+    
+    // 6. 세션이 완료되었을 때 finalizeStudySession 호출
+    if (allQuestionsAnswered && session != null && !Boolean.TRUE.equals(session.getCompleted())) {
+      // finalizeStudySession: study_session_item 기준으로 정확히 계산
+      StudySessionManager.FinalizeResult result = sessionManager.finalizeStudySession(session);
+      
+      // LearningStep 메타데이터에 wrongQuestionIds 추가 (하위 호환성)
+      miniMeta.put("total", result.total());
+      miniMeta.put("correct", result.correct());
+      miniMeta.put("scorePct", (int) Math.round(result.scorePct()));
+      miniMeta.put("passed", result.passed());
+      miniMeta.put("completed", true);
+      miniMeta.put("wrongQuestionIds", wrongQuestionIds);
+      miniStep.setMetadataJson(toJson(miniMeta));
+      miniStep.setScorePct((int) Math.round(result.scorePct()));
+      miniStep.setUpdatedAt(Instant.now());
+      learningStepRepository.save(miniStep);
+    } else {
+      // 아직 완료되지 않은 경우 기존 로직 유지
+      miniStep.setMetadataJson(metadataJson);
+      miniStep.setScorePct(accumulatedScorePct);
+      miniStep.setUpdatedAt(Instant.now());
+      learningStepRepository.save(miniStep);
+    }
 
     // 상태는 메타데이터 기반으로 판단 (실제 상태 변경은 advance에서)
     String status = newTotal >= MINI_SIZE ? "COMPLETE" : "IN_PROGRESS";
@@ -471,7 +495,6 @@ public class WrittenService {
     }
 
     boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
-    int scorePct = items.isEmpty() ? 0 : (correctCount * 100) / items.size();
     boolean mcqCompleted = allCorrect;  // 모든 문제를 맞춰야 완료
 
     // 3. LearningStep (MCQ) 업데이트 (이전 메타데이터 불러와서 누적)
@@ -504,20 +527,81 @@ public class WrittenService {
     String metadataJson = toJson(mcqMeta);
 
     // 4. 진정한 완료 설정 (MCQ 완료 시 - 모든 문제를 맞춰야 완료)
+    boolean newlyCompleted = false;
     if (finalCompleted && allWrongIds.isEmpty() && learningSession.getTrulyCompleted() == null) {
       learningSession.setTrulyCompleted(true);
       learningSessionService.saveLearningSession(learningSession);
+      newlyCompleted = true;
     }
 
-    // 5. StudySession의 summaryJson에도 저장 (하위 호환성)
-    sessionManager.saveStepMeta(session, "mcq", mcqMeta);
+    // 5. 세션이 완료되었는지 확인 (모든 문제를 제출했는지)
+    List<StudySessionItem> allMcqItems = sessionManager.items(session.getId());
+    long mcqAnsweredCount = allMcqItems.stream()
+        .filter(item -> item.getUserAnswerJson() != null && !item.getUserAnswerJson().isBlank())
+        .count();
+    boolean allMcqQuestionsAnswered = mcqAnsweredCount >= MCQ_SIZE && mcqAnsweredCount == allMcqItems.size();
+    
+    // summary_json에서도 완료 여부 확인
+    Map<String, Object> summaryMcqMeta = sessionManager.loadStepMeta(session, "mcq");
+    boolean mcqCompletedInSummary = Boolean.TRUE.equals(summaryMcqMeta.get("completed"));
+    int mcqTotalInSummary = readInt(summaryMcqMeta, "total");
+    
+    // 5-2. 세션이 완료되었을 때 finalizeStudySession 호출
+    // 핵심: 모든 문제가 제출되었거나, summary_json에 완료 정보가 있고 score_pct가 0이면 무조건 호출
+    // MCQ 세션은 독립적으로 score_pct와 passed를 계산 (MINI와 무관)
+    boolean shouldFinalize = false;
+    if (session != null) {
+      // 조건 1: 모든 문제가 제출되었으면 항상 호출
+      if (allMcqQuestionsAnswered) {
+        shouldFinalize = true;
+      }
+      // 조건 2: summary_json에 완료 정보가 있고, score_pct가 0이거나 NULL이면 무조건 호출
+      // (summary_json에는 올바른 정보가 있는데 DB에는 0으로 저장되어 있으면 재계산 필요)
+      if (mcqCompletedInSummary && mcqTotalInSummary >= MCQ_SIZE) {
+        if (session.getScorePct() == null || session.getScorePct() == 0.0 || !Boolean.TRUE.equals(session.getPassed())) {
+          shouldFinalize = true;
+        }
+      }
+    }
+    
+    if (shouldFinalize) {
+      // finalizeStudySession: study_session_item 기준으로 정확히 계산
+      // MCQ 세션 자체의 passed는 MCQ만 고려 (MINI 무관)
+      System.out.println("[MCQ Finalize] Calling finalizeStudySession for sessionId=" + session.getId() + 
+                         ", scorePct before=" + session.getScorePct() + ", passed=" + session.getPassed());
+      StudySessionManager.FinalizeResult result = sessionManager.finalizeStudySession(session);
+      System.out.println("[MCQ Finalize] After finalizeStudySession: total=" + result.total() + 
+                         ", correct=" + result.correct() + ", scorePct=" + result.scorePct() + ", passed=" + result.passed());
+      
+      // 세션을 다시 조회하여 최신 상태 확인
+      session = sessionManager.getSession(session.getId());
+      System.out.println("[MCQ Finalize] Session reloaded: scorePct=" + session.getScorePct() + ", passed=" + session.getPassed());
+      
+      // LearningStep 메타데이터에 wrongQuestionIds 추가 (하위 호환성)
+      // finalizeStudySession이 이미 LearningStep도 업데이트했으므로, 여기서는 wrongQuestionIds만 추가
+      mcqStep = learningStepRepository.findById(mcqStep.getId()).orElse(mcqStep);
+      Map<String, Object> finalMeta = parseJson(mcqStep.getMetadataJson());
+      if (finalMeta == null || finalMeta.isEmpty()) {
+        finalMeta = new HashMap<>();
+      }
+      finalMeta.put("wrongQuestionIds", allWrongIds);
+      mcqStep.setMetadataJson(toJson(finalMeta));
+      learningStepRepository.save(mcqStep);
+    } else {
+      // 아직 완료되지 않은 경우 기존 로직 유지
+      sessionManager.saveStepMeta(session, "mcq", mcqMeta);
+      mcqStep.setMetadataJson(metadataJson);
+      mcqStep.setScorePct(accumulatedScorePct);
+      mcqStep.setUpdatedAt(Instant.now());
+      learningStepRepository.save(mcqStep);
+    }
 
-    // 6. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
-    // MCQ 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
-    mcqStep.setMetadataJson(metadataJson);
-    mcqStep.setScorePct(accumulatedScorePct);
-    mcqStep.setUpdatedAt(Instant.now());
-    learningStepRepository.save(mcqStep);
+    // 6. [B] MICRO 완료 체크 및 XP 지급
+    // summary_json에 완료 정보가 있거나 모든 문제가 제출되었으면 체크
+    boolean mcqIsCompleted = allMcqQuestionsAnswered || (mcqCompletedInSummary && mcqTotalInSummary >= MCQ_SIZE);
+    if (mcqIsCompleted && "MICRO".equals(learningSession.getMode())) {
+      checkMicroCompletionAndXp(learningSession, session, ExamMode.WRITTEN);
+    }
 
     // 상태는 메타데이터 기반으로 판단 (실제 상태 변경은 advance에서)
     String status = newTotal >= MCQ_SIZE ? "COMPLETE" : "IN_PROGRESS";
@@ -707,7 +791,6 @@ public class WrittenService {
     }
 
     boolean allCorrect = !items.isEmpty() && wrongIds.isEmpty();
-    int scorePct = items.isEmpty() ? 0 : (correctCount * 100) / items.size();
     boolean mcqCompleted = allCorrect;  // 모든 문제를 맞춰야 완료
 
     // 3. LearningStep (MCQ) 업데이트 (이전 메타데이터 불러와서 누적)
@@ -739,21 +822,51 @@ public class WrittenService {
     
     String metadataJson = toJson(mcqMeta);
 
-    // 4. 진정한 완료 설정 (MCQ 완료 시)
-    if (finalCompleted && learningSession.getTrulyCompleted() == null) {
+    // 4. 진정한 완료 설정 (MCQ 완료 시 - 모든 문제를 맞춰야 완료)
+    boolean newlyCompleted = false;
+    if (finalCompleted && allWrongIds.isEmpty() && learningSession.getTrulyCompleted() == null) {
       learningSession.setTrulyCompleted(true);
       learningSessionService.saveLearningSession(learningSession);
+      newlyCompleted = true;
     }
 
-    // 5. StudySession의 summaryJson에도 저장 (하위 호환성)
-    sessionManager.saveStepMeta(session, "mcq", mcqMeta);
+    // 5-1. 세션이 완료되었는지 확인 (모든 문제를 제출했는지)
+    List<StudySessionItem> allReviewItems = sessionManager.items(session.getId());
+    long reviewAnsweredCount = allReviewItems.stream()
+        .filter(item -> item.getUserAnswerJson() != null && !item.getUserAnswerJson().isBlank())
+        .count();
+    boolean allReviewQuestionsAnswered = reviewAnsweredCount >= REVIEW_SIZE && reviewAnsweredCount == allReviewItems.size();
+    
+    // 5-2. 세션이 완료되었을 때 finalizeStudySession 호출
+    // 모든 문제가 제출되었으면 finalizeStudySession 호출 (이미 완료된 경우도 재계산)
+    if (allReviewQuestionsAnswered && session != null) {
+      // finalizeStudySession: study_session_item 기준으로 정확히 계산
+      StudySessionManager.FinalizeResult result = sessionManager.finalizeStudySession(session);
+      
+      // LearningStep 메타데이터에 wrongQuestionIds 추가 (하위 호환성)
+      mcqMeta.put("total", result.total());
+      mcqMeta.put("correct", result.correct());
+      mcqMeta.put("scorePct", (int) Math.round(result.scorePct()));
+      mcqMeta.put("passed", result.passed());
+      mcqMeta.put("completed", true);
+      mcqMeta.put("wrongQuestionIds", allWrongIds);
+      mcqStep.setMetadataJson(toJson(mcqMeta));
+      mcqStep.setScorePct((int) Math.round(result.scorePct()));
+      mcqStep.setUpdatedAt(Instant.now());
+      learningStepRepository.save(mcqStep);
+    } else {
+      // 아직 완료되지 않은 경우 기존 로직 유지
+      sessionManager.saveStepMeta(session, "mcq", mcqMeta);
+      mcqStep.setMetadataJson(metadataJson);
+      mcqStep.setScorePct(accumulatedScorePct);
+      mcqStep.setUpdatedAt(Instant.now());
+      learningStepRepository.save(mcqStep);
+    }
 
-    // 6. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
-    // MCQ 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
-    mcqStep.setMetadataJson(metadataJson);
-    mcqStep.setScorePct(accumulatedScorePct);
-    mcqStep.setUpdatedAt(Instant.now());
-    learningStepRepository.save(mcqStep);
+    // 6. [C] REVIEW 완료 체크 및 XP 지급
+    if (allReviewQuestionsAnswered && "REVIEW".equals(learningSession.getMode())) {
+      checkReviewCompletionAndXp(learningSession, session, ExamMode.WRITTEN);
+    }
 
     // 상태는 메타데이터 기반으로 판단 (실제 상태 변경은 advance에서)
     String status = newTotal >= REVIEW_SIZE ? "COMPLETE" : "IN_PROGRESS";
@@ -862,11 +975,21 @@ public class WrittenService {
               rootTopicId
           ));
           sessionManager.markXpGranted(session);
+          // 세션이 이미 completed여도 score_pct와 passed를 업데이트
+          double scorePct = mcqTotal == 0 ? 0.0 : (mcqCorrect * 100.0) / mcqTotal;
+          boolean allPassed = completed && scorePct >= 100.0;
           if (!Boolean.TRUE.equals(session.getCompleted())) {
-            double scorePct = mcqTotal == 0 ? 0.0 : (mcqCorrect * 100.0) / mcqTotal;
-            sessionManager.closeSession(session, scorePct, completed, Map.of());
+            // 완료되지 않은 경우 closeSession 호출
+            sessionManager.closeSession(session, scorePct, allPassed, Map.of());
+          } else {
+            // 이미 완료된 경우 score_pct와 passed만 업데이트
+            Map<String, Object> currentMeta = sessionManager.loadMeta(session);
+            sessionManager.closeSession(session, scorePct, allPassed, currentMeta);
           }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+          // XP hook 실패는 학습 흐름을 막지 않음, 로깅만 수행
+          System.err.println("Failed to grant XP in reviewSummary (REVIEW): " + e.getMessage());
+          e.printStackTrace();
         }
       }
     }
@@ -925,9 +1048,33 @@ public class WrittenService {
     LearningStep mcqStep = learningSessionService.getStep(learningSession, mcqStepName);
     StudySession session = mcqStep.getStudySession();
 
-    // 4. LearningStep에서 메타데이터 추출
+    // 4. 약점 태그 계산
+    List<String> weakTags = List.of();
+    Map<String, Object> meta = Map.of();
+    Long sessionId = null;
+    
+    if (session != null) {
+      sessionId = session.getId();
+      meta = sessionManager.loadMeta(session);
+      
+      // summary_json에서 직접 정보 가져오기 (이미 올바른 정보가 있음)
+      // summary_json이 더 신뢰할 수 있는 소스임
+    }
+    
+    // 4-1. LearningStep과 summary_json에서 메타데이터 추출 (summary_json 우선)
     Map<String, Object> miniMeta;
     Map<String, Object> mcqMeta = parseJson(mcqStep.getMetadataJson());
+    
+    // summary_json에서 mcq 정보 가져오기 (우선순위 높음)
+    if (session != null && !meta.isEmpty()) {
+      Object mcqRaw = meta.get("mcq");
+      if (mcqRaw instanceof Map<?, ?> mcqFromSummary) {
+        Map<String, Object> mcqFromSummaryMap = new HashMap<>();
+        mcqFromSummary.forEach((k, v) -> mcqFromSummaryMap.put(String.valueOf(k), v));
+        // summary_json의 정보로 덮어쓰기
+        mcqMeta.putAll(mcqFromSummaryMap);
+      }
+    }
     
     int miniTotal = 0;
     int miniCorrect = 0;
@@ -936,6 +1083,18 @@ public class WrittenService {
     if (miniStepName != null) {
       LearningStep miniStep = learningSessionService.getStep(learningSession, miniStepName);
       miniMeta = parseJson(miniStep.getMetadataJson());
+      
+      // summary_json에서 mini 정보 가져오기 (우선순위 높음)
+      if (session != null && !meta.isEmpty()) {
+        Object miniRaw = meta.get("mini");
+        if (miniRaw instanceof Map<?, ?> miniFromSummary) {
+          Map<String, Object> miniFromSummaryMap = new HashMap<>();
+          miniFromSummary.forEach((k, v) -> miniFromSummaryMap.put(String.valueOf(k), v));
+          // summary_json의 정보로 덮어쓰기
+          miniMeta.putAll(miniFromSummaryMap);
+        }
+      }
+      
       miniTotal = readInt(miniMeta, "total");
       miniCorrect = readInt(miniMeta, "correct");
       miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
@@ -947,15 +1106,8 @@ public class WrittenService {
     int mcqCorrect = readInt(mcqMeta, "correct");
     boolean mcqCompleted = Boolean.TRUE.equals(mcqMeta.get("completed"));
     
-    // 4. 약점 태그 계산
-    List<String> weakTags = List.of();
-    Map<String, Object> meta = Map.of();
-    Long sessionId = null;
-    
-    if (session != null) {
-      sessionId = session.getId();
-      meta = sessionManager.loadMeta(session);
-
+    // 약점 태그 계산
+    if (session != null && sessionId != null) {
       List<UserAnswer> sessionAnswers = userAnswerRepository.findByUserIdAndSessionId(userId, sessionId).stream()
           .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
           .toList();
@@ -1012,24 +1164,62 @@ public class WrittenService {
       status = completed ? "COMPLETE" : "IN_PROGRESS";
     }
 
-    // 진정한 완료(MCQ 완료)일 때만 XP 지급
+    // MICRO 모드: MINI와 MCQ 모두 완료되었는지 확인
     boolean trulyCompleted = learningSession != null && Boolean.TRUE.equals(learningSession.getTrulyCompleted());
+    boolean miniAllPassed = false;
     
-    if (trulyCompleted && sessionId != null && session != null) {
-      if (!Boolean.TRUE.equals(session.getXpGranted())) {
-        try {
-          progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-              userId,
-              ExamMode.WRITTEN.name(),
-              "MICRO",
-              topicId
-          ));
-          sessionManager.markXpGranted(session);
-          if (!Boolean.TRUE.equals(session.getCompleted())) {
-            double scorePct = totalSolved == 0 ? 0.0 : (totalCorrect * 100.0) / totalSolved;
-            sessionManager.closeSession(session, scorePct, completed, Map.of());
+    if ("MICRO".equals(learningSession != null ? learningSession.getMode() : null)) {
+      // MINI가 모두 맞았는지 확인
+      miniAllPassed = miniPassed && miniTotal >= MINI_SIZE && miniCorrect == miniTotal;
+      // MCQ도 모두 맞았는지 확인
+      boolean mcqAllCorrect = mcqCompleted && mcqTotal >= MCQ_SIZE && mcqCorrect == mcqTotal;
+      
+      // MINI와 MCQ 모두 완료되었을 때만 XP 지급
+      if (trulyCompleted && miniAllPassed && mcqAllCorrect && sessionId != null && session != null) {
+        if (!Boolean.TRUE.equals(session.getXpGranted())) {
+          try {
+            progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+                userId,
+                ExamMode.WRITTEN.name(),
+                "MICRO",
+                topicId
+            ));
+            sessionManager.markXpGranted(session);
+            // MINI 세션도 표시 (MICRO는 MINI+MCQ 합쳐서 하나의 XP)
+            LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
+            StudySession miniSession = miniStep != null ? miniStep.getStudySession() : null;
+            if (miniSession != null && !Boolean.TRUE.equals(miniSession.getXpGranted())) {
+              sessionManager.markXpGranted(miniSession);
+            }
+          } catch (Exception e) {
+            // XP hook 실패는 학습 흐름을 막지 않음, 로깅만 수행
+            System.err.println("Failed to grant XP in getSummary (MICRO): " + e.getMessage());
+            e.printStackTrace();
           }
-        } catch (Exception ignored) {
+        }
+      }
+      
+      // MCQ 세션의 score_pct와 passed 업데이트
+      // summary_json에 완료 정보가 있으면 그것을 사용해서 직접 업데이트
+      if (session != null && mcqTotal >= MCQ_SIZE && mcqCompleted) {
+        // summary_json의 정보를 사용해서 score_pct와 passed 업데이트
+        Object scorePctObj = mcqMeta.get("scorePct");
+        double scorePctFromSummary = scorePctObj instanceof Number ? ((Number) scorePctObj).doubleValue() : 
+                                      (mcqTotal > 0 ? (mcqCorrect * 100.0) / mcqTotal : 0.0);
+        boolean passedFromSummary = mcqCorrect == mcqTotal && mcqTotal > 0;
+        
+        // score_pct가 0이거나 NULL이면 summary_json의 정보로 직접 업데이트
+        if (session.getScorePct() == null || session.getScorePct() == 0.0 || !Boolean.TRUE.equals(session.getPassed())) {
+          System.out.println("[Summary] Updating MCQ session from summary_json: sessionId=" + session.getId() + 
+                             ", scorePct=" + session.getScorePct() + " -> " + scorePctFromSummary + 
+                             ", passed=" + session.getPassed() + " -> " + passedFromSummary);
+          
+          // summary_json의 정보를 사용해서 직접 업데이트
+          // sessionManager.closeSession을 사용하여 저장
+          sessionManager.closeSession(session, scorePctFromSummary, passedFromSummary, meta);
+          
+          System.out.println("[Summary] After update: sessionId=" + session.getId() + 
+                             ", scorePct=" + session.getScorePct() + ", passed=" + session.getPassed());
         }
       }
     }
@@ -1875,5 +2065,120 @@ public class WrittenService {
       }
     }
     return 0;
+  }
+
+  /**
+   * [C] REVIEW 완료 체크 및 XP 지급
+   * REVIEW 세션이 완료되고 모든 문제를 맞았는지 확인하고 XP 지급
+   */
+  private void checkReviewCompletionAndXp(LearningSession learningSession, StudySession reviewSession, ExamMode examMode) {
+    if (!"REVIEW".equals(learningSession.getMode())) {
+      return; // REVIEW 모드가 아니면 체크하지 않음
+    }
+
+    String userId = learningSession.getUserId();
+    
+    // REVIEW 세션 완료 및 모든 문제 정답 확인
+    if (reviewSession == null || !Boolean.TRUE.equals(reviewSession.getCompleted()) ||
+        !Boolean.TRUE.equals(reviewSession.getPassed()) ||
+        reviewSession.getScorePct() == null || reviewSession.getScorePct() < 100.0) {
+      return;
+    }
+
+    // XP 지급 (idempotent)
+    if (!Boolean.TRUE.equals(reviewSession.getXpGranted())) {
+      try {
+        // progress-service에 XP 지급 요청 (idempotent 처리됨)
+        progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+            userId,
+            examMode.name(),
+            "REVIEW",
+            learningSession.getTopicId()
+        ));
+        
+        // XP 지급 완료 표시
+        sessionManager.markXpGranted(reviewSession);
+      } catch (Exception e) {
+        // XP hook 실패는 학습 흐름을 막지 않음, 로깅만 수행
+        System.err.println("Failed to grant XP for REVIEW completion: " + e.getMessage());
+        e.printStackTrace();
+      }
+    }
+  }
+
+  /**
+   * [B] MICRO 완료 체크 및 XP 지급
+   * MINI, MCQ, SUMMARY 모두 완료되었는지 확인하고 XP 지급
+   */
+  private void checkMicroCompletionAndXp(LearningSession learningSession, StudySession mcqSession, ExamMode examMode) {
+    if (!"MICRO".equals(learningSession.getMode())) {
+      return; // MICRO 모드가 아니면 체크하지 않음
+    }
+
+    String userId = learningSession.getUserId();
+    
+    // 1. MINI step 확인: status = COMPLETE && score_pct = 100
+    LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
+    if (miniStep == null || !"COMPLETE".equals(miniStep.getStatus())) {
+      return;
+    }
+    Map<String, Object> miniMeta = parseJson(miniStep.getMetadataJson());
+    int miniTotal = readInt(miniMeta, "total");
+    int miniCorrect = readInt(miniMeta, "correct");
+    boolean miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
+    boolean miniPerfect = miniStep.getScorePct() != null && miniStep.getScorePct() >= 100 &&
+                          miniPassed && miniTotal >= MINI_SIZE && miniCorrect == miniTotal;
+    if (!miniPerfect) {
+      return;
+    }
+
+    // 2. MCQ step 확인: status = COMPLETE && score_pct = 100
+    LearningStep mcqStep = learningSessionService.getStep(learningSession, "MCQ");
+    if (mcqStep == null || !"COMPLETE".equals(mcqStep.getStatus())) {
+      return;
+    }
+    boolean mcqPerfect = mcqStep.getScorePct() != null && mcqStep.getScorePct() >= 100;
+    if (!mcqPerfect) {
+      return;
+    }
+
+    // 3. SUMMARY step 확인: status = COMPLETE
+    LearningStep summaryStep = learningSessionService.getStep(learningSession, "SUMMARY");
+    if (summaryStep == null || !"COMPLETE".equals(summaryStep.getStatus())) {
+      return;
+    }
+
+    // 4. 모든 조건 만족 시 XP 지급 (idempotent)
+    if (mcqSession != null && !Boolean.TRUE.equals(mcqSession.getXpGranted())) {
+      try {
+        // progress-service에 XP 지급 요청 (idempotent 처리됨)
+        progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+            userId,
+            examMode.name(),
+            "MICRO",
+            learningSession.getTopicId()
+        ));
+        
+        // XP 지급 완료 표시
+        sessionManager.markXpGranted(mcqSession);
+        
+        // MINI 세션도 표시 (MICRO는 MINI+MCQ 합쳐서 하나의 XP)
+        StudySession miniSession = miniStep.getStudySession();
+        if (miniSession != null && !Boolean.TRUE.equals(miniSession.getXpGranted())) {
+          sessionManager.markXpGranted(miniSession);
+        }
+        
+        // learning_session 업데이트
+        if (!Boolean.TRUE.equals(learningSession.getTrulyCompleted())) {
+          learningSession.setTrulyCompleted(true);
+          learningSession.setStatus("DONE");
+          learningSessionService.saveLearningSession(learningSession);
+        }
+      } catch (Exception e) {
+        // XP hook 실패는 학습 흐름을 막지 않음, 로깅만 수행
+        System.err.println("Failed to grant XP for MICRO completion: " + e.getMessage());
+        e.printStackTrace();
+      }
+    }
   }
 }

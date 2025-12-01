@@ -1,22 +1,26 @@
-// src/main/java/com/OhRyue/certpilot/progress/service/StudyFlowService.java
 package com.OhRyue.certpilot.progress.service;
-
-import com.OhRyue.certpilot.progress.domain.ReportDaily;
-import com.OhRyue.certpilot.progress.domain.ReportWeekly;
-import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
-import com.OhRyue.certpilot.progress.domain.enums.XpReason;
-import com.OhRyue.certpilot.progress.dto.StudyFlowCompleteReq;
-import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
-import com.OhRyue.certpilot.progress.repository.ReportWeeklyRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.WeekFields;
 import java.util.Locale;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.OhRyue.certpilot.progress.domain.ReportDaily;
+import com.OhRyue.certpilot.progress.domain.ReportWeekly;
+import com.OhRyue.certpilot.progress.domain.UserXpWallet;
+import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
+import com.OhRyue.certpilot.progress.domain.enums.XpReason;
+import com.OhRyue.certpilot.progress.dto.StudyFlowCompleteReq;
+import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
+import com.OhRyue.certpilot.progress.repository.ReportWeeklyRepository;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StudyFlowService {
@@ -33,7 +37,7 @@ public class StudyFlowService {
         ExamMode mode = parseExamMode(req.examMode());
         String flowType = normalizeFlowType(req.flowType());
 
-        // 1) 이번 플로우에 줄 XP 양 정의 (원하시는대로 조정 가능)
+        // 1) 이번 플로우에 줄 XP 양 정의
         int xpDelta = computeFlowXp(mode, flowType);
 
         // 2) refId = (user, mode, flowType, topicId) → 이 조합에 대해 최초 1번만 XP
@@ -47,38 +51,53 @@ public class StudyFlowService {
         };
 
         // 4) XP 지급 (idempotent)
-        xpService.addXp(req.userId(), xpDelta, reason, refId);
+        UserXpWallet walletBefore = xpService.getWallet(req.userId());
+        UserXpWallet walletAfter = xpService.addXp(req.userId(), xpDelta, reason, refId);
+
+        long actualXpGained = walletAfter.getXpTotal() - walletBefore.getXpTotal();
+        if (actualXpGained > 0) {
+            log.info(
+                "Flow complete - XP granted: userId={}, flowType={}, examMode={}, topicId={}, expectedXp={}, actualXp={}, newTotal={}, level={}",
+                req.userId(), flowType, mode, req.topicId(), xpDelta, actualXpGained, walletAfter.getXpTotal(), walletAfter.getLevel()
+            );
+        } else {
+            log.info(
+                "Flow complete - XP already granted (idempotent): userId={}, flowType={}, examMode={}, topicId={}, refId={}",
+                req.userId(), flowType, mode, req.topicId(), refId
+            );
+        }
+
         rankService.recomputeForUser(req.userId());
 
-        // 5) Daily / Weekly 리포트에도 xpGained 누적 (문항 카운트는 기존 ingest에서 처리)
+        // 5) Daily / Weekly 리포트에도 xpGained 누적 (문항 카운트는 ingest에서 처리)
         LocalDate today = LocalDate.now(KST);
 
         // daily
         ReportDaily daily = dailyRepository.findByUserIdAndDate(req.userId(), today)
-                .orElse(ReportDaily.builder()
-                        .userId(req.userId())
-                        .date(today)
-                        .solvedCount(0)
-                        .correctCount(0)
-                        .timeSpentSec(0)
-                        .accuracy(java.math.BigDecimal.ZERO)
-                        .xpGained(0)
-                        .build());
+            .orElse(ReportDaily.builder()
+                .userId(req.userId())
+                .date(today)
+                .solvedCount(0)
+                .correctCount(0)
+                .timeSpentSec(0)
+                .accuracy(java.math.BigDecimal.ZERO)
+                .xpGained(0)
+                .build());
         daily.setXpGained(daily.getXpGained() + xpDelta);
         dailyRepository.save(daily);
 
         // weekly
         String weekIso = isoWeek(today);
         ReportWeekly weekly = weeklyRepository.findByUserIdAndWeekIso(req.userId(), weekIso)
-                .orElse(ReportWeekly.builder()
-                        .userId(req.userId())
-                        .weekIso(weekIso)
-                        .solvedCount(0)
-                        .correctCount(0)
-                        .timeSpentSec(0)
-                        .accuracy(java.math.BigDecimal.ZERO)
-                        .xpGained(0)
-                        .build());
+            .orElse(ReportWeekly.builder()
+                .userId(req.userId())
+                .weekIso(weekIso)
+                .solvedCount(0)
+                .correctCount(0)
+                .timeSpentSec(0)
+                .accuracy(java.math.BigDecimal.ZERO)
+                .xpGained(0)
+                .build());
         weekly.setXpGained(weekly.getXpGained() + xpDelta);
         weeklyRepository.save(weekly);
     }
@@ -100,25 +119,26 @@ public class StudyFlowService {
 
     /**
      * 플로우별 XP 양 정의
-     * - 예시는 임의 값입니다. 마음에 드는 값으로 조정하셔도 됩니다.
+     * 메인학습(MICRO/REVIEW)은 최초 1회만 경험치 지급(완전 정답 시)
      */
     private int computeFlowXp(ExamMode mode, String flowType) {
-        // 메인학습: 경험치를 많이 지급
+        // 메인학습 MICRO: 필기 150 XP, 실기 200 XP
         if ("MICRO".equals(flowType)) {
-            return (mode == ExamMode.PRACTICAL) ? 200 : 150;  // 실기 Micro 조금 더 크게
+            return (mode == ExamMode.PRACTICAL) ? 200 : 150;
         }
+        // 메인학습 REVIEW: 필기 200 XP, 실기 250 XP
         if ("REVIEW".equals(flowType)) {
-            return (mode == ExamMode.PRACTICAL) ? 250 : 200; // Review는 더 크게
+            return (mode == ExamMode.PRACTICAL) ? 250 : 200;
         }
         return 0;
     }
 
     private String buildRefId(String userId, ExamMode mode, String flowType, Long topicId) {
         return "flow:"
-                + userId + ":"
-                + mode.name().toUpperCase(Locale.ROOT) + ":"
-                + flowType + ":"
-                + (topicId == null ? "unknown" : topicId);
+            + userId + ":"
+            + mode.name().toUpperCase(Locale.ROOT) + ":"
+            + flowType + ":"
+            + (topicId == null ? "unknown" : topicId);
     }
 
     private String isoWeek(LocalDate date) {
