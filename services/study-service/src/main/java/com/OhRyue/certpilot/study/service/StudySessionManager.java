@@ -228,7 +228,10 @@ public class StudySessionManager {
                 topicIds, examMode, questionType, PageRequest.of(0, questionCount));
 
         if (questions.isEmpty()) {
-            throw new IllegalStateException("문제가 부족합니다. rootTopicId: " + rootTopicId + ", type: " + questionType);
+            // 디버깅을 위한 상세 에러 메시지
+            throw new IllegalStateException(
+                String.format("문제가 부족합니다. rootTopicId=%d, topicIds=%s, examMode=%s, type=%s, required=%d",
+                    rootTopicId, topicIds, examMode, questionType, questionCount));
         }
 
         // StudySession 생성

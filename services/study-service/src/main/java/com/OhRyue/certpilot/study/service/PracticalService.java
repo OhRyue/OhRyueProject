@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.OhRyue.certpilot.study.client.CurriculumGateway;
 import com.OhRyue.certpilot.study.client.ProgressHookClient;
+import com.OhRyue.certpilot.study.client.ProgressXpClient;
 import com.OhRyue.certpilot.study.domain.LearningSession;
 import com.OhRyue.certpilot.study.domain.LearningStep;
 import com.OhRyue.certpilot.study.domain.Question;
@@ -66,6 +67,7 @@ public class PracticalService {
   private final AIExplanationService aiExplanationService;
   private final TopicTreeService topicTreeService;
   private final ProgressHookClient progressHookClient;
+  private final ProgressXpClient progressXpClient;
   private final ObjectMapper objectMapper;
 
   // cert-service 커리큘럼 연동 (토픽 제목/개념 조회용)
@@ -177,8 +179,8 @@ public class PracticalService {
       status = "IN_PROGRESS";
     }
 
-    // 미니 정답 여부와 관계없이 다음 단계는 항상 PRACTICAL_SET 로 이동 가능
-    String next = completed ? "PRACTICAL_SET" : null;
+    // 미니 정답 여부와 관계없이 다음 단계는 항상 SHORT_SET 로 이동 가능
+    String next = completed ? "SHORT_SET" : null;
 
     return new FlowDtos.StepEnvelope<>(
         studySession.getId(),
@@ -331,8 +333,8 @@ public class PracticalService {
         "PRACTICAL",
         "PRACTICAL_MINI",
         finalPassed ? "COMPLETE" : "IN_PROGRESS",
-        // 항상 PRACTICAL_SET 으로 이동 가능하도록 고정
-        "PRACTICAL_SET",
+        // 항상 SHORT_SET 으로 이동 가능하도록 고정
+        "SHORT_SET",
         sessionManager.loadMeta(session),
         new WrittenDtos.MiniSubmitResp(req.answers().size(), correctCount, finalPassed, resultItems, wrongQuestionIds),
         learningSession.getId()
@@ -373,15 +375,15 @@ public class PracticalService {
       throw new IllegalStateException("토픽이 일치하지 않습니다.");
     }
 
-    // 2. PRACTICAL 단계 조회 (없으면 예외 발생)
+    // 2. SHORT 단계 조회 (없으면 예외 발생)
     LearningStep practicalStep;
     try {
-      practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+      practicalStep = learningSessionService.getStep(learningSession, "SHORT");
     } catch (NoSuchElementException e) {
-      throw new IllegalStateException("PRACTICAL 단계가 없습니다. 세션을 다시 시작해주세요. (이전 버전의 세션일 수 있습니다)", e);
+      throw new IllegalStateException("SHORT 단계가 없습니다. 세션을 다시 시작해주세요. (이전 버전의 세션일 수 있습니다)", e);
     }
 
-    // 3. MINI 단계에서 StudySession 가져오기 (실기는 MINI와 PRACTICAL이 같은 StudySession 공유)
+    // 3. MINI 단계에서 StudySession 가져오기 (실기는 MINI와 SHORT가 같은 StudySession 공유)
     LearningStep miniStep;
     try {
       miniStep = learningSessionService.getStep(learningSession, "MINI");
@@ -395,11 +397,11 @@ public class PracticalService {
       throw new IllegalStateException("StudySession이 초기화되지 않았습니다. MINI 단계를 먼저 완료해주세요.");
     }
 
-    // 4. PRACTICAL 단계 상태 확인
+    // 4. SHORT 단계 상태 확인
     String stepStatus = practicalStep.getStatus();
     boolean completed = "COMPLETE".equals(stepStatus);
 
-    // PRACTICAL 단계를 IN_PROGRESS로 변경
+    // SHORT 단계를 IN_PROGRESS로 변경
     if ("READY".equals(stepStatus)) {
       learningSessionService.updateStepStatus(practicalStep, "IN_PROGRESS", null, null);
       stepStatus = "IN_PROGRESS";
@@ -408,7 +410,7 @@ public class PracticalService {
     // 세션에 할당된 문제 조회
     List<StudySessionItem> sessionItems = sessionManager.items(session.getId());
 
-    // PRACTICAL 단계 문제만 필터링 (MINI 단계 문제 제외)
+    // SHORT 단계 문제만 필터링 (MINI 단계 문제 제외)
     List<StudySessionItem> practicalItems = sessionItems.stream()
         .filter(item -> {
           // orderNo가 MINI_SIZE(4)보다 큰 문제만 (실기 세트 문제)
@@ -420,17 +422,11 @@ public class PracticalService {
     List<Long> questionIds;
 
     if (practicalItems.isEmpty()) {
-      // 할당된 문제가 없으면 새로 할당 (PRACTICAL 단계에 연결된 StudySession 사용)
-      // 실기는 MINI와 PRACTICAL이 같은 StudySession을 공유하므로 MINI 세션 사용
-      // SHORT 3 + LONG 2 = 총 5문제
-      List<Question> shortQuestions = questionRepository.pickRandomByTopic(
-          topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 3));
-      List<Question> longQuestions = questionRepository.pickRandomByTopic(
-          topicId, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 2));
-
-      List<Question> combined = Stream.concat(shortQuestions.stream(), longQuestions.stream())
-          .distinct()
-          .toList();
+      // 할당된 문제가 없으면 새로 할당 (SHORT 단계에 연결된 StudySession 사용)
+      // 실기는 MINI와 SHORT가 같은 StudySession을 공유하므로 MINI 세션 사용
+      // SHORT 5문제만 사용 (LONG 제거)
+      List<Question> combined = questionRepository.pickRandomByTopic(
+          topicId, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, PRACTICAL_SIZE));
 
       if (combined.isEmpty()) {
         throw new IllegalStateException("문제가 부족합니다. topicId: " + topicId);
@@ -518,12 +514,12 @@ public class PracticalService {
     boolean metaCompleted = Boolean.TRUE.equals(practicalMeta.get("completed"));
     completed = completed || metaCompleted;
     String status = completed ? "COMPLETE" : "IN_PROGRESS";
-    String next = completed ? "PRACTICAL_SUMMARY" : null;
+    String next = completed ? "SHORT_SUMMARY" : null;
 
     return new FlowDtos.StepEnvelope<>(
         session.getId(),
         "PRACTICAL",
-        "PRACTICAL_SET",
+        "SHORT_SET",
         status,
         next,
         sessionManager.loadMeta(session),
@@ -545,7 +541,7 @@ public class PracticalService {
       throw new IllegalStateException("토픽이 일치하지 않습니다.");
     }
 
-    // 2. MINI 단계에서 StudySession 가져오기 (실기는 MINI와 PRACTICAL이 같은 StudySession 공유)
+    // 2. MINI 단계에서 StudySession 가져오기 (실기는 MINI와 SHORT가 같은 StudySession 공유)
     LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
     StudySession session = miniStep.getStudySession();
 
@@ -556,7 +552,7 @@ public class PracticalService {
     // 3. 세션에 할당된 문제인지 검증
     List<StudySessionItem> sessionItems = sessionManager.items(session.getId());
     Set<Long> allocatedQuestionIds = sessionItems.stream()
-        .filter(item -> item.getOrderNo() > MINI_SIZE)  // PRACTICAL 단계 문제만
+        .filter(item -> item.getOrderNo() > MINI_SIZE)  // SHORT 단계 문제만
         .map(StudySessionItem::getQuestionId)
         .collect(Collectors.toSet());
 
@@ -568,7 +564,7 @@ public class PracticalService {
 
     // 순서는 세션에 할당된 순서 사용
     Map<Long, Integer> questionOrderMap = sessionItems.stream()
-        .filter(item -> item.getOrderNo() > MINI_SIZE)  // PRACTICAL 단계 문제만
+        .filter(item -> item.getOrderNo() > MINI_SIZE)  // SHORT 단계 문제만
         .collect(Collectors.toMap(StudySessionItem::getQuestionId, StudySessionItem::getOrderNo));
 
     Map<Long, Question> questionMap = questionRepository.findByIdIn(
@@ -644,7 +640,7 @@ public class PracticalService {
 
     // 할당된 PRACTICAL 문제의 총 개수 확인
     List<StudySessionItem> allPracticalItems = updatedSessionItems.stream()
-        .filter(item -> item.getOrderNo() > MINI_SIZE)  // PRACTICAL 단계 문제만
+        .filter(item -> item.getOrderNo() > MINI_SIZE)  // SHORT 단계 문제만
         .toList();
     int allocatedTotal = allPracticalItems.size();
 
@@ -655,7 +651,18 @@ public class PracticalService {
     boolean allPracticalQuestionsAnswered = allocatedTotal > 0 && answeredCount >= allocatedTotal;
 
     // 4. LearningStep 업데이트
-    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    // 하위 호환성: "SHORT" 단계가 없으면 "PRACTICAL" 단계를 찾아봄 (이전 버전의 세션)
+    LearningStep practicalStep;
+    try {
+      practicalStep = learningSessionService.getStep(learningSession, "SHORT");
+    } catch (NoSuchElementException e) {
+      // 이전 버전의 세션일 수 있으므로 "PRACTICAL" 단계 시도
+      try {
+        practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+      } catch (NoSuchElementException e2) {
+        throw new IllegalStateException("SHORT 또는 PRACTICAL 단계가 없습니다. 세션을 다시 시작해주세요.", e2);
+      }
+    }
     Map<String, Object> prevPracticalMeta = parseJson(practicalStep.getMetadataJson());
 
     // StudySessionItem에서 실제 정답 정보 직접 계산 (누적 계산 대신)
@@ -688,7 +695,7 @@ public class PracticalService {
     // StudySession의 summaryJson에도 저장 (하위 호환성)
     sessionManager.saveStepMeta(session, "practical", practicalMeta);
 
-    // 진정한 완료 설정 (PRACTICAL 단계 완료 시 모든 문제를 맞췄을 때)
+    // 진정한 완료 설정 (SHORT 단계 완료 시 모든 문제를 맞췄을 때)
     boolean newlyCompleted = false;
     if (finalCompleted && allWrongIds.isEmpty() && learningSession.getTrulyCompleted() == null) {
       learningSession.setTrulyCompleted(true);
@@ -768,13 +775,13 @@ public class PracticalService {
 
     // 다음 단계 결정: 오답이 있으면 REVIEW_WRONG, 없으면 SUMMARY
     String nextStep = finalCompleted
-        ? (!allWrongIds.isEmpty() ? "PRACTICAL_REVIEW_WRONG" : "PRACTICAL_SUMMARY")
-        : "PRACTICAL_SET";
+        ? (!allWrongIds.isEmpty() ? "SHORT_REVIEW_WRONG" : "SHORT_SUMMARY")
+        : "SHORT_SET";
 
     return new FlowDtos.StepEnvelope<>(
         session.getId(),
         "PRACTICAL",
-        "PRACTICAL_SET",
+        "SHORT_SET",
         finalCompleted ? "COMPLETE" : "IN_PROGRESS",
         nextStep,
         sessionManager.loadMeta(session),
@@ -806,8 +813,8 @@ public class PracticalService {
       throw new IllegalStateException("Review 모드가 아닙니다.");
     }
 
-    // 2. PRACTICAL 단계 조회
-    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    // 2. SHORT 단계 조회
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, "SHORT");
     StudySession studySession = practicalStep.getStudySession();
 
     if (studySession == null) {
@@ -859,7 +866,7 @@ public class PracticalService {
     return new FlowDtos.StepEnvelope<>(
         studySession.getId(),
         "REVIEW",
-        "PRACTICAL_REVIEW_SET",
+        "SHORT_REVIEW_SET",
         completed ? "COMPLETE" : "IN_PROGRESS",
         completed ? "REVIEW_WRONG" : null,
         sessionManager.loadMeta(studySession),
@@ -886,7 +893,7 @@ public class PracticalService {
       throw new IllegalStateException("Review 모드가 아닙니다.");
     }
 
-    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, "SHORT");
 
     // 2. StudySession 조회 (이미 할당되어 있어야 함)
     StudySession session = practicalStep.getStudySession();
@@ -976,7 +983,7 @@ public class PracticalService {
           correct ? 100 : 0,  // 하위 호환성을 위해 점수도 저장
           session,
           item,
-          "PRACTICAL_REVIEW"
+          "SHORT_REVIEW"
       );
       pushProgressHook(userId, question.getType(), correct, correct ? 100 : 0, question.getId());
       // 실기 리뷰도 Progress 에 반영
@@ -1074,7 +1081,7 @@ public class PracticalService {
     return new FlowDtos.StepEnvelope<>(
         session.getId(),
         "REVIEW",
-        "PRACTICAL_REVIEW_SET",
+        "SHORT_REVIEW_SET",
         status,
         nextStep,
         sessionManager.loadMeta(session),
@@ -1104,18 +1111,11 @@ public class PracticalService {
       throw new IllegalStateException("Review 모드가 아닙니다.");
     }
 
-    // 2. StudySession 조회 (실기 리뷰는 PRACTICAL 단계를 사용)
-    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    // 2. StudySession 조회 (실기 리뷰는 SHORT 단계를 사용)
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, "SHORT");
     StudySession session = practicalStep.getStudySession();
 
-    // 3. LearningStep에서 메타데이터 추출
-    Map<String, Object> practicalMeta = parseJson(practicalStep.getMetadataJson());
-
-    int practicalTotal = readInt(practicalMeta, "total");
-    int practicalCorrect = readInt(practicalMeta, "correct");
-    boolean practicalCompleted = Boolean.TRUE.equals(practicalMeta.get("completed"));
-
-    // 4. 약점 태그 계산 (실기 오답 태그 기반)
+    // 3. 약점 태그 계산 및 summary_json 로드
     List<String> mistakes = List.of();
     Map<String, Object> meta = Map.of();
     Long sessionId = null;
@@ -1136,6 +1136,24 @@ public class PracticalService {
       mistakes = collectMistakes(answers, questionCache);
     }
 
+    // 4. LearningStep과 summary_json에서 메타데이터 추출 (summary_json 우선)
+    Map<String, Object> practicalMeta = parseJson(practicalStep.getMetadataJson());
+    
+    // summary_json에서 practical 정보 가져오기 (우선순위 높음)
+    if (session != null && !meta.isEmpty()) {
+      Object practicalRaw = meta.get("practical");
+      if (practicalRaw instanceof Map<?, ?> practicalFromSummary) {
+        Map<String, Object> practicalFromSummaryMap = new HashMap<>();
+        practicalFromSummary.forEach((k, v) -> practicalFromSummaryMap.put(String.valueOf(k), v));
+        // summary_json의 정보로 덮어쓰기
+        practicalMeta.putAll(practicalFromSummaryMap);
+      }
+    }
+
+    int practicalTotal = readInt(practicalMeta, "total");
+    int practicalCorrect = readInt(practicalMeta, "correct");
+    boolean practicalCompleted = Boolean.TRUE.equals(practicalMeta.get("completed"));
+
     boolean completed = practicalCompleted;
 
     String topicTitle = "";
@@ -1153,6 +1171,151 @@ public class PracticalService {
         mistakes
     );
 
+    // XP 정보 초기값
+    Integer earnedXp = null;
+    Long totalXp = null;
+    Integer level = null;
+    Integer xpToNextLevel = null;
+    Boolean leveledUp = null;
+    Integer levelUpRewardPoints = null;
+
+    String status = completed ? "COMPLETE" : "IN_PROGRESS";
+
+    // XP 지급 (xp_granted=0이면 항상 지급, 정답률 기반)
+    // 조건: xp_granted=0 (passed와 상관없이 정답률에 따라 XP 지급)
+    if (sessionId != null && session != null && !Boolean.TRUE.equals(session.getXpGranted())) {
+      try {
+        // 정답률 계산 (summary_json에서 가져온 practicalMeta 우선 사용)
+        double scorePct;
+        
+        // 1순위: practicalMeta에서 직접 가져오기 (summary_json에서 파싱한 값이 가장 정확)
+        Object scorePctObj = practicalMeta.get("scorePct");
+        if (scorePctObj != null && scorePctObj instanceof Number) {
+          scorePct = ((Number) scorePctObj).doubleValue();
+          System.out.println("[PracticalService.practicalReviewSummary] scorePct from practicalMeta: " + scorePct);
+        } else if (practicalTotal > 0) {
+          // 2순위: 계산하기
+          scorePct = (practicalCorrect * 100.0) / practicalTotal;
+          System.out.println("[PracticalService.practicalReviewSummary] scorePct calculated: " + scorePct + 
+                            " (practicalTotal=" + practicalTotal + ", practicalCorrect=" + practicalCorrect + ")");
+        } else if (session.getScorePct() != null) {
+          // 3순위: session에서 가져오기
+          scorePct = session.getScorePct();
+          System.out.println("[PracticalService.practicalReviewSummary] scorePct from session: " + scorePct);
+        } else {
+          // 4순위: 기본값 0.0
+          scorePct = 0.0;
+          System.out.println("[PracticalService.practicalReviewSummary] scorePct default: 0.0");
+        }
+        
+        // scorePct는 반드시 0.0 이상 100.0 이하의 유효한 값이어야 함
+        if (scorePct < 0.0 || scorePct > 100.0 || Double.isNaN(scorePct)) {
+          System.err.println("[PracticalService.practicalReviewSummary] Invalid scorePct: " + scorePct + ", using 0.0");
+          scorePct = 0.0;
+        }
+        
+        // 로깅: 실제 전달되는 scorePct 값 확인
+        System.out.println("[PracticalService.practicalReviewSummary] XP 지급 요청: sessionId=" + session.getId() + 
+                          ", practicalTotal=" + practicalTotal + ", practicalCorrect=" + practicalCorrect + 
+                          ", scorePct=" + scorePct);
+        
+        // 1. XP 지급 요청 (정답률 기반) - scorePct는 절대 null이 아님
+        ProgressXpClient.XpEarnRequest xpRequest = new ProgressXpClient.XpEarnRequest(
+            "SHORT_REVIEW",
+            session.getId(),
+            rootTopicId,
+            scorePct  // 항상 유효한 Double 값 (null 아님)
+        );
+        
+        System.out.println("[PracticalService.practicalReviewSummary] XP 요청 상세: activityType=" + xpRequest.activityType() + 
+                          ", sessionId=" + xpRequest.sessionId() + ", topicId=" + xpRequest.topicId() + 
+                          ", scorePct=" + xpRequest.scorePct());
+        
+        ProgressXpClient.XpEarnResponse xpResp = progressXpClient.earnXp(xpRequest);
+          
+          // 2. XP 정보를 응답에 포함
+          earnedXp = xpResp.earnedXp();
+          totalXp = xpResp.totalXp();
+          level = xpResp.level();
+          xpToNextLevel = xpResp.xpToNextLevel();
+          leveledUp = xpResp.leveledUp();
+          levelUpRewardPoints = xpResp.levelUpRewardPoints();
+          
+          // 3. xp_granted 플래그 업데이트
+          sessionManager.markXpGranted(session);
+          
+          // 4. 기존 hook도 호출 (다른 통계 처리용)
+          try {
+            progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+                userId,
+                ExamMode.PRACTICAL.name(),
+                "REVIEW",
+                rootTopicId
+            ));
+          } catch (Exception hookEx) {
+            // hook 실패는 학습 흐름을 막지 않음
+            System.err.println("Failed to call flow-complete hook: " + hookEx.getMessage());
+          }
+          
+        } catch (Exception e) {
+          // XP 지급 실패는 학습 흐름을 막지 않음, 로깅만 수행
+          System.err.println("Failed to grant XP in practicalReviewSummary (REVIEW): " + e.getMessage());
+          e.printStackTrace();
+        }
+    }
+    
+    // REVIEW 세션의 score_pct와 passed 업데이트
+    // summary_json에 완료 정보가 있으면 그것을 사용해서 직접 업데이트
+    // 세션이 완료되었거나 (finished_at이 있거나, 모든 문제를 풀었거나) score_pct가 0이면 업데이트
+    if (session != null && practicalTotal > 0) {
+      // 세션이 완료되었는지 확인
+      boolean sessionFinished = session.getFinishedAt() != null;
+      boolean sessionCompleted = Boolean.TRUE.equals(session.getCompleted());
+      
+      // 모든 문제를 제출했는지 확인
+      List<StudySessionItem> allReviewItems = sessionManager.items(session.getId());
+      long reviewAnsweredCount = allReviewItems.stream()
+          .filter(item -> item.getUserAnswerJson() != null && !item.getUserAnswerJson().isBlank())
+          .count();
+      boolean allQuestionsAnswered = reviewAnsweredCount >= REVIEW_SIZE && 
+                                     reviewAnsweredCount == allReviewItems.size() &&
+                                     allReviewItems.size() >= REVIEW_SIZE;
+      
+      // practicalMeta에서 정보 가져오기
+      double scorePctFromMeta = practicalTotal > 0 ? (practicalCorrect * 100.0) / practicalTotal : 0.0;
+      boolean passedFromMeta = practicalCorrect == practicalTotal && practicalTotal > 0;
+      
+      // scorePctFromMeta를 practicalMeta에서 직접 가져오기 (summary_json에서 파싱한 값이 더 정확)
+      Object scorePctObj = practicalMeta.get("scorePct");
+      if (scorePctObj != null && scorePctObj instanceof Number) {
+        double metaScorePct = ((Number) scorePctObj).doubleValue();
+        // summary_json에 값이 있으면 그것을 사용 (더 신뢰할 수 있음)
+        scorePctFromMeta = metaScorePct;
+      }
+      
+      // score_pct 업데이트 필요 여부 확인 (0점도 포함하여 항상 업데이트)
+      boolean needsUpdate = session.getScorePct() == null || 
+                            Math.abs(session.getScorePct() - scorePctFromMeta) > 0.01 ||
+                            !Boolean.TRUE.equals(session.getPassed()) != !passedFromMeta ||
+                            !"CLOSED".equals(session.getStatus());
+      
+      if (needsUpdate) {
+        Map<String, Object> currentMeta = sessionManager.loadMeta(session);
+        
+        // 세션이 완료되었거나 모든 문제를 풀었으면 CLOSED로 변경
+        if (sessionFinished || sessionCompleted || completed || allQuestionsAnswered) {
+          System.out.println("[PracticalService.practicalReviewSummary] Updating session: sessionId=" + session.getId() + 
+                            ", scorePct=" + session.getScorePct() + " -> " + scorePctFromMeta + 
+                            ", passed=" + session.getPassed() + " -> " + passedFromMeta);
+          sessionManager.closeSession(session, scorePctFromMeta, passedFromMeta, currentMeta);
+        }
+      }
+    }
+
+    // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
+    // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
+
+    // 최종 payload 생성 (XP 정보 포함)
     WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
         0,              // Review 모드에는 MINI 없음
         0,
@@ -1160,45 +1323,14 @@ public class PracticalService {
         practicalTotal,
         practicalCorrect,
         summaryText,
-        completed
+        completed,
+        earnedXp,
+        totalXp,
+        level,
+        xpToNextLevel,
+        leveledUp,
+        levelUpRewardPoints
     );
-
-    String status = completed ? "COMPLETE" : "IN_PROGRESS";
-
-    // 진정한 완료(PRACTICAL 완료)일 때만 XP 지급
-    boolean trulyCompleted = learningSession != null && Boolean.TRUE.equals(learningSession.getTrulyCompleted());
-
-    if (trulyCompleted && sessionId != null && session != null) {
-      if (!Boolean.TRUE.equals(session.getXpGranted())) {
-        try {
-          progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-              userId,
-              ExamMode.PRACTICAL.name(),
-              "REVIEW",
-              rootTopicId
-          ));
-          sessionManager.markXpGranted(session);
-          // 세션이 이미 completed여도 score_pct와 passed를 업데이트
-          double scorePct = practicalTotal == 0 ? 0.0 : (practicalCorrect * 100.0) / practicalTotal;
-          boolean allPassed = completed && scorePct >= 100.0;
-          if (!Boolean.TRUE.equals(session.getCompleted())) {
-            // 완료되지 않은 경우 closeSession 호출
-            sessionManager.closeSession(session, scorePct, allPassed, Map.of());
-          } else {
-            // 이미 완료된 경우 score_pct와 passed만 업데이트
-            Map<String, Object> currentMeta = sessionManager.loadMeta(session);
-            sessionManager.closeSession(session, scorePct, allPassed, currentMeta);
-          }
-        } catch (Exception e) {
-          // XP hook 실패는 학습 흐름을 막지 않음, 로깅만 수행
-          System.err.println("Failed to grant XP in practicalReviewSummary (REVIEW): " + e.getMessage());
-          e.printStackTrace();
-        }
-      }
-    }
-
-    // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
-    // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
 
     return new FlowDtos.StepEnvelope<>(
         sessionId,
@@ -1244,8 +1376,8 @@ public class PracticalService {
       practicalStepName = "ASSIST_PRACTICAL_CATEGORY";
       miniStepName = null;
     } else {
-      // 일반 학습: MINI와 PRACTICAL 단계 사용
-      practicalStepName = "PRACTICAL";
+      // 일반 학습: MINI와 SHORT 단계 사용
+      practicalStepName = "SHORT";
       miniStepName = "MINI";
     }
 
@@ -1302,7 +1434,7 @@ public class PracticalService {
 
     boolean completed = miniPassed && practicalCompleted;
     int totalSolved = miniTotal + practicalTotal;
-    int practicalPassed = practicalTotal > 0 ? Math.max(0, practicalTotal - readList(practicalMeta, "wrongQuestionIds").size()) : 0;
+    int practicalPassedCount = practicalTotal > 0 ? Math.max(0, practicalTotal - readList(practicalMeta, "wrongQuestionIds").size()) : 0;
 
     // 토픽 제목도 cert-service(커리큘럼)에서 가져오도록 수정
     String topicTitle = "";
@@ -1321,44 +1453,167 @@ public class PracticalService {
       }
     }
 
-    String summary = aiExplanationService.summarizePractical(
+    // 실기 요약: 실기 문제(Practical)만 집중 (MINI는 OX 문제이므로 실기 요약에서 제외)
+    // totalSolved가 아니라 practicalTotal과 practicalCorrect만 전달
+    String summaryText = aiExplanationService.summarizePractical(
         topicTitle,
-        totalSolved,
-        practicalCorrect,
+        practicalTotal,  // 실기 문제 총 수만 전달 (MINI 제외)
+        practicalCorrect,  // 실기 문제 정답 수만 전달
         mistakes
     );
 
-    WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
-        miniTotal,
-        miniCorrect,
-        miniPassed,
-        practicalTotal,
-        practicalCorrect,
-        summary,
-        completed
-    );
+    // XP 정보 초기값
+    Integer earnedXp = null;
+    Long totalXp = null;
+    Integer level = null;
+    Integer xpToNextLevel = null;
+    Boolean leveledUp = null;
+    Integer levelUpRewardPoints = null;
 
     String status = completed ? "COMPLETE" : "IN_PROGRESS";
 
-    // 진정한 완료(PRACTICAL 완료)일 때만 XP 지급
+    // MICRO 모드: MINI와 PRACTICAL 모두 완료되었는지 확인
     boolean trulyCompleted = Boolean.TRUE.equals(learningSession.getTrulyCompleted());
-
-    if (trulyCompleted && sessionId != null && session != null) {
-      if (!Boolean.TRUE.equals(session.getXpGranted())) {
+    boolean miniAllPassed = false;
+    
+    if ("MICRO".equals(learningSession.getMode())) {
+      // MINI가 모두 맞았는지 확인
+      miniAllPassed = miniPassed && miniTotal >= MINI_SIZE && miniCorrect == miniTotal;
+      // PRACTICAL도 모두 맞았는지 확인
+      boolean practicalAllCorrect = completed && practicalTotal >= PRACTICAL_SIZE && practicalCorrect == practicalTotal;
+      
+      // XP 지급 (xp_granted=0이면 항상 지급, 정답률 기반)
+      // 조건: xp_granted=0 (passed와 상관없이 정답률에 따라 XP 지급)
+      // MICRO는 MINI와 PRACTICAL 모두 완료되었을 때 XP 지급
+      if (sessionId != null && session != null && !Boolean.TRUE.equals(session.getXpGranted())) {
         try {
-          progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-              userId,
-              ExamMode.PRACTICAL.name(),
-              "MICRO",
-              topicId
-          ));
-          sessionManager.markXpGranted(session);
-          if (!Boolean.TRUE.equals(session.getCompleted())) {
-            int scorePct = practicalTotal == 0 ? 0 : (practicalCorrect * 100) / practicalTotal;
-            sessionManager.closeSession(session, scorePct, completed, Map.of());
+          // 정답률 계산 (MICRO는 MINI+PRACTICAL 합산 정답률 사용)
+          // 1순위: practicalMeta에서 직접 가져오기 (summary_json에서 파싱한 값이 가장 정확)
+          double scorePct;
+          Object scorePctObj = practicalMeta.get("scorePct");
+          if (scorePctObj != null && scorePctObj instanceof Number) {
+            double practicalScorePct = ((Number) scorePctObj).doubleValue();
+            // MICRO는 MINI + PRACTICAL 합산 정답률 사용
+            if (totalSolved > 0) {
+              int totalCorrect = miniCorrect + practicalCorrect;
+              scorePct = (totalCorrect * 100.0) / totalSolved;
+            } else {
+              scorePct = practicalScorePct; // PRACTICAL만 있는 경우
+            }
+            System.out.println("[PracticalService.summary] scorePct from practicalMeta: " + practicalScorePct + 
+                             ", calculated total: " + scorePct + " (totalSolved=" + totalSolved + ", totalCorrect=" + (miniCorrect + practicalCorrect) + ")");
+          } else if (totalSolved > 0) {
+            // 2순위: 계산하기
+            int totalCorrect = miniCorrect + practicalCorrect;
+            scorePct = (totalCorrect * 100.0) / totalSolved;
+            System.out.println("[PracticalService.summary] scorePct calculated: " + scorePct + 
+                            " (totalSolved=" + totalSolved + ", totalCorrect=" + totalCorrect + ")");
+          } else if (session.getScorePct() != null && session.getScorePct() > 0.0) {
+            // 3순위: session에서 가져오기 (0이 아닐 때만)
+            scorePct = session.getScorePct();
+            System.out.println("[PracticalService.summary] scorePct from session: " + scorePct);
+          } else {
+            // 4순위: 기본값 0.0
+            scorePct = 0.0;
+            System.out.println("[PracticalService.summary] scorePct default: 0.0");
           }
-        } catch (Exception ignored) {
-          // XP hook 실패는 학습 흐름을 막지 않음
+          
+          // scorePct는 반드시 0.0 이상 100.0 이하의 유효한 값이어야 함
+          if (scorePct < 0.0 || scorePct > 100.0 || Double.isNaN(scorePct)) {
+            System.err.println("[PracticalService.summary] Invalid scorePct: " + scorePct + ", using 0.0");
+            scorePct = 0.0;
+          }
+          
+          System.out.println("[PracticalService.summary] XP 지급 요청 (MICRO): sessionId=" + session.getId() + 
+                            ", totalSolved=" + totalSolved + ", totalCorrect=" + (miniCorrect + practicalCorrect) + 
+                            ", scorePct=" + scorePct);
+          
+          // 1. XP 지급 요청 (정답률 기반) - scorePct는 절대 null이 아님
+          ProgressXpClient.XpEarnRequest xpRequest = new ProgressXpClient.XpEarnRequest(
+              "PRACTICAL_MICRO",
+              session.getId(),
+              topicId,
+              scorePct  // 항상 유효한 Double 값 (null 아님)
+          );
+          
+          System.out.println("[PracticalService.summary] XP 요청 상세: activityType=" + xpRequest.activityType() + 
+                            ", sessionId=" + xpRequest.sessionId() + ", topicId=" + xpRequest.topicId() + 
+                            ", scorePct=" + xpRequest.scorePct());
+          
+          ProgressXpClient.XpEarnResponse xpResp = progressXpClient.earnXp(xpRequest);
+            
+            // 2. XP 정보를 응답에 포함
+            earnedXp = xpResp.earnedXp();
+            totalXp = xpResp.totalXp();
+            level = xpResp.level();
+            xpToNextLevel = xpResp.xpToNextLevel();
+            leveledUp = xpResp.leveledUp();
+            levelUpRewardPoints = xpResp.levelUpRewardPoints();
+            
+            // 3. xp_granted 플래그 업데이트
+            sessionManager.markXpGranted(session);
+            // MINI 세션도 표시 (MICRO는 MINI+PRACTICAL 합쳐서 하나의 XP)
+            LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
+            StudySession miniSession = miniStep != null ? miniStep.getStudySession() : null;
+            if (miniSession != null && !Boolean.TRUE.equals(miniSession.getXpGranted())) {
+              sessionManager.markXpGranted(miniSession);
+            }
+            
+            // 4. 기존 hook도 호출 (다른 통계 처리용)
+            try {
+              progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
+                  userId,
+                  ExamMode.PRACTICAL.name(),
+                  "MICRO",
+                  topicId
+              ));
+            } catch (Exception hookEx) {
+              // hook 실패는 학습 흐름을 막지 않음
+              System.err.println("Failed to call flow-complete hook: " + hookEx.getMessage());
+            }
+            
+        } catch (Exception e) {
+          // XP 지급 실패는 학습 흐름을 막지 않음, 로깅만 수행
+          System.err.println("Failed to grant XP in practicalSummary (MICRO): " + e.getMessage());
+          e.printStackTrace();
+        }
+      }
+    }
+    
+    // PRACTICAL 세션의 score_pct와 passed 업데이트 (모든 모드에 대해)
+    // summary_json에 완료 정보가 있으면 그것을 사용해서 직접 업데이트
+    if (session != null && practicalTotal > 0) {
+      // practicalMeta에서 정보 가져오기
+      double scorePctFromMeta = practicalTotal > 0 ? (practicalCorrect * 100.0) / practicalTotal : 0.0;
+      boolean passedFromMeta = practicalCorrect == practicalTotal && practicalTotal > 0;
+      
+      // scorePctFromMeta를 practicalMeta에서 직접 가져오기 (summary_json에서 파싱한 값이 더 정확)
+      Object scorePctObj = practicalMeta.get("scorePct");
+      if (scorePctObj != null && scorePctObj instanceof Number) {
+        double metaScorePct = ((Number) scorePctObj).doubleValue();
+        // summary_json에 값이 있으면 그것을 사용 (더 신뢰할 수 있음)
+        scorePctFromMeta = metaScorePct;
+      }
+      
+      // score_pct 업데이트 필요 여부 확인 (0점도 포함하여 항상 업데이트)
+      boolean needsUpdate = session.getScorePct() == null || 
+                            Math.abs(session.getScorePct() - scorePctFromMeta) > 0.01 ||
+                            !Boolean.TRUE.equals(session.getPassed()) != !passedFromMeta ||
+                            !"CLOSED".equals(session.getStatus());
+      
+      if (needsUpdate) {
+        Map<String, Object> currentMeta = sessionManager.loadMeta(session);
+        
+        // 세션이 완료되었거나 모든 문제를 풀었으면 CLOSED로 변경
+        boolean sessionFinished = session.getFinishedAt() != null;
+        boolean sessionCompleted = Boolean.TRUE.equals(session.getCompleted());
+        boolean allQuestionsAnswered = practicalCompleted || (practicalTotal >= PRACTICAL_SIZE && practicalCorrect + (practicalTotal - practicalCorrect) == practicalTotal);
+        
+        if (sessionFinished || sessionCompleted || practicalCompleted || allQuestionsAnswered) {
+          System.out.println("[PracticalService.summary] Updating PRACTICAL session: sessionId=" + session.getId() + 
+                            ", scorePct=" + session.getScorePct() + " -> " + scorePctFromMeta + 
+                            ", passed=" + session.getPassed() + " -> " + passedFromMeta);
+          sessionManager.closeSession(session, scorePctFromMeta, passedFromMeta, currentMeta);
         }
       }
     }
@@ -1366,10 +1621,27 @@ public class PracticalService {
     // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
     // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
 
+    // 최종 payload 생성 (XP 정보 포함)
+    WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
+        miniTotal,
+        miniCorrect,
+        miniPassed,
+        practicalTotal,
+        practicalCorrect,
+        summaryText,
+        completed,
+        earnedXp,
+        totalXp,
+        level,
+        xpToNextLevel,
+        leveledUp,
+        levelUpRewardPoints
+    );
+
     return new FlowDtos.StepEnvelope<>(
         sessionId,
         "PRACTICAL",
-        "PRACTICAL_SUMMARY",
+        "SHORT_SUMMARY",
         status,
         null,
         meta,
@@ -1423,7 +1695,7 @@ public class PracticalService {
       throw new IllegalStateException("Review 모드가 아닙니다.");
     }
 
-    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
+    LearningStep practicalStep = learningSessionService.getStep(learningSession, "SHORT");
 
     // 2. StudySession 조회 (이미 할당되어 있어야 함)
     StudySession session = practicalStep.getStudySession();
@@ -1516,7 +1788,7 @@ public class PracticalService {
     sessionManager.saveStepMeta(session, "practical", practicalMeta);
 
     // 9. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
-    // PRACTICAL 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
+    // SHORT 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
     practicalStep.setMetadataJson(metadataJson);
     practicalStep.setScorePct(accumulatedScorePct);
     practicalStep.setUpdatedAt(Instant.now());
@@ -1546,7 +1818,7 @@ public class PracticalService {
       throw new IllegalStateException("세션 소유자가 아닙니다.");
     }
 
-    // stepCode(MICRO_OX / PRACTICAL_SET / REVIEW ...) → UserAnswer.source 로 매핑
+    // stepCode(MICRO_OX / SHORT_SET / REVIEW ...) → UserAnswer.source 로 매핑
     String source = mapStepToSource(stepCode);
 
     // 이 사용자 + 해당 세션 + 해당 step(source)에서 틀린 답안만 수집
@@ -1631,15 +1903,15 @@ public class PracticalService {
       LearningStep categoryStep = learningSessionService.getStep(learningSession, stepName);
       session = categoryStep.getStudySession();
     } else if ("REVIEW".equals(learningSession.getMode())) {
-      // 실기 REVIEW 모드: PRACTICAL 단계의 StudySession 사용
-      stepName = "PRACTICAL";
-      stepCode = "PRACTICAL_REVIEW";
+      // 실기 REVIEW 모드: SHORT 단계의 StudySession 사용
+      stepName = "SHORT";
+      stepCode = "SHORT_REVIEW";
       LearningStep practicalStep = learningSessionService.getStep(learningSession, stepName);
       session = practicalStep.getStudySession();
     } else {
-      // Micro 실기 모드: MINI 단계와 PRACTICAL 단계가 같은 StudySession을 공유하므로 MINI 단계에서 조회
+      // Micro 실기 모드: MINI 단계와 SHORT 단계가 같은 StudySession을 공유하므로 MINI 단계에서 조회
       stepName = "MINI";
-      stepCode = "PRACTICAL_SET";
+      stepCode = "SHORT_SET";
       LearningStep miniStep = learningSessionService.getStep(learningSession, stepName);
       session = miniStep.getStudySession();
     }
@@ -1717,7 +1989,8 @@ public class PracticalService {
   /* ========================= Helper Methods ========================= */
 
   private boolean isPractical(Question question) {
-    return question.getType() == QuestionType.SHORT || question.getType() == QuestionType.LONG;
+    // 실기는 SHORT만 사용 (LONG 제거)
+    return question.getType() == QuestionType.SHORT;
   }
 
   private void persistUserAnswer(String userId,
@@ -1943,9 +2216,9 @@ public class PracticalService {
       return "MICRO_PRACTICAL";
     }
     return switch (stepCode) {
-      case "MICRO_OX", "PRACTICAL_MINI" -> "PRACTICAL_MINI";              // 실기 OX
-      case "PRACTICAL_SET", "MICRO_PRACTICAL" -> "MICRO_PRACTICAL";       // 실기 Micro 세트
-      case "REVIEW", "PRACTICAL_REVIEW_SET", "PRACTICAL_REVIEW" -> "PRACTICAL_REVIEW"; // 실기 Review
+      case "MICRO_OX", "PRACTICAL_MINI" -> "PRACTICAL_MINI";              // 실기 OX (MINI 단계)
+      case "SHORT_SET", "MICRO_PRACTICAL" -> "MICRO_PRACTICAL";       // 실기 Micro 세트 (SHORT 단계)
+      case "REVIEW", "SHORT_REVIEW_SET", "SHORT_REVIEW" -> "SHORT_REVIEW"; // 실기 Review (SHORT 단계)
       case "ASSIST_PRACTICAL_DIFFICULTY", "ASSIST_PRACTICAL_WEAKNESS", "ASSIST_PRACTICAL_CATEGORY" -> "ASSIST_PRACTICAL"; // 보조학습 (difficulty/weakness/category)
       default -> stepCode; // 다른 source 를 그대로 사용하고 싶을 때
     };
@@ -2021,34 +2294,8 @@ public class PracticalService {
       return; // REVIEW 모드가 아니면 체크하지 않음
     }
 
-    String userId = learningSession.getUserId();
-    
-    // REVIEW 세션 완료 및 모든 문제 정답 확인
-    if (reviewSession == null || !Boolean.TRUE.equals(reviewSession.getCompleted()) ||
-        !Boolean.TRUE.equals(reviewSession.getPassed()) ||
-        reviewSession.getScorePct() == null || reviewSession.getScorePct() < 100.0) {
-      return;
-    }
-
-    // XP 지급 (idempotent)
-    if (!Boolean.TRUE.equals(reviewSession.getXpGranted())) {
-      try {
-        // progress-service에 XP 지급 요청 (idempotent 처리됨)
-        progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-            userId,
-            examMode.name(),
-            "REVIEW",
-            learningSession.getTopicId()
-        ));
-        
-        // XP 지급 완료 표시
-        sessionManager.markXpGranted(reviewSession);
-      } catch (Exception e) {
-        // XP hook 실패는 학습 흐름을 막지 않음, 로깅만 수행
-        System.err.println("Failed to grant XP for REVIEW PRACTICAL completion: " + e.getMessage());
-        e.printStackTrace();
-      }
-    }
+    // summary 메서드에서 이미 XP 지급 로직이 처리되므로, 여기서는 제거
+    // 이 메서드는 더 이상 사용하지 않거나, summary에서만 XP 지급하도록 변경
   }
 
   /**
@@ -2060,64 +2307,7 @@ public class PracticalService {
       return; // MICRO 모드가 아니면 체크하지 않음
     }
 
-    String userId = learningSession.getUserId();
-    
-    // 1. MINI step 확인: status = COMPLETE && score_pct = 100
-    LearningStep miniStep = learningSessionService.getStep(learningSession, "MINI");
-    if (miniStep == null || !"COMPLETE".equals(miniStep.getStatus())) {
-      return;
-    }
-    Map<String, Object> miniMeta = parseJson(miniStep.getMetadataJson());
-    int miniTotal = readInt(miniMeta, "total");
-    int miniCorrect = readInt(miniMeta, "correct");
-    boolean miniPassed = Boolean.TRUE.equals(miniMeta.get("passed"));
-    boolean miniPerfect = miniStep.getScorePct() != null && miniStep.getScorePct() >= 100 &&
-                          miniPassed && miniTotal >= MINI_SIZE && miniCorrect == miniTotal;
-    if (!miniPerfect) {
-      return;
-    }
-
-    // 2. PRACTICAL step 확인: status = COMPLETE && score_pct = 100
-    LearningStep practicalStep = learningSessionService.getStep(learningSession, "PRACTICAL");
-    if (practicalStep == null || !"COMPLETE".equals(practicalStep.getStatus())) {
-      return;
-    }
-    boolean practicalPerfect = practicalStep.getScorePct() != null && practicalStep.getScorePct() >= 100;
-    if (!practicalPerfect) {
-      return;
-    }
-
-    // 3. SUMMARY step 확인: status = COMPLETE
-    LearningStep summaryStep = learningSessionService.getStep(learningSession, "SUMMARY");
-    if (summaryStep == null || !"COMPLETE".equals(summaryStep.getStatus())) {
-      return;
-    }
-
-    // 4. 모든 조건 만족 시 XP 지급 (idempotent)
-    if (practicalSession != null && !Boolean.TRUE.equals(practicalSession.getXpGranted())) {
-      try {
-        // progress-service에 XP 지급 요청 (idempotent 처리됨)
-        progressHookClient.flowComplete(new ProgressHookClient.FlowCompletePayload(
-            userId,
-            examMode.name(),
-            "MICRO",
-            learningSession.getTopicId()
-        ));
-        
-        // XP 지급 완료 표시 (실기는 MINI와 PRACTICAL이 같은 세션 공유)
-        sessionManager.markXpGranted(practicalSession);
-        
-        // learning_session 업데이트
-        if (!Boolean.TRUE.equals(learningSession.getTrulyCompleted())) {
-          learningSession.setTrulyCompleted(true);
-          learningSession.setStatus("DONE");
-          learningSessionService.saveLearningSession(learningSession);
-        }
-      } catch (Exception e) {
-        // XP hook 실패는 학습 흐름을 막지 않음, 로깅만 수행
-        System.err.println("Failed to grant XP for MICRO PRACTICAL completion: " + e.getMessage());
-        e.printStackTrace();
-      }
-    }
+    // summary 메서드에서 이미 XP 지급 로직이 처리되므로, 여기서는 제거
+    // 이 메서드는 더 이상 사용하지 않거나, summary에서만 XP 지급하도록 변경
   }
 }

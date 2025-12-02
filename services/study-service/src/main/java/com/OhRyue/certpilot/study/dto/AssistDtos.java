@@ -81,7 +81,28 @@ public class AssistDtos {
       @Schema(description = "DB 기본 해설") String explanation
   ) {}
 
+  @Schema(description = "보조학습(필기) 요약 응답")
+  public record WrittenSummaryResp(
+      @Schema(description = "총 풀이 수") int total,
+      @Schema(description = "정답 수") int correct,
+      @Schema(description = "AI 학습 요약") String aiSummary,
+      @Schema(description = "완료 여부") boolean completed,
+      // XP 정보 (보조학습은 grade-one에서 이미 지급되므로 earnedXp는 세션에서 지급된 총 XP)
+      @Schema(description = "이번 세션에서 획득한 XP (정답 수 × 5)") Integer earnedXp,
+      @Schema(description = "현재 총 XP") Long totalXp,
+      @Schema(description = "현재 레벨") Integer level,
+      @Schema(description = "다음 레벨까지 필요한 XP") Integer xpToNextLevel,
+      @Schema(description = "레벨업 여부 (보조학습 summary에서는 항상 false)") Boolean leveledUp,
+      @Schema(description = "레벨업 보상 포인트") Integer levelUpRewardPoints
+  ) {}
+
   /* ===================== Written Assist – 단건 즉시 채점 ===================== */
+
+  @Schema(description = "보조학습(필기) 단건 즉시 채점 요청")
+  public record WrittenGradeOneReq(
+      @Schema(description = "문제 ID") @NotNull Long questionId,
+      @Schema(description = "사용자가 선택한 보기 라벨(A/B/C/D)") @NotNull String label
+  ) {}
 
   @Schema(description = "보조학습(필기) 단건 즉시 채점 응답")
   public record WrittenGradeOneResp(
@@ -120,7 +141,28 @@ public class AssistDtos {
       @Schema(description = "AI 해설") String aiExplanation
   ) {}
 
+  @Schema(description = "보조학습(실기) 요약 응답")
+  public record PracticalSummaryResp(
+      @Schema(description = "총 풀이 수") int total,
+      @Schema(description = "정답 수") int correct,
+      @Schema(description = "AI 학습 요약") String aiSummary,
+      @Schema(description = "완료 여부") boolean completed,
+      // XP 정보 (보조학습은 grade-one에서 이미 지급되므로 earnedXp는 세션에서 지급된 총 XP)
+      @Schema(description = "이번 세션에서 획득한 XP (정답 수 × 5)") Integer earnedXp,
+      @Schema(description = "현재 총 XP") Long totalXp,
+      @Schema(description = "현재 레벨") Integer level,
+      @Schema(description = "다음 레벨까지 필요한 XP") Integer xpToNextLevel,
+      @Schema(description = "레벨업 여부 (보조학습 summary에서는 항상 false)") Boolean leveledUp,
+      @Schema(description = "레벨업 보상 포인트") Integer levelUpRewardPoints
+  ) {}
+
   /* ===================== Practical Assist – 단건 즉시 채점 ===================== */
+
+  @Schema(description = "보조학습(실기) 단건 즉시 채점 요청")
+  public record PracticalGradeOneReq(
+      @Schema(description = "문제 ID") @NotNull Long questionId,
+      @Schema(description = "사용자의 주관식 답변") @NotNull String userText
+  ) {}
 
   @Schema(description = "보조학습(실기) 단건 즉시 채점 응답")
   public record PracticalGradeOneResp(

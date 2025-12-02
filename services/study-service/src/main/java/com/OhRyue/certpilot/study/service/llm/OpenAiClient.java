@@ -1,19 +1,21 @@
 package com.OhRyue.certpilot.study.service.llm;
 
-import com.OhRyue.certpilot.study.config.LlmProperties;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.util.retry.Retry;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import com.OhRyue.certpilot.study.config.LlmProperties;
+
+import lombok.RequiredArgsConstructor;
+import reactor.util.retry.Retry;
 
 @Component
 @RequiredArgsConstructor
@@ -28,7 +30,8 @@ public class OpenAiClient implements AiClient {
         당신은 정보처리기사 학습 코치입니다.
         - 반드시 JSON 형식으로만 응답합니다.
         - keys = why_wrong(string, 25~80자), correct_reason(string, 25~80자), confusions(array of string, max 3).
-        - 불필요한 텍스트나 설명을 추가하지 마세요.
+        - 모든 문자열은 한국어 존댓말로 작성합니다.
+        - JSON 이외의 텍스트는 절대 출력하지 마세요.
         """;
 
     String user = buildExplainPrompt(request);
@@ -68,16 +71,17 @@ public class OpenAiClient implements AiClient {
         - 표현만 달라지고 의미가 동일하면 정답으로 인정합니다
 
         주의:
-        - JSON 이외의 텍스트는 절대 출력하지 마세요
+        - 모든 문자열은 한국어 존댓말로 작성합니다.
+        - JSON 이외의 텍스트는 절대 출력하지 마세요.
         """;
     String user = buildGradePrompt(request);
     Map<String, Object> json = invoke(system, user);
-    
+
     String explainCorrect = Jsons.optString(json, "explainCorrect");
     String explainUser = Jsons.optString(json, "explainUser");
     // 하위 호환성을 위해 두 해설을 조합한 explain 생성
     String explain = combineExplanations(explainCorrect, explainUser);
-    
+
     return new GradeResponse(
         Jsons.optBoolean(json, "correct"),
         explain,
@@ -86,7 +90,7 @@ public class OpenAiClient implements AiClient {
         Jsons.optListString(json, "tips")
     );
   }
-  
+
   private static String combineExplanations(String explainCorrect, String explainUser) {
     if (explainCorrect == null || explainCorrect.isBlank()) {
       return explainUser != null ? explainUser : "";
@@ -101,8 +105,38 @@ public class OpenAiClient implements AiClient {
   public SummaryResponse summary(SummaryRequest request) {
     String system = """
         당신은 정보처리기사 학습 코치입니다.
-        - JSON만 반환하세요.
-        - keys = one_liner(string<=120자), bullets(array of string, max 3), next_reco(string<=80자).
+
+        역할:
+        - 이번 세션 결과를 바탕으로 수험생에게 짧고 동기부여되는 피드백을 제공합니다.
+        - 숫자 요약(정답/오답) + 개념 피드백 + 다음 액션을 한 번에 제시합니다.
+
+        출력 형식 (반드시 JSON 객체 하나만 반환):
+        {
+          "one_liner": "string",   // 40~80자, 이번 세션을 한 문장으로 요약 (칭찬 + 핵심 피드백)
+          "bullets": [             // 최대 3개
+            "string",              // 강점 1
+            "string",              // 보완할 점 1
+            "string"               // 구체적인 학습 행동 1
+          ],
+          "next_reco": "string"    // 60~80자, 다음에 무엇을 하면 좋을지 한 줄로 정리
+        }
+
+        작성 규칙:
+        - 모든 문자열은 한국어 존댓말로 작성합니다.
+        - STATS.scorePct 값을 기준으로 아래 규칙을 적용하세요.
+          - scorePct >= 80: 잘한 점을 먼저 분명하게 칭찬하고, 약점은 1개만 짚어 주세요.
+          - 30 <= scorePct < 80: 부족한 개념/유형을 중심으로 보완 방향을 제시하세요.
+          - scorePct < 30: 기초 개념 복습을 강조하되, 너무 부정적으로 쓰지 말고 격려하는 톤을 유지하세요.
+        - STATS의 total, correct, scorePct는 표처럼 나열하지 말고 자연스럽게 한두 번만 언급합니다.
+          (예: "10문제 중 9문제를 맞추셔서 정확도가 90%까지 올라갔습니다." 정도)
+        - KEY POINTS, COMMON MISTAKES에 포함된 용어를 가능하면 한두 개 이상 문장 안에 녹여 주세요.
+
+        - 외부 교재, 강의, 강사, 유튜브, 웹사이트, 학원 등은 언급하지 마세요.
+        - 항상 이 서비스 안에서 할 수 있는 행동만 제안하세요
+          (예: 틀린 문제 다시 풀기, 해당 토픽 MICRO 학습/REVIEW 재도전, 보조학습 Assist 활용 등).
+        - "관련 교재나 강의를 통해"와 같은 표현은 사용하지 마세요.
+
+        - JSON 이외의 텍스트(설명, 문장, 주석 등)는 절대 출력하지 마세요.
         """;
     String user = buildSummaryPrompt(request);
     Map<String, Object> json = invoke(system, user);
@@ -156,14 +190,15 @@ public class OpenAiClient implements AiClient {
 
   private static String buildSummaryPrompt(SummaryRequest req) {
     StringBuilder sb = new StringBuilder();
+    sb.append("아래는 이번 학습 세션 요약 정보입니다.\n\n");
     sb.append("TOPIC: ").append(Optional.ofNullable(req.topicName()).orElse("")).append("\n");
-    sb.append("STATS: ").append(Optional.ofNullable(req.stats()).orElse(Map.of())).append("\n");
+    sb.append("STATS (JSON): ").append(Optional.ofNullable(req.stats()).orElse(Map.of())).append("\n");
     sb.append("KEY POINTS: ").append(Optional.ofNullable(req.keyPoints()).orElse(List.of())).append("\n");
     sb.append("COMMON MISTAKES: ").append(Optional.ofNullable(req.mistakes()).orElse(List.of())).append("\n");
     if (req.meta() != null && !req.meta().isEmpty()) {
       sb.append("META: ").append(req.meta()).append("\n");
     }
-    sb.append("학습 요약을 JSON 객체로만 출력하세요.");
+    sb.append("\n위 정보를 바탕으로 학습 요약 피드백을 생성하세요. 출력은 JSON 객체 하나로만 작성하세요.");
     return sb.toString();
   }
 
@@ -192,9 +227,21 @@ public class OpenAiClient implements AiClient {
         .retryWhen(Retry.max(1))
         .block();
 
-    if (response == null) return Map.of();
+    if (response == null) {
+      return Map.of("trace_id", UUID.randomUUID().toString());
+    }
+
     String content = Jsons.extractChoiceContent(response);
-    Map<String, Object> json = Jsons.parseJsonObject(content);
+    Map<String, Object> json;
+    try {
+      json = Jsons.parseJsonObject(content);
+    } catch (Exception e) {
+      return Map.of(
+          "trace_id", UUID.randomUUID().toString(),
+          "raw_content", content != null ? content : ""
+      );
+    }
+
     json.putIfAbsent("trace_id", UUID.randomUUID().toString());
     return json;
   }

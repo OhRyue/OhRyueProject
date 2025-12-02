@@ -50,7 +50,7 @@ public class LearningSessionService {
   );
   /** 실기(PRACTICAL) 단계 순서 */
   private static final List<String> ORDER_PRACTICAL = List.of(
-      "CONCEPT", "MINI", "PRACTICAL", "REVIEW_WRONG", "SUMMARY"
+      "CONCEPT", "MINI", "SHORT", "REVIEW_WRONG", "SUMMARY"
   );
   /** 리뷰(REVIEW) 단계 순서 - 필기 */
   private static final List<String> ORDER_REVIEW_WRITTEN = List.of(
@@ -58,7 +58,7 @@ public class LearningSessionService {
   );
   /** 리뷰(REVIEW) 단계 순서 - 실기 */
   private static final List<String> ORDER_REVIEW_PRACTICAL = List.of(
-      "PRACTICAL", "REVIEW_WRONG", "SUMMARY"
+      "SHORT", "REVIEW_WRONG", "SUMMARY"
   );
 
   private static final List<String> ORDER_ASSIST_WRITTEN_DIFFICULTY = List.of(
@@ -177,27 +177,42 @@ public class LearningSessionService {
         .updatedAt(Instant.now())
         .build());
 
-    ExamMode examMode = parseMode(modeStr);
+    // examMode 파싱: req.examMode()를 우선 사용, 없으면 modeStr에서 파싱
+    ExamMode examMode;
+    if (req.examMode() != null && !req.examMode().isBlank()) {
+      try {
+        examMode = ExamMode.valueOf(req.examMode().trim().toUpperCase());
+      } catch (IllegalArgumentException ex) {
+        // 파싱 실패 시 modeStr에서 파싱 시도
+        examMode = parseMode(modeStr);
+      }
+    } else {
+      // req.examMode()가 없으면 modeStr에서 파싱
+      examMode = parseMode(modeStr);
+    }
     
     // Review 모드일 경우 별도 처리
     if ("REVIEW".equals(modeStr)) {
       // Review 모드: examMode 확인 (실기 Review는 PRACTICAL, 필기 Review는 WRITTEN)
-      ExamMode reviewExamMode = ExamMode.WRITTEN; // 기본값
-      if (req.examMode() != null && !req.examMode().isBlank()) {
-        try {
-          reviewExamMode = ExamMode.valueOf(req.examMode().trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-          reviewExamMode = ExamMode.WRITTEN; // 기본값
-        }
+      ExamMode reviewExamMode = examMode; // 위에서 파싱한 examMode 사용
+      
+      // Review 모드: rootTopicId의 직접 자식 토픽들만 조회 (2레벨 → 3레벨)
+      // REVIEW 모드는 2레벨 토픽에서 실행되며, 자식(3레벨) 토픽들의 문제를 사용합니다.
+      String examModeStr = req.examMode() != null && !req.examMode().isBlank() 
+          ? req.examMode().trim().toUpperCase() 
+          : null;
+      Set<Long> topicIds = topicTreeService.childrenOf(req.topicId(), examModeStr);
+      
+      if (topicIds.isEmpty() || topicIds.equals(Set.of(req.topicId()))) {
+        // 자식 토픽을 찾지 못한 경우: cert-service API 호출 실패 또는 실제로 자식이 없음
+        // 이 경우 fallback으로 rootTopicId를 사용하지 않고, 명확한 에러를 발생시킴
+        throw new IllegalStateException(
+            String.format("REVIEW 모드: rootTopicId=%d의 자식 토픽을 찾을 수 없습니다. " +
+                         "cert-service API 확인 필요 (parentId=%d, mode=%s)", 
+                         req.topicId(), req.topicId(), examModeStr));
       }
       
-      // Review 모드: 하위 토픽들 조회
-      Set<Long> topicIds = topicTreeService.descendantsOf(req.topicId());
-      if (topicIds.isEmpty()) {
-        topicIds = Set.of(req.topicId());
-      }
-      
-      // 단계 순서 결정 (실기 Review는 PRACTICAL 단계, 필기 Review는 MCQ 단계)
+      // 단계 순서 결정 (실기 Review는 SHORT 단계, 필기 Review는 MCQ 단계)
       List<String> reviewOrder = (reviewExamMode == ExamMode.PRACTICAL) 
           ? ORDER_REVIEW_PRACTICAL 
           : ORDER_REVIEW_WRITTEN;
@@ -219,18 +234,12 @@ public class LearningSessionService {
           sessionManager.createAndAllocateSessionForReviewStep(
               step, userId, req.topicId(), reviewExamMode, QuestionType.MCQ, 10, topicIds);
         }
-        // 실기 Review: PRACTICAL 단계의 경우 문제 사전 할당 (SHORT 6 + LONG 4 = 10문제)
-        else if ("PRACTICAL".equals(stepCode) && reviewExamMode == ExamMode.PRACTICAL) {
+        // 실기 Review: SHORT 단계의 경우 문제 사전 할당 (SHORT 10문제만 사용, LONG 제거)
+        else if ("SHORT".equals(stepCode) && reviewExamMode == ExamMode.PRACTICAL) {
           try {
-            // SHORT 6문제 + LONG 4문제 = 총 10문제
-            List<Question> shortQuestions = questionRepository.pickRandomByTopicIn(
-                topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 6));
-            List<Question> longQuestions = questionRepository.pickRandomByTopicIn(
-                topicIds, ExamMode.PRACTICAL, QuestionType.LONG, PageRequest.of(0, 4));
-            
-            List<Question> questions = Stream.concat(shortQuestions.stream(), longQuestions.stream())
-                .distinct()
-                .toList();
+            // SHORT 10문제만 사용 (LONG 제거)
+            List<Question> questions = questionRepository.pickRandomByTopicIn(
+                topicIds, ExamMode.PRACTICAL, QuestionType.SHORT, PageRequest.of(0, 10));
             
             if (questions.isEmpty()) {
               throw new IllegalStateException("문제가 부족합니다. rootTopicId: " + req.topicId());
@@ -285,8 +294,10 @@ public class LearningSessionService {
       }
     } else {
       // 일반 모드 (WRITTEN, PRACTICAL)
-      // 요청 모드에 맞춰 단계 초기화 및 문제 사전 할당
-      for (String stepCode : orderOf(modeStr)) {
+      // examMode에 맞춰 단계 초기화 및 문제 사전 할당
+      // modeStr이 "MICRO"인 경우에도 examMode로 단계를 결정해야 함
+      List<String> stepOrder = orderOf(examMode);  // examMode를 사용하여 단계 순서 결정
+      for (String stepCode : stepOrder) {
         LearningStep step = stepRepo.save(LearningStep.builder()
             .learningSession(s)
             .stepCode(stepCode)
@@ -297,13 +308,21 @@ public class LearningSessionService {
             .updatedAt(Instant.now())
             .build());
         
-        // MINI, MCQ 단계의 경우 문제 사전 할당
+        // MINI, MCQ, SHORT 단계의 경우 문제 사전 할당
         if ("MINI".equals(stepCode)) {
+          // MINI 단계는 필기/실기 모드 모두 OX 문제 사용
           sessionManager.createAndAllocateSessionForStep(
               step, userId, req.topicId(), examMode, QuestionType.OX, 4);
         } else if ("MCQ".equals(stepCode)) {
-          sessionManager.createAndAllocateSessionForStep(
-              step, userId, req.topicId(), examMode, QuestionType.MCQ, 5);
+          // MCQ는 필기 모드에만 있음
+          if (examMode == ExamMode.WRITTEN) {
+            sessionManager.createAndAllocateSessionForStep(
+                step, userId, req.topicId(), examMode, QuestionType.MCQ, 5);
+          }
+        } else if ("SHORT".equals(stepCode)) {
+          // SHORT는 실기 모드에만 있음 (문제 할당은 나중에 SHORT_SET에서 수행)
+          // 여기서는 StudySession만 생성하고, 문제 할당은 하지 않음
+          // MINI 단계와 같은 StudySession을 공유하므로 별도 StudySession 생성 불필요
         }
         // CONCEPT, REVIEW_WRONG, SUMMARY 등은 문제 할당 없음
       }
@@ -454,7 +473,7 @@ public class LearningSessionService {
     current.setUpdatedAt(Instant.now());
     stepRepo.save(current);
 
-    // StudySession 종료 처리 (MINI, MCQ, PRACTICAL 단계 완료 시)
+    // StudySession 종료 처리 (MINI, MCQ, SHORT 단계 완료 시)
     boolean shouldCloseSession;
     if ("REVIEW".equals(s.getMode())) {
       shouldCloseSession = hasStudySessionForReview(current, s);
@@ -465,9 +484,9 @@ public class LearningSessionService {
     if (shouldCloseSession) {
       com.OhRyue.certpilot.study.domain.StudySession studySession;
       
-      // Review 모드의 PRACTICAL 단계는 직접 StudySession을 가짐
-      // 일반 모드의 PRACTICAL 단계는 MINI 단계와 같은 StudySession을 공유
-      if ("PRACTICAL".equals(current.getStepCode()) && !"REVIEW".equals(s.getMode())) {
+      // Review 모드의 SHORT 단계는 직접 StudySession을 가짐
+      // 일반 모드의 SHORT 단계는 MINI 단계와 같은 StudySession을 공유
+      if ("SHORT".equals(current.getStepCode()) && !"REVIEW".equals(s.getMode())) {
         var miniStep = stepRepo.findByLearningSessionIdAndStepCode(s.getId(), "MINI")
             .orElseThrow(() -> new IllegalStateException("MINI 단계를 찾을 수 없습니다."));
         studySession = miniStep.getStudySession();
@@ -489,10 +508,21 @@ public class LearningSessionService {
     String next = findNextStep(steps, s.getMode(), current, s);
     
     if (next != null) {
-      var nextStep = steps.stream()
+      // 하위 호환성: "SHORT" 단계가 없으면 "PRACTICAL" 단계를 찾아봄 (이전 버전의 세션)
+      var nextStepOpt = steps.stream()
           .filter(x -> x.getStepCode().equals(next))
-          .findFirst()
-          .orElseThrow();
+          .findFirst();
+      
+      // "SHORT"가 없고 "PRACTICAL"이 있으면 "PRACTICAL" 사용
+      if (nextStepOpt.isEmpty() && "SHORT".equals(next)) {
+        nextStepOpt = steps.stream()
+            .filter(x -> x.getStepCode().equals("PRACTICAL"))
+            .findFirst();
+      }
+      
+      var nextStep = nextStepOpt.orElseThrow(() -> 
+          new IllegalStateException("다음 단계를 찾을 수 없습니다: " + next));
+      
       // 다음 단계를 IN_PROGRESS로 활성화
       nextStep.setStatus("IN_PROGRESS");
       nextStep.setUpdatedAt(Instant.now());
@@ -517,7 +547,7 @@ public class LearningSessionService {
   private boolean requiresCompletionCheck(String stepCode) {
     return "MINI".equals(stepCode) || 
            "MCQ".equals(stepCode) || 
-           "PRACTICAL".equals(stepCode) ||
+           "SHORT".equals(stepCode) ||
            "ASSIST_WRITTEN_DIFFICULTY".equals(stepCode) ||
            "ASSIST_PRACTICAL_DIFFICULTY".equals(stepCode) ||
            "ASSIST_WRITTEN_CATEGORY".equals(stepCode) ||
@@ -529,13 +559,13 @@ public class LearningSessionService {
    */
   private boolean requiresCompletionCheckForReview(String stepCode, LearningSession session) {
     // 필기 Review 모드: MCQ만 검증
-    // 실기 Review 모드: PRACTICAL만 검증
-    // 실기 Review 모드인지 확인 (PRACTICAL 단계가 있으면 실기 Review)
-    boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "PRACTICAL")
+    // 실기 Review 모드: SHORT만 검증
+    // 실기 Review 모드인지 확인 (SHORT 단계가 있으면 실기 Review)
+    boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "SHORT")
         .isPresent();
     
     if (isPracticalReview) {
-      return "PRACTICAL".equals(stepCode);
+      return "SHORT".equals(stepCode);
     } else {
       return "MCQ".equals(stepCode);
     }
@@ -547,8 +577,8 @@ public class LearningSessionService {
   private void validateStepCompletion(LearningStep step, LearningSession session) {
     com.OhRyue.certpilot.study.domain.StudySession studySession;
     
-    // PRACTICAL 단계는 MINI 단계와 같은 StudySession을 공유하므로 MINI 단계에서 가져옴
-    if ("PRACTICAL".equals(step.getStepCode())) {
+    // SHORT 단계는 MINI 단계와 같은 StudySession을 공유하므로 MINI 단계에서 가져옴
+    if ("SHORT".equals(step.getStepCode())) {
       var miniStep = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "MINI")
           .orElseThrow(() -> new IllegalStateException("MINI 단계를 찾을 수 없습니다."));
       studySession = miniStep.getStudySession();
@@ -578,8 +608,8 @@ public class LearningSessionService {
     } else if ("MCQ".equals(step.getStepCode())) {
       // MCQ는 별도 StudySession이므로 모든 아이템 (일반 모드와 Review 모드 모두)
       stepItems = items;
-    } else if ("PRACTICAL".equals(step.getStepCode())) {
-      // PRACTICAL은 MINI와 같은 StudySession을 공유하므로 orderNo > 4
+    } else if ("SHORT".equals(step.getStepCode())) {
+      // SHORT는 MINI와 같은 StudySession을 공유하므로 orderNo > 4
       stepItems = items.stream()
           .filter(item -> item.getOrderNo() > 4)
           .toList();
@@ -624,7 +654,7 @@ public class LearningSessionService {
 
     // Review 모드에서는:
     // - 필기 Review: MCQ 단계는 별도 StudySession이므로 모든 아이템
-    // - 실기 Review: PRACTICAL 단계는 별도 StudySession이므로 모든 아이템
+    // - 실기 Review: SHORT 단계는 별도 StudySession이므로 모든 아이템
     List<com.OhRyue.certpilot.study.domain.StudySessionItem> stepItems = items;
 
     // 모든 문제에 답변이 있는지 확인
@@ -645,7 +675,7 @@ public class LearningSessionService {
   private boolean hasStudySession(LearningStep step) {
     return "MINI".equals(step.getStepCode()) || 
            "MCQ".equals(step.getStepCode()) || 
-           "PRACTICAL".equals(step.getStepCode()) ||
+           "SHORT".equals(step.getStepCode()) ||
            "ASSIST_WRITTEN_DIFFICULTY".equals(step.getStepCode()) ||
            "ASSIST_PRACTICAL_DIFFICULTY".equals(step.getStepCode()) ||
            "ASSIST_WRITTEN_WEAKNESS".equals(step.getStepCode()) ||
@@ -659,13 +689,13 @@ public class LearningSessionService {
    */
   private boolean hasStudySessionForReview(LearningStep step, LearningSession session) {
     // 필기 Review 모드: MCQ만 StudySession 사용
-    // 실기 Review 모드: PRACTICAL만 StudySession 사용
-    // 실기 Review 모드인지 확인 (PRACTICAL 단계가 있으면 실기 Review)
-    boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "PRACTICAL")
+    // 실기 Review 모드: SHORT만 StudySession 사용
+    // 실기 Review 모드인지 확인 (SHORT 단계가 있으면 실기 Review)
+    boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "SHORT")
         .isPresent();
     
     if (isPracticalReview) {
-      return "PRACTICAL".equals(step.getStepCode());
+      return "SHORT".equals(step.getStepCode());
     } else {
       return "MCQ".equals(step.getStepCode());
     }
@@ -678,9 +708,9 @@ public class LearningSessionService {
     // Review 모드인 경우 실기 Review인지 필기 Review인지 확인
     List<String> stepOrder;
     if ("REVIEW".equals(mode)) {
-      // 실기 Review 모드인지 확인 (PRACTICAL 단계가 있으면 실기 Review)
-      boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "PRACTICAL")
-          .isPresent();
+      // 실기 Review 모드인지 확인 (SHORT 단계가 있으면 실기 Review)
+      boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "SHORT")
+        .isPresent();
       stepOrder = isPracticalReview ? ORDER_REVIEW_PRACTICAL : ORDER_REVIEW_WRITTEN;
     } else {
       stepOrder = orderOf(mode);
@@ -708,7 +738,7 @@ public class LearningSessionService {
       } else if ("ASSIST_PRACTICAL_CATEGORY".equals(mode)) {
         previousStepCode = "ASSIST_PRACTICAL_CATEGORY";
       } else {
-        previousStepCode = mode.equals("PRACTICAL") ? "PRACTICAL" : "MCQ";
+        previousStepCode = mode.equals("PRACTICAL") ? "SHORT" : "MCQ";
       }
       var previousStep = steps.stream()
           .filter(x -> x.getStepCode().equals(previousStepCode))
@@ -721,18 +751,36 @@ public class LearningSessionService {
     }
     
     for (String stepCode : stepOrder) {
-      var found = steps.stream()
+      // 하위 호환성: "SHORT" 단계가 없으면 "PRACTICAL" 단계를 찾아봄 (이전 버전의 세션)
+      var foundOpt = steps.stream()
           .filter(x -> x.getStepCode().equals(stepCode))
-          .findFirst()
-          .orElseThrow();
+          .findFirst();
+      
+      // "SHORT"가 없고 "PRACTICAL"이 있으면 "PRACTICAL" 사용
+      String actualStepCode = stepCode; // effectively final 변수
+      if (foundOpt.isEmpty() && "SHORT".equals(stepCode)) {
+        foundOpt = steps.stream()
+            .filter(x -> x.getStepCode().equals("PRACTICAL"))
+            .findFirst();
+        if (foundOpt.isPresent()) {
+          // "PRACTICAL"을 찾았으면 "PRACTICAL"로 반환하도록 actualStepCode 수정
+          actualStepCode = "PRACTICAL";
+        }
+      }
+      
+      if (foundOpt.isEmpty()) {
+        continue; // 이 단계가 없으면 다음 단계로
+      }
+      
+      var found = foundOpt.get();
       
       // READY 상태인 단계를 찾음 (IN_PROGRESS는 현재 진행 중인 단계이므로 제외)
       if ("READY".equals(found.getStatus())) {
         // REVIEW_WRONG 단계이고 오답이 없으면 건너뛰기
-        if ("REVIEW_WRONG".equals(stepCode) && !hasWrongAnswers) {
+        if ("REVIEW_WRONG".equals(actualStepCode) && !hasWrongAnswers) {
           continue;
         }
-        return stepCode;
+        return actualStepCode; // 실제 존재하는 stepCode 반환 (SHORT 또는 PRACTICAL)
       }
     }
     
@@ -817,6 +865,7 @@ public class LearningSessionService {
       
       // MINI, MCQ 단계의 경우 문제 사전 할당
       if ("MINI".equals(stepCode)) {
+        // MINI 단계는 필기/실기 모드 모두 OX 문제 사용
         sessionManager.createAndAllocateSessionForStep(
             step, userId, topicId, examMode, QuestionType.OX, 4);
       } else if ("MCQ".equals(stepCode)) {
@@ -899,10 +948,18 @@ public class LearningSessionService {
         .updatedAt(Instant.now())
         .build());
 
-    // 하위 토픽들 조회
-    Set<Long> topicIds = topicTreeService.descendantsOf(rootTopicId);
-    if (topicIds.isEmpty()) {
-      topicIds = Set.of(rootTopicId);
+    // 하위 토픽들 조회 (REVIEW 모드: 직접 자식만 조회)
+    // REVIEW 모드는 2레벨 토픽에서 실행되며, 자식(3레벨) 토픽들의 문제를 사용합니다.
+    String examModeStr = examMode != null ? examMode.name() : null;
+    Set<Long> topicIds = topicTreeService.childrenOf(rootTopicId, examModeStr);
+    
+    if (topicIds.isEmpty() || topicIds.equals(Set.of(rootTopicId))) {
+      // 자식 토픽을 찾지 못한 경우: cert-service API 호출 실패 또는 실제로 자식이 없음
+      // 이 경우 fallback으로 rootTopicId를 사용하지 않고, 명확한 에러를 발생시킴
+      throw new IllegalStateException(
+          String.format("REVIEW 모드: rootTopicId=%d의 자식 토픽을 찾을 수 없습니다. " +
+                       "cert-service API 확인 필요 (parentId=%d, mode=%s)", 
+                       rootTopicId, rootTopicId, examModeStr));
     }
 
     // 단계 초기화 및 문제 사전 할당 (REVIEW 모드: MCQ -> REVIEW_WRONG -> SUMMARY)

@@ -105,9 +105,21 @@ public class ReportService {
 
   public TagAbilityResp abilityByTag(String userId, String mode, int limit) {
     ExamMode examMode = parseMode(mode);
-    List<ReportTagSkill> skills = tagSkillRepository.findByUserIdAndExamModeOrderByTotalDesc(userId, examMode);
-    skills = skills.size() <= limit ? skills : skills.subList(0, limit);
-    List<TagAbility> items = skills.stream()
+    
+    // 1. 모든 태그 스킬 조회 (정답률 순으로 정렬되지 않았으므로 모두 가져옴)
+    List<ReportTagSkill> allSkills = tagSkillRepository.findByUserIdAndExamModeOrderByTotalDesc(userId, examMode);
+    
+    // 2. 약점 태그 추출: 정답률 70% 미만인 것들 중에서 정답률이 가장 낮은 상위 태그 선택
+    List<String> weaknessTags = allSkills.stream()
+        .filter(skill -> skill.getAccuracy().doubleValue() < 70.0)
+        .sorted(Comparator.comparing(skill -> skill.getAccuracy().doubleValue())) // 정답률 낮은 순
+        .limit(3) // 상위 3개만
+        .map(ReportTagSkill::getTag)
+        .toList();
+    
+    // 3. items는 total 많은 순으로 limit 개수만큼 제한 (리포트 표시용)
+    List<ReportTagSkill> skillsForItems = allSkills.size() <= limit ? allSkills : allSkills.subList(0, limit);
+    List<TagAbility> items = skillsForItems.stream()
         .map(skill -> new TagAbility(
             skill.getTag(),
             skill.getCorrect(),
@@ -115,18 +127,14 @@ public class ReportService {
             skill.getAccuracy().doubleValue()
         ))
         .toList();
-    List<String> weaknessTags = items.stream()
-        .filter(item -> item.accuracy() < 70.0)
-        .sorted(Comparator.comparing(TagAbility::accuracy))
-        .map(TagAbility::tag)
-        .toList();
+    
     String message;
     if (weaknessTags.isEmpty()) {
-      message = items.isEmpty()
+      message = allSkills.isEmpty()
           ? "아직 리포트를 만들기 위한 데이터가 부족합니다. 학습을 시작해 보세요!"
           : "태그별 정답률이 안정적으로 유지되고 있어요. 지금 흐름을 유지해 보세요!";
     } else {
-      String highlight = String.join(", ", weaknessTags.subList(0, Math.min(3, weaknessTags.size())));
+      String highlight = String.join(", ", weaknessTags);
       message = highlight + " 태그 정답률이 낮습니다. 약점 보완 세트를 추천해요.";
     }
     return new TagAbilityResp(items, weaknessTags, message);

@@ -9,7 +9,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
-import java.util.List;
 
 public interface UserXpLedgerRepository extends JpaRepository<UserXpLedger, Long> {
 

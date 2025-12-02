@@ -15,6 +15,8 @@ public interface TopicRepository extends JpaRepository<Topic, Long> {
     List<Topic> findByCertIdAndExamMode(Long certId, ExamMode examMode);
 
     List<Topic> findByExamMode(ExamMode examMode);
+    
+    List<Topic> findByExamModeAndParentId(ExamMode examMode, Long parentId);
 
     List<Topic> findByCodeContaining(String code);
 

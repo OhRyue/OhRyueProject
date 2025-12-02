@@ -95,6 +95,9 @@ public class CurriculumController {
                     .toList();
         } else if (certId != null && mode != null) {
             topics = topicRepository.findByCertIdAndExamMode(certId, mode);
+        } else if (mode != null && parentId != null) {
+            // mode와 parentId만 있는 경우: examMode와 parentId로 필터링
+            topics = topicRepository.findByExamModeAndParentId(mode, parentId);
         } else if (certId != null) {
             topics = topicRepository.findByCertId(certId);
         } else if (mode != null) {

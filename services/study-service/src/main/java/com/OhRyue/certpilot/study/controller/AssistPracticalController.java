@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 보조학습 – 실기(Short/Long) 전용 컨트롤러
@@ -94,32 +93,34 @@ public class AssistPracticalController {
   @PostMapping("/difficulty/grade-one")
   public AssistDtos.PracticalGradeOneResp gradeOneDifficulty(
       @RequestParam Long learningSessionId,
-      @RequestParam Long questionId,
-      @RequestBody Map<String, String> body
+      @RequestBody @Valid AssistDtos.PracticalGradeOneReq req
   ) {
-    String userText = body.getOrDefault("userText", "");
-    return practicalService.gradeOneDifficulty(learningSessionId, questionId, userText);
+    return practicalService.gradeOneDifficulty(learningSessionId, req);
   }
 
   @Operation(summary = "실기: 약점 보완 보조학습 단건 즉시 채점")
   @PostMapping("/weakness/grade-one")
   public AssistDtos.PracticalGradeOneResp gradeOneWeakness(
       @RequestParam Long learningSessionId,
-      @RequestParam Long questionId,
-      @RequestBody Map<String, String> body
+      @RequestBody @Valid AssistDtos.PracticalGradeOneReq req
   ) {
-    String userText = body.getOrDefault("userText", "");
-    return practicalService.gradeOneDifficulty(learningSessionId, questionId, userText);
+    return practicalService.gradeOneDifficulty(learningSessionId, req);
   }
 
   @Operation(summary = "실기: 카테고리 기반 보조학습 단건 즉시 채점")
   @PostMapping("/category/grade-one")
   public AssistDtos.PracticalGradeOneResp gradeOneCategory(
       @RequestParam Long learningSessionId,
-      @RequestParam Long questionId,
-      @RequestBody Map<String, String> body
+      @RequestBody @Valid AssistDtos.PracticalGradeOneReq req
   ) {
-    String userText = body.getOrDefault("userText", "");
-    return practicalService.gradeOneDifficulty(learningSessionId, questionId, userText);
+    return practicalService.gradeOneDifficulty(learningSessionId, req);
+  }
+
+  @Operation(summary = "실기: 보조학습 요약 조회")
+  @GetMapping("/summary")
+  public FlowDtos.StepEnvelope<AssistDtos.PracticalSummaryResp> summary(
+      @RequestParam Long learningSessionId
+  ) {
+    return practicalService.summary(learningSessionId);
   }
 }

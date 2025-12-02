@@ -32,6 +32,18 @@ public interface ProgressQueryClient {
       @RequestParam(value = "mode", defaultValue = "WRITTEN") String mode
   );
 
+  /**
+   * 태그별 능력지수 조회
+   * - Progress: GET /api/progress/report/ability-by-tag
+   * - mode: "WRITTEN" / "PRACTICAL"
+   * - userId는 JWT에서 추출
+   */
+  @GetMapping("/report/ability-by-tag")
+  TagAbilityResp abilityByTag(
+      @RequestParam(value = "mode", defaultValue = "WRITTEN") String mode,
+      @RequestParam(value = "limit", defaultValue = "20") int limit
+  );
+
   // === DTOs: Progress 쪽 GoalDtos.DailyGoalStatus, ReportDtos.Overview 에 맞춰 작성 ===
 
   // /goal/today 응답
@@ -59,4 +71,18 @@ public interface ProgressQueryClient {
       double prevWeekAccuracy,
       long totalStudyMinutesLastWeek
   ) {}
+
+  // /report/ability-by-tag 응답
+  record TagAbilityResp(
+      java.util.List<TagAbility> items,
+      java.util.List<String> weaknessTags,
+      String message
+  ) {
+    record TagAbility(
+        String tag,
+        int correct,
+        int total,
+        double accuracy
+    ) {}
+  }
 }

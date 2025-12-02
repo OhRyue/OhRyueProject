@@ -154,7 +154,14 @@ public class WrittenDtos {
       int mcqTotal,      // MCQ 총 풀이 수 (필기) 또는 실기 주관식 총 풀이 수 (실기)
       int mcqCorrect,    // MCQ 정답 수 (필기) 또는 실기 주관식 통과 수 (실기)
       String aiSummary,  // AI 학습 요약(폴백 포함)
-      boolean completed  // 완료 여부(최소 시도)
+      boolean completed, // 완료 여부(최소 시도)
+      // XP 정보 (완료 시에만 값이 있음)
+      Integer earnedXp,          // 이번에 획득한 XP
+      Long totalXp,              // 지급 후 총 XP
+      Integer level,             // 현재 레벨
+      Integer xpToNextLevel,     // 다음 레벨까지 필요한 XP
+      Boolean leveledUp,         // 이번 지급으로 인해 레벨업 O/X
+      Integer levelUpRewardPoints // 레벨업 보상 포인트 (없으면 0)
   ) {}
 
   /* ===================== 즉시 채점 - OX ===================== */

@@ -7,6 +7,7 @@ import com.OhRyue.certpilot.progress.domain.UserXpLedger;
 import com.OhRyue.certpilot.progress.domain.UserXpWallet;
 import com.OhRyue.certpilot.progress.domain.enums.PointReason;
 import com.OhRyue.certpilot.progress.domain.enums.XpReason;
+import com.OhRyue.certpilot.progress.dto.XpDtos;
 import com.OhRyue.certpilot.progress.repository.UserPointLedgerRepository;
 import com.OhRyue.certpilot.progress.repository.UserPointWalletRepository;
 import com.OhRyue.certpilot.progress.repository.UserXpLedgerRepository;
@@ -19,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Map;
+import static java.util.Map.entry;
 
 @Slf4j
 @Service
@@ -32,7 +35,111 @@ public class XpService {
     
     // 레벨업 시 지급할 포인트
     private static final int POINTS_PER_LEVEL = 100;
+    
+    // XP 규칙 테이블: activityType → 기본 XP (100% 완벽 클리어 시)
+    private static final Map<String, Integer> BASE_XP_RULES = Map.ofEntries(
+            entry("WRITTEN_MICRO", 150),
+            entry("PRACTICAL_MICRO", 200),
+            entry("WRITTEN_REVIEW", 200),
+            entry("PRACTICAL_REVIEW", 250),
+            entry("ASSIST_CORRECT", 5),
+            entry("ASSIST_WRONG", 0),
+            entry("DUEL_WIN", 30),
+            entry("DUEL_JOIN", 5),
+            entry("TOURNAMENT_WIN", 100),
+            entry("TOURNAMENT_JOIN", 10),
+            entry("GOLDENBELL_WIN", 200),
+            entry("GOLDENBELL_JOIN", 20)
+    );
+    
+    /**
+     * 정답률 기반 XP 계산
+     * - 100%: 활동별 기본 XP
+     * - 80% ~ 99%: 50 XP
+     * - 30% ~ 79%: 30 XP
+     * - 0% ~ 29%: 10 XP
+     * 
+     * @param activityType 활동 타입
+     * @param scorePct 정답률 (0.0 ~ 100.0)
+     * @return 지급할 XP
+     */
+    private int calculateXpByScore(String activityType, Double scorePct) {
+        log.info("[calculateXpByScore] Called with: activityType={}, scorePct={}", activityType, scorePct);
+        
+        // 메인학습 활동인지 확인
+        boolean isMainLearning = activityType != null && (
+            activityType.equals("WRITTEN_MICRO") || 
+            activityType.equals("PRACTICAL_MICRO") ||
+            activityType.equals("WRITTEN_REVIEW") || 
+            activityType.equals("PRACTICAL_REVIEW")
+        );
+        
+        log.info("[calculateXpByScore] isMainLearning={}", isMainLearning);
+        
+        // 메인학습이 아니면 기존 로직 (scorePct 무시)
+        if (!isMainLearning) {
+            int baseXp = BASE_XP_RULES.getOrDefault(activityType, 0);
+            log.info("[calculateXpByScore] Not main learning, returning base XP: {}", baseXp);
+            return baseXp;
+        }
+        
+        // 메인학습: scorePct가 null이거나 유효하지 않으면 0 XP 반환 (기본 XP 지급 안 함)
+        if (scorePct == null) {
+            log.warn("[calculateXpByScore] scorePct is NULL for main learning activity: activityType={}, returning 0 XP", 
+                    activityType);
+            return 0;
+        }
+        
+        if (scorePct.isNaN() || scorePct < 0.0 || scorePct > 100.0) {
+            log.warn("[calculateXpByScore] Invalid scorePct for main learning activity: activityType={}, scorePct={}, returning 0 XP", 
+                    activityType, scorePct);
+            return 0;
+        }
+        
+        // 메인학습: 정답률 기반 XP 계산
+        int xp;
+        if (scorePct == 100.0) {
+            // 100%: 기본 XP
+            xp = BASE_XP_RULES.getOrDefault(activityType, 0);
+            log.info("[calculateXpByScore] Perfect score! activityType={}, scorePct={}, baseXp={}", activityType, scorePct, xp);
+        } else if (scorePct >= 80.0) {
+            // 80% ~ 99%: 50 XP
+            xp = 50;
+            log.info("[calculateXpByScore] High score: activityType={}, scorePct={}, xp=50", activityType, scorePct);
+        } else if (scorePct >= 30.0) {
+            // 30% ~ 79%: 30 XP
+            xp = 30;
+            log.info("[calculateXpByScore] Medium score: activityType={}, scorePct={}, xp=30", activityType, scorePct);
+        } else {
+            // 0% ~ 29%: 10 XP
+            xp = 10;
+            log.info("[calculateXpByScore] Low score: activityType={}, scorePct={}, xp=10", activityType, scorePct);
+        }
+        
+        log.info("[calculateXpByScore] Final result: activityType={}, scorePct={}, xp={}", activityType, scorePct, xp);
+        return xp;
+    }
 
+    /**
+     * 다음 레벨까지 필요한 XP 계산
+     * 공식: 300 + 현재 레벨 × 50
+     */
+    @Transactional(readOnly = true)
+    public int calculateXpToNextLevel(int currentLevel, long currentXpTotal) {
+        int requiredXp = 300 + currentLevel * 50;
+        
+        // 현재 레벨에서 다음 레벨까지 필요한 누적 XP 계산
+        long cumulative = 0;
+        int level = 1;
+        while (level < currentLevel) {
+            cumulative += (300 + level * 50);
+            level++;
+        }
+        long nextLevelThreshold = cumulative + requiredXp;
+        
+        return (int) Math.max(0, nextLevelThreshold - currentXpTotal);
+    }
+    
     /**
      * 레벨 계산 규칙: 300 + 레벨 × 50
      * 
@@ -201,5 +308,85 @@ public class XpService {
     @Transactional(readOnly = true)
     public Page<UserXpLedger> getLedger(String userId, Pageable pageable) {
         return ledgerRepo.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+    }
+    
+    /**
+     * XP 지급 API
+     * 
+     * 중복 지급 방지는 study-service의 xp_granted 플래그로 처리합니다.
+     * progress-service는 요청이 오면 항상 XP를 지급합니다.
+     * 
+     * @param userId 사용자 ID
+     * @param req XP 지급 요청
+     * @return XP 지급 응답
+     */
+    @Transactional
+    public XpDtos.XpEarnResponse earnXp(String userId, XpDtos.XpEarnRequest req) {
+        // 1. 요청 파라미터 검증 및 로깅
+        log.info("[XP_EARN] ========== XP EARN REQUEST ==========");
+        log.info("[XP_EARN] userId={}", userId);
+        log.info("[XP_EARN] activityType={}", req.activityType());
+        log.info("[XP_EARN] sessionId={}", req.sessionId());
+        log.info("[XP_EARN] topicId={}", req.topicId());
+        log.info("[XP_EARN] scorePct={} (type: {})", req.scorePct(), req.scorePct() != null ? req.scorePct().getClass().getName() : "null");
+        
+        // 2. 정답률 기반 XP 계산
+        int xpAmount = calculateXpByScore(req.activityType(), req.scorePct());
+        log.info("[XP_EARN] ========== XP CALCULATION RESULT ==========");
+        log.info("[XP_EARN] activityType={}, scorePct={}, xpAmount={}", 
+                req.activityType(), req.scorePct(), xpAmount);
+        
+        if (xpAmount == 0 && req.scorePct() == null) {
+            log.warn("[XP_EARN] Unknown activity type or null scorePct: activityType={}, scorePct={}", 
+                    req.activityType(), req.scorePct());
+        }
+        
+        // 2. XP 지급 (중복 지급 방지는 study-service의 xp_granted 플래그로 처리)
+        // refId를 null로 전달하여 addXp의 중복 지급 방지 로직을 우회
+        // (study-service에서 이미 xp_granted 플래그로 중복 지급을 방지함)
+        XpReason reason = mapActivityTypeToReason(req.activityType());
+        
+        UserXpWallet walletBefore = getWallet(userId);
+        long xpBefore = walletBefore.getXpTotal();
+        int levelBefore = walletBefore.getLevel();
+        
+        // refId를 null로 전달하여 항상 XP 지급 (중복 지급 방지 우회)
+        UserXpWallet walletAfter = addXp(userId, xpAmount, reason, null);
+        long xpAfter = walletAfter.getXpTotal();
+        int levelAfter = walletAfter.getLevel();
+        
+        int earnedXp = (int) (xpAfter - xpBefore);
+        boolean leveledUp = levelAfter > levelBefore;
+        int levelUpRewardPoints = leveledUp ? (levelAfter - levelBefore) * POINTS_PER_LEVEL : 0;
+        
+        log.info("XP earned: userId={}, activityType={}, sessionId={}, scorePct={}, earnedXp={}, totalXp={}, level={}->{}, leveledUp={}", 
+                userId, req.activityType(), req.sessionId(), req.scorePct(), earnedXp, xpAfter, levelBefore, levelAfter, leveledUp);
+        
+        return new XpDtos.XpEarnResponse(
+                earnedXp,
+                xpAfter,
+                levelAfter,
+                calculateXpToNextLevel(levelAfter, xpAfter),
+                leveledUp,
+                levelUpRewardPoints
+        );
+    }
+    
+    /**
+     * activityType을 XpReason으로 매핑
+     */
+    private XpReason mapActivityTypeToReason(String activityType) {
+        if (activityType == null) {
+            return XpReason.ETC;
+        }
+        
+        return switch (activityType) {
+            case "WRITTEN_MICRO", "PRACTICAL_MICRO" -> XpReason.MICRO;
+            case "WRITTEN_REVIEW", "PRACTICAL_REVIEW" -> XpReason.REVIEW;
+            case "ASSIST_CORRECT", "ASSIST_WRONG" -> XpReason.ASSIST;
+            case "DUEL_WIN", "DUEL_JOIN", "TOURNAMENT_WIN", "TOURNAMENT_JOIN", 
+                 "GOLDENBELL_WIN", "GOLDENBELL_JOIN" -> XpReason.BATTLE;
+            default -> XpReason.ETC;
+        };
     }
 }

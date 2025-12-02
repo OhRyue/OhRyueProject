@@ -2,6 +2,7 @@ package com.OhRyue.certpilot.study.service;
 
 import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.client.ProgressQueryClient;
+import com.OhRyue.certpilot.study.client.ProgressXpClient;
 import com.OhRyue.certpilot.study.domain.LearningSession;
 import com.OhRyue.certpilot.study.domain.LearningStep;
 import com.OhRyue.certpilot.study.domain.Question;
@@ -54,6 +55,7 @@ public class AssistWrittenService {
   private final TopicTreeService topicTreeService;
   // StudySession 관리 및 XP 지급을 위한 의존성 추가
   private final com.OhRyue.certpilot.study.repository.UserAnswerRepository userAnswerRepository;
+  private final com.OhRyue.certpilot.study.repository.QuestionTagRepository questionTagRepository;
   private final StudySessionManager sessionManager;
   private final com.OhRyue.certpilot.study.client.ProgressHookClient progressHookClient;
   private final LearningSessionService learningSessionService;
@@ -61,6 +63,8 @@ public class AssistWrittenService {
   private final LearningStepRepository learningStepRepository;
   private final StudySessionRepository studySessionRepository;
   private final ObjectMapper objectMapper;
+  private final AIExplanationService aiExplanationService;
+  private final com.OhRyue.certpilot.study.client.ProgressXpClient progressXpClient;
 
   /* ================= 카테고리: 토픽 배열 선택 → 해당 토픽들에서 출제 ================= */
 
@@ -75,27 +79,150 @@ public class AssistWrittenService {
       throw new IllegalArgumentException("토픽 ID 배열이 비어있습니다.");
     }
 
-    Set<Long> topicIdSet = new HashSet<>(topicIds);
+    // 1. 각 토픽에 대해 자식 토픽 확인 및 최종 토픽 ID 집합 생성
+    // 2레벨 토픽(자식이 있는 경우)은 자식 토픽들을 사용, 3레벨 토픽(자식이 없는 경우)은 원래 토픽 사용
+    Set<Long> finalTopicIds = new HashSet<>();
+    Map<Long, Set<Long>> topicToChildMap = new HashMap<>(); // 원본 토픽 -> 실제 사용할 토픽들 매핑
+    
+    for (Long topicId : topicIds) {
+      Set<Long> children = topicTreeService.childrenOf(topicId, "WRITTEN");
+      if (children != null && !children.isEmpty()) {
+        // 2레벨 토픽: 자식 토픽들을 사용
+        finalTopicIds.addAll(children);
+        topicToChildMap.put(topicId, children);
+      } else {
+        // 3레벨 토픽 또는 자식이 없는 토픽: 원래 토픽 사용
+        finalTopicIds.add(topicId);
+        topicToChildMap.put(topicId, Set.of(topicId));
+      }
+    }
 
-    // 1. 문제 풀 생성
+    log.debug("[assist/written/category] originalTopicIds={}, finalTopicIds={}, topicToChildMap={}",
+        topicIds, finalTopicIds, topicToChildMap);
+
+    // 2. 문제 풀 생성 (최종 토픽 ID 집합으로 조회)
     List<Question> pool = questionRepository
-        .findByTopicIdInAndModeAndType(topicIdSet, ExamMode.WRITTEN, QuestionType.MCQ)
+        .findByTopicIdInAndModeAndType(finalTopicIds, ExamMode.WRITTEN, QuestionType.MCQ)
         .stream()
         .sorted(Comparator.comparingLong(Question::getId))
         .toList();
 
-    log.debug("[assist/written/category] topicIds={}, poolSize={}, count={}",
-        topicIdSet, pool.size(), want);
+    log.debug("[assist/written/category] poolSize={}, count={}", pool.size(), want);
 
     if (pool.isEmpty()) {
       throw new IllegalStateException("선택한 토픽에 문제가 없습니다.");
     }
 
-    // 2. 문제 선택 (랜덤 셔플 후 want 개수만큼)
-    List<Question> copy = new ArrayList<>(new LinkedHashSet<>(pool));
-    Collections.shuffle(copy);
-    int lim = Math.min(copy.size(), Math.max(1, want));
-    List<Question> selectedQuestions = copy.subList(0, lim);
+    // 3. 문제를 실제 토픽 ID별로 그룹화 (자식 토픽별로 그룹화)
+    Map<Long, List<Question>> questionsByTopicId = new HashMap<>();
+    for (Question q : pool) {
+      questionsByTopicId
+          .computeIfAbsent(q.getTopicId(), k -> new ArrayList<>())
+          .add(q);
+    }
+
+    // 4. 각 실제 토픽에서 골고루 문제 선택 (균등 분배)
+    List<Question> selectedQuestions = new ArrayList<>();
+    
+    // 각 토픽의 문제를 섞기
+    questionsByTopicId.values().forEach(Collections::shuffle);
+    
+    // 실제 토픽 ID 목록 (자식 토픽들)
+    List<Long> topicIdsList = new ArrayList<>(questionsByTopicId.keySet());
+    int topicCount = topicIdsList.size();
+    
+    if (topicCount == 0) {
+      throw new IllegalStateException("선택 가능한 토픽이 없습니다.");
+    }
+    
+    // 기본 할당량: 각 토픽에 동일하게 할당
+    int basePerTopic = want / topicCount;
+    int remainder = want % topicCount; // 나머지는 첫 몇 개 토픽에 추가 할당
+    
+    Map<Long, Integer> topicQuotas = new HashMap<>(); // 각 토픽에 할당할 문제 수
+    for (int i = 0; i < topicIdsList.size(); i++) {
+      Long topicId = topicIdsList.get(i);
+      int quota = basePerTopic + (i < remainder ? 1 : 0);
+      topicQuotas.put(topicId, quota);
+    }
+    
+    log.debug("[assist/written/category] topicQuotas={}, want={}, topicCount={}, topicIdsList={}", 
+        topicQuotas, want, topicCount, topicIdsList);
+    
+    // 각 토픽에서 할당량만큼 선택
+    for (Long topicId : topicIdsList) {
+      List<Question> topicQuestions = questionsByTopicId.get(topicId);
+      if (topicQuestions == null || topicQuestions.isEmpty()) {
+        continue;
+      }
+      
+      int quota = topicQuotas.getOrDefault(topicId, 0);
+      int toSelect = Math.min(quota, topicQuestions.size());
+      
+      for (int i = 0; i < toSelect && selectedQuestions.size() < want; i++) {
+        Question q = topicQuestions.get(i);
+        if (!selectedQuestions.contains(q)) {
+          selectedQuestions.add(q);
+        }
+      }
+    }
+    
+    // 5. 할당량으로 부족한 경우 (일부 토픽에 문제가 부족한 경우), 
+    // 문제가 많은 토픽에서 추가로 선택
+    if (selectedQuestions.size() < want) {
+      int remaining = want - selectedQuestions.size();
+      
+      // 토픽별 선택된 문제 수를 계산
+      Map<Long, Integer> selectedCount = new HashMap<>();
+      for (Question q : selectedQuestions) {
+        selectedCount.put(q.getTopicId(), selectedCount.getOrDefault(q.getTopicId(), 0) + 1);
+      }
+      
+      // 문제가 많은 토픽부터 추가 선택 (현재 선택 비율이 낮은 토픽 우선)
+      List<Map.Entry<Long, List<Question>>> sortedTopics = questionsByTopicId.entrySet().stream()
+          .sorted((e1, e2) -> {
+            int size1 = e1.getValue().size();
+            int size2 = e2.getValue().size();
+            int selected1 = selectedCount.getOrDefault(e1.getKey(), 0);
+            int selected2 = selectedCount.getOrDefault(e2.getKey(), 0);
+            // 남은 문제 수가 많고, 선택 비율이 낮은 토픽 우선
+            int ratio1 = size1 > 0 ? (selected1 * 100) / size1 : 0;
+            int ratio2 = size2 > 0 ? (selected2 * 100) / size2 : 0;
+            if (ratio1 != ratio2) {
+              return Integer.compare(ratio1, ratio2); // 낮은 비율 우선
+            }
+            return Integer.compare(size2 - selected2, size1 - selected1); // 남은 문제가 많은 순
+          })
+          .toList();
+      
+      for (Map.Entry<Long, List<Question>> entry : sortedTopics) {
+        if (remaining <= 0) break;
+        
+        Long topicId = entry.getKey();
+        List<Question> topicQuestions = entry.getValue();
+        
+        for (Question q : topicQuestions) {
+          if (remaining <= 0) break;
+          if (!selectedQuestions.contains(q)) {
+            selectedQuestions.add(q);
+            remaining--;
+          }
+        }
+      }
+    }
+    
+    // 6. 최종적으로 부족하면 전체 풀에서 랜덤으로 추가
+    if (selectedQuestions.size() < want) {
+      List<Question> remainingPool = new ArrayList<>(pool);
+      remainingPool.removeAll(selectedQuestions);
+      Collections.shuffle(remainingPool);
+      
+      int additional = Math.min(want - selectedQuestions.size(), remainingPool.size());
+      selectedQuestions.addAll(remainingPool.subList(0, additional));
+    }
+
+    log.debug("[assist/written/category] selectedQuestions={}, count={}", 
+        selectedQuestions.size(), selectedQuestions.size());
 
     // 3. LearningSession 생성 (topicId는 0 사용, mode는 ASSIST_WRITTEN_CATEGORY)
     LearningSession learningSession = learningSessionRepository.save(LearningSession.builder()
@@ -142,9 +269,9 @@ public class AssistWrittenService {
         .updatedAt(Instant.now())
         .build());
 
-    // 5. StudySession 생성 (topicScopeJson에 topicIds 저장)
+    // 6. StudySession 생성 (topicScopeJson에 원본 topicIds 저장)
     Map<String, Object> scopeMap = new HashMap<>();
-    scopeMap.put("topicIds", new ArrayList<>(topicIdSet));
+    scopeMap.put("topicIds", new ArrayList<>(topicIds)); // 원본 토픽 ID 배열 저장
     String scopeJson;
     try {
       scopeJson = objectMapper.writeValueAsString(scopeMap);
@@ -561,42 +688,182 @@ public class AssistWrittenService {
     String userId = AuthUserUtil.getCurrentUserId();
     int want = sanitizeCount(count);
 
-    // 1. 약점 토픽 추출
-    List<UserProgress> progresses = progressRepository.findByUserId(userId);
-    progresses.sort(Comparator.comparingDouble(this::writtenAccuracy)
-        .thenComparing(UserProgress::getUpdatedAt));
-
-    List<Long> targetTopics = progresses.stream()
-        .map(UserProgress::getTopicId)
-        .limit(5)
-        .toList();
+    // 1. 약점 태그 추출 (report_tag_skill 테이블 기반)
+    List<String> weaknessTags = new ArrayList<>();
+    try {
+      ProgressQueryClient.TagAbilityResp tagAbilityResp = 
+          progressQueryClient.abilityByTag("WRITTEN", 20);
+      if (tagAbilityResp != null && tagAbilityResp.weaknessTags() != null) {
+        weaknessTags = tagAbilityResp.weaknessTags();
+      }
+      log.debug("[assist/written/weakness] userId={}, weaknessTags={} (from report_tag_skill)", 
+          userId, weaknessTags);
+    } catch (Exception e) {
+      log.warn("[assist/written/weakness] Failed to fetch weakness tags from progress-service: {}", 
+          e.getMessage(), e);
+      // Fallback: UserAnswer 기반으로 약점 태그 추출
+      List<com.OhRyue.certpilot.study.domain.UserAnswer> writtenAnswers = 
+          userAnswerRepository.findByUserId(userId).stream()
+              .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
+              .toList();
+      
+      Map<Long, List<String>> tagsByQuestion = new HashMap<>();
+      writtenAnswers.stream()
+          .map(com.OhRyue.certpilot.study.domain.UserAnswer::getQuestionId)
+          .distinct()
+          .forEach(qid -> tagsByQuestion.put(qid, questionTagRepository.findTagsByQuestionId(qid)));
+      
+      Map<String, int[]> tagStats = new HashMap<>();
+      for (com.OhRyue.certpilot.study.domain.UserAnswer answer : writtenAnswers) {
+        List<String> tags = tagsByQuestion.getOrDefault(answer.getQuestionId(), List.of());
+        for (String tag : tags) {
+          int[] stat = tagStats.computeIfAbsent(tag, k -> new int[2]);
+          if (Boolean.TRUE.equals(answer.getCorrect())) stat[0] += 1;
+          stat[1] += 1;
+        }
+      }
+      
+      weaknessTags = tagStats.entrySet().stream()
+          .map(entry -> {
+            String tag = entry.getKey();
+            int correct = entry.getValue()[0];
+            int total = entry.getValue()[1];
+            double accuracy = total > 0 ? (correct * 100.0 / total) : 0.0;
+            return Map.entry(tag, Map.entry(accuracy, total));
+          })
+          .filter(entry -> entry.getValue().getKey() < 70.0 && entry.getValue().getValue() >= 3)
+          .sorted(Comparator.comparingDouble(entry -> entry.getValue().getKey()))
+          .limit(5)
+          .map(Map.Entry::getKey)
+          .toList();
+      
+      log.debug("[assist/written/weakness] userId={}, weaknessTags={} (fallback from UserAnswer)", 
+          userId, weaknessTags);
+    }
 
     // 2. 문제 풀 생성
-    List<Question> pool;
-    if (targetTopics.isEmpty()) {
-      pool = questionRepository
+    List<Question> selectedQuestions;
+    if (weaknessTags.isEmpty()) {
+      // 약점 태그가 없을 때는 NORMAL 난이도 문제를 찾음
+      List<Question> pool = questionRepository
           .findByModeAndTypeAndDifficulty(ExamMode.WRITTEN, QuestionType.MCQ, Difficulty.NORMAL);
+      List<Question> copy = new ArrayList<>(new LinkedHashSet<>(pool));
+      Collections.shuffle(copy);
+      int lim = Math.min(copy.size(), Math.max(1, want));
+      selectedQuestions = copy.subList(0, lim);
     } else {
-      pool = questionRepository
-          .findByTopicIdInAndModeAndType(targetTopics, ExamMode.WRITTEN, QuestionType.MCQ);
+      // 약점 태그별로 문제를 그룹화 (카테고리 모드처럼 균등 분배)
+      Map<String, List<Question>> questionsByTag = new HashMap<>();
+      
+      for (String tag : weaknessTags) {
+        List<Long> questionIds = questionTagRepository.findQuestionIdsByTag(tag);
+        List<Question> tagQuestions = questionRepository.findByIdIn(questionIds).stream()
+            .filter(q -> q.getMode() == ExamMode.WRITTEN)
+            .filter(q -> q.getType() == QuestionType.MCQ)
+            .distinct()
+            .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        questionsByTag.put(tag, tagQuestions);
+      }
+      
+      log.debug("[assist/written/weakness] weaknessTags={}, questionsByTag sizes={}", 
+          weaknessTags, questionsByTag.entrySet().stream()
+              .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
+      
+      // 각 태그의 문제를 섞기
+      questionsByTag.values().forEach(Collections::shuffle);
+      
+      // 태그별 할당량 계산 (균등 분배)
+      int tagCount = weaknessTags.size();
+      int basePerTag = want / tagCount;
+      int remainder = want % tagCount;
+      
+      Map<String, Integer> tagQuotas = new HashMap<>();
+      for (int i = 0; i < weaknessTags.size(); i++) {
+        String tag = weaknessTags.get(i);
+        int quota = basePerTag + (i < remainder ? 1 : 0);
+        tagQuotas.put(tag, quota);
+      }
+      
+      log.debug("[assist/written/weakness] tagQuotas={}, want={}", tagQuotas, want);
+      
+      // 각 태그에서 할당량만큼 선택
+      selectedQuestions = new ArrayList<>();
+      for (String tag : weaknessTags) {
+        List<Question> tagQuestions = questionsByTag.getOrDefault(tag, List.of());
+        int quota = tagQuotas.getOrDefault(tag, 0);
+        int toSelect = Math.min(quota, tagQuestions.size());
+        
+        for (int i = 0; i < toSelect && selectedQuestions.size() < want; i++) {
+          Question q = tagQuestions.get(i);
+          if (!selectedQuestions.contains(q)) {
+            selectedQuestions.add(q);
+          }
+        }
+      }
+      
+      // 할당량으로 부족한 경우, 문제가 많은 태그에서 추가 선택
+      if (selectedQuestions.size() < want) {
+        int remaining = want - selectedQuestions.size();
+        
+        // 태그별 선택된 문제 수 계산
+        Map<String, Integer> selectedCount = new HashMap<>();
+        for (Question q : selectedQuestions) {
+          List<String> qTags = questionTagRepository.findTagsByQuestionId(q.getId());
+          for (String tag : qTags) {
+            if (weaknessTags.contains(tag)) {
+              selectedCount.put(tag, selectedCount.getOrDefault(tag, 0) + 1);
+              break; // 첫 번째 약점 태그만 카운트
+            }
+          }
+        }
+        
+        // 문제가 많은 태그부터 추가 선택
+        List<Map.Entry<String, List<Question>>> sortedTags = questionsByTag.entrySet().stream()
+            .sorted((e1, e2) -> {
+              int size1 = e1.getValue().size();
+              int size2 = e2.getValue().size();
+              int selected1 = selectedCount.getOrDefault(e1.getKey(), 0);
+              int selected2 = selectedCount.getOrDefault(e2.getKey(), 0);
+              // 남은 문제 수가 많고, 선택 비율이 낮은 태그 우선
+              int ratio1 = size1 > 0 ? (selected1 * 100) / size1 : 0;
+              int ratio2 = size2 > 0 ? (selected2 * 100) / size2 : 0;
+              if (ratio1 != ratio2) {
+                return Integer.compare(ratio1, ratio2); // 낮은 비율 우선
+              }
+              return Integer.compare(size2 - selected2, size1 - selected1); // 남은 문제가 많은 순
+            })
+            .toList();
+        
+        for (Map.Entry<String, List<Question>> entry : sortedTags) {
+          if (remaining <= 0) break;
+          
+          String tag = entry.getKey();
+          List<Question> tagQuestions = entry.getValue();
+          
+          for (Question q : tagQuestions) {
+            if (remaining <= 0) break;
+            if (!selectedQuestions.contains(q)) {
+              selectedQuestions.add(q);
+              remaining--;
+            }
+          }
+        }
+      }
     }
 
-    pool = pool.stream()
-        .sorted(Comparator.comparingLong(Question::getId))
-        .toList();
+    // 최종 검증: WRITTEN 모드 문제만 포함되도록 필터링
+    selectedQuestions = selectedQuestions.stream()
+        .filter(q -> q.getMode() == ExamMode.WRITTEN)
+        .filter(q -> q.getType() == QuestionType.MCQ)
+        .distinct()
+        .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
 
-    log.debug("[assist/written/weakness] userId={}, targets={}, poolSize={}, count={}",
-        userId, targetTopics, pool.size(), want);
+    log.debug("[assist/written/weakness] userId={}, weaknessTags={}, selectedQuestions.size()={}, count={}",
+        userId, weaknessTags, selectedQuestions.size(), want);
 
-    if (pool.isEmpty()) {
+    if (selectedQuestions.isEmpty()) {
       throw new IllegalStateException("약점 보완 문제가 없습니다.");
     }
-
-    // 3. 문제 선택 (랜덤 셔플 후 want 개수만큼)
-    List<Question> copy = new ArrayList<>(new LinkedHashSet<>(pool));
-    Collections.shuffle(copy);
-    int lim = Math.min(copy.size(), Math.max(1, want));
-    List<Question> selectedQuestions = copy.subList(0, lim);
 
     // 4. LearningSession 생성 (topicId는 0 사용, mode는 ASSIST_WRITTEN_WEAKNESS)
     LearningSession learningSession = learningSessionRepository.save(LearningSession.builder()
@@ -643,9 +910,9 @@ public class AssistWrittenService {
         .updatedAt(Instant.now())
         .build());
 
-    // 6. StudySession 생성 (topicScopeJson에 targetTopics 저장)
+    // 6. StudySession 생성 (topicScopeJson에 weaknessTags 저장)
     Map<String, Object> scopeMap = new HashMap<>();
-    scopeMap.put("targetTopics", targetTopics);
+    scopeMap.put("weaknessTags", weaknessTags);
     String scopeJson;
     try {
       scopeJson = objectMapper.writeValueAsString(scopeMap);
@@ -1019,10 +1286,10 @@ public class AssistWrittenService {
     );
   }
 
-  /* ================= 난이도 단건 즉시 채점 ================= */
+  /* ================= 보조학습 요약 ================= */
 
-  @Transactional
-  public AssistDtos.WrittenGradeOneResp gradeOneDifficulty(Long learningSessionId, Long questionId, String label) {
+  @Transactional(readOnly = true)
+  public FlowDtos.StepEnvelope<AssistDtos.WrittenSummaryResp> summary(Long learningSessionId) {
     String userId = AuthUserUtil.getCurrentUserId();
 
     // 1. LearningSession 조회 및 소유자 확인
@@ -1030,26 +1297,13 @@ public class AssistWrittenService {
     if (!learningSession.getUserId().equals(userId)) {
       throw new IllegalStateException("세션 소유자가 아닙니다.");
     }
+    
     String mode = learningSession.getMode();
     if (!"ASSIST_WRITTEN_DIFFICULTY".equals(mode) && !"ASSIST_WRITTEN_WEAKNESS".equals(mode) && !"ASSIST_WRITTEN_CATEGORY".equals(mode)) {
       throw new IllegalStateException("보조학습 세션이 아닙니다.");
     }
 
-    // 2. 문제 조회
-    Question question = questionRepository.findById(questionId)
-        .orElseThrow(() -> new IllegalStateException("문제를 찾을 수 없습니다: " + questionId));
-
-    if (question.getMode() != ExamMode.WRITTEN || question.getType() != QuestionType.MCQ) {
-      throw new IllegalStateException("필기 MCQ 문제가 아닙니다.");
-    }
-
-    // 3. 채점
-    String userLabel = Optional.ofNullable(label).orElse("").trim();
-    String correctLabel = Optional.ofNullable(question.getAnswerKey()).orElse("").trim();
-    boolean isCorrect = !correctLabel.isBlank() && correctLabel.equalsIgnoreCase(userLabel);
-    String explanation = Optional.ofNullable(question.getSolutionText()).orElse("");
-
-    // 4. StudySessionItem에 답변 저장
+    // 2. 문제 풀기 단계 조회
     String stepCode;
     if ("ASSIST_WRITTEN_DIFFICULTY".equals(mode)) {
       stepCode = "ASSIST_WRITTEN_DIFFICULTY";
@@ -1058,102 +1312,262 @@ public class AssistWrittenService {
     } else {
       stepCode = "ASSIST_WRITTEN_CATEGORY";
     }
-    LearningStep difficultyStep = learningSessionService.getStep(learningSession, stepCode);
-    StudySession studySession = difficultyStep.getStudySession();
+    
+    LearningStep assistStep = learningSessionService.getStep(learningSession, stepCode);
+    if (assistStep == null) {
+      throw new IllegalStateException("학습 단계를 찾을 수 없습니다.");
+    }
 
+    StudySession studySession = assistStep.getStudySession();
+    if (studySession == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다.");
+    }
+
+    // 3. 메타데이터 추출
+    Map<String, Object> metadata = parseJson(assistStep.getMetadataJson());
+    int total = readInt(metadata, "total");
+    int correct = readInt(metadata, "correct");
+    boolean completed = Boolean.TRUE.equals(metadata.get("completed"));
+
+    // 4. 토픽 제목 설정
+    String topicTitle;
+    if ("ASSIST_WRITTEN_CATEGORY".equals(mode)) {
+      topicTitle = "카테고리 기반 보조학습";
+    } else if ("ASSIST_WRITTEN_DIFFICULTY".equals(mode)) {
+      topicTitle = "난이도 기반 보조학습";
+    } else {
+      topicTitle = "약점 보완 보조학습";
+    }
+
+    // 5. 약점 태그 계산 (필요한 경우)
+    List<String> weakTags = List.of();
     if (studySession != null) {
-      List<StudySessionItem> sessionItems = sessionManager.items(studySession.getId());
-      StudySessionItem sessionItem = sessionItems.stream()
-          .filter(item -> item.getQuestionId().equals(questionId))
-          .findFirst()
-          .orElse(null);
+      List<com.OhRyue.certpilot.study.domain.UserAnswer> sessionAnswers = 
+          userAnswerRepository.findByUserIdAndSessionId(userId, studySession.getId()).stream()
+              .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
+              .toList();
+      // 약점 태그 계산 로직은 필요시 추가
+    }
 
-      if (sessionItem != null) {
-        try {
-          Map<String, Object> answerPayload = new HashMap<>();
-          answerPayload.put("label", userLabel);
-          answerPayload.put("correct", isCorrect);
-          String answerJson = objectMapper.writeValueAsString(answerPayload);
+    // 6. AI 요약 생성
+    String aiSummary = aiExplanationService.summarizeWritten(
+        topicTitle,
+        total,
+        correct,
+        weakTags
+    );
 
-          sessionManager.upsertItem(
-              studySession,
-              questionId,
-              sessionItem.getOrderNo(),
-              answerJson,
-              isCorrect,
-              isCorrect ? 100 : 0,
-              null
-          );
+    // 7. XP 정보 조회
+    Integer earnedXp = null;
+    Long totalXp = null;
+    Integer level = null;
+    Integer xpToNextLevel = null;
+    Boolean leveledUp = false;
+    Integer levelUpRewardPoints = 0;
 
-          // UserAnswer 저장
-          com.OhRyue.certpilot.study.domain.UserAnswer userAnswer =
-              com.OhRyue.certpilot.study.domain.UserAnswer.builder()
-                  .userId(userId)
-                  .questionId(questionId)
-                  .examMode(ExamMode.WRITTEN)
-                  .questionType(QuestionType.MCQ)
-                  .userAnswerJson(answerJson)
-                  .correct(isCorrect)
-                  .score(isCorrect ? 100 : 0)
-                  .source("ASSIST_WRITTEN")
-                  .sessionId(studySession.getId())
-                  .sessionItemId(sessionItem.getId())
-                  .build();
-          userAnswerRepository.save(userAnswer);
+    try {
+      // 보조학습은 grade-one에서 정답당 5 XP를 지급했으므로, earnedXp는 정답 수 × 5
+      earnedXp = correct * 5;
 
-          // 5. 메타데이터 업데이트 (모든 문제를 풀었는지 확인)
-          List<StudySessionItem> allItems = sessionManager.items(studySession.getId());
-          long answeredCount = allItems.stream()
-              .filter(item -> item.getUserAnswerJson() != null && !item.getUserAnswerJson().isBlank())
+      // 현재 XP 지갑 정보 조회
+      com.OhRyue.certpilot.study.client.ProgressXpClient.XpWalletResponse walletResp = progressXpClient.getWallet();
+      totalXp = walletResp.xpTotal();
+      level = walletResp.level();
+      xpToNextLevel = walletResp.xpToNextLevel();
+    } catch (Exception e) {
+      // XP 조회 실패는 학습 흐름을 막지 않음
+      log.warn("Failed to retrieve XP information in assist summary: {}", e.getMessage());
+    }
+
+    // 8. 응답 생성
+    AssistDtos.WrittenSummaryResp payload = new AssistDtos.WrittenSummaryResp(
+        total,
+        correct,
+        aiSummary,
+        completed,
+        earnedXp,
+        totalXp,
+        level,
+        xpToNextLevel,
+        leveledUp,
+        levelUpRewardPoints
+    );
+
+    return new FlowDtos.StepEnvelope<>(
+        studySession.getId(),
+        "ASSIST_WRITTEN",
+        "SUMMARY",
+        completed ? "COMPLETE" : "IN_PROGRESS",
+        null,
+        sessionManager.loadMeta(studySession),
+        payload,
+        learningSession.getId()
+    );
+  }
+
+  private Map<String, Object> parseJson(String json) {
+    if (json == null || json.isBlank()) {
+      return new HashMap<>();
+    }
+    try {
+      return objectMapper.readValue(json, Map.class);
+    } catch (JsonProcessingException e) {
+      return new HashMap<>();
+    }
+  }
+
+  private int readInt(Map<String, Object> map, String key) {
+    Object value = map.get(key);
+    if (value instanceof Number) {
+      return ((Number) value).intValue();
+    }
+    return 0;
+  }
+
+  /* ================= 난이도 단건 즉시 채점 ================= */
+
+  @Transactional
+  public AssistDtos.WrittenGradeOneResp gradeOneDifficulty(Long learningSessionId, AssistDtos.WrittenGradeOneReq req) {
+    String userId = AuthUserUtil.getCurrentUserId();
+
+    // 1. LearningSession 조회 및 소유자 확인
+    LearningSession learningSession = learningSessionService.getLearningSession(learningSessionId);
+    if (!learningSession.getUserId().equals(userId)) {
+      throw new IllegalStateException("세션 소유자가 아닙니다.");
+    }
+    
+    String mode = learningSession.getMode();
+    if (!"ASSIST_WRITTEN_DIFFICULTY".equals(mode) && !"ASSIST_WRITTEN_WEAKNESS".equals(mode) && !"ASSIST_WRITTEN_CATEGORY".equals(mode)) {
+      throw new IllegalStateException("보조학습 세션이 아닙니다.");
+    }
+
+    // 2. 문제 풀기 단계 조회
+    String stepCode;
+    if ("ASSIST_WRITTEN_DIFFICULTY".equals(mode)) {
+      stepCode = "ASSIST_WRITTEN_DIFFICULTY";
+    } else if ("ASSIST_WRITTEN_WEAKNESS".equals(mode)) {
+      stepCode = "ASSIST_WRITTEN_WEAKNESS";
+    } else {
+      stepCode = "ASSIST_WRITTEN_CATEGORY";
+    }
+    
+    LearningStep learningStep = learningSessionService.getStep(learningSession, stepCode);
+    if (learningStep == null) {
+      throw new IllegalStateException("학습 단계를 찾을 수 없습니다.");
+    }
+
+    // 3. StudySession 조회
+    StudySession studySession = learningStep.getStudySession();
+    if (studySession == null) {
+      throw new IllegalStateException("StudySession이 초기화되지 않았습니다.");
+    }
+
+    // 4. 문제 조회
+    Question question = questionRepository.findById(req.questionId())
+        .orElseThrow(() -> new IllegalStateException("문제를 찾을 수 없습니다: " + req.questionId()));
+
+    if (question.getMode() != ExamMode.WRITTEN || question.getType() != QuestionType.MCQ) {
+      throw new IllegalStateException("필기 MCQ 문제가 아닙니다.");
+    }
+
+    // 4. 채점
+    String userLabel = Optional.ofNullable(req.label()).orElse("").trim();
+    String correctLabel = Optional.ofNullable(question.getAnswerKey()).orElse("").trim();
+    boolean isCorrect = !correctLabel.isBlank() && correctLabel.equalsIgnoreCase(userLabel);
+    String explanation = Optional.ofNullable(question.getSolutionText()).orElse("");
+
+    // 5. StudySessionItem에 답변 저장
+    List<StudySessionItem> sessionItems = sessionManager.items(studySession.getId());
+    StudySessionItem sessionItem = sessionItems.stream()
+        .filter(item -> item.getQuestionId().equals(req.questionId()))
+        .findFirst()
+        .orElse(null);
+
+    if (sessionItem != null) {
+      try {
+        Map<String, Object> answerPayload = new HashMap<>();
+        answerPayload.put("label", userLabel);
+        answerPayload.put("correct", isCorrect);
+        String answerJson = objectMapper.writeValueAsString(answerPayload);
+
+        sessionManager.upsertItem(
+            studySession,
+            req.questionId(),
+            sessionItem.getOrderNo(),
+            answerJson,
+            isCorrect,
+            isCorrect ? 100 : 0,
+            null
+        );
+
+        // UserAnswer 저장
+        com.OhRyue.certpilot.study.domain.UserAnswer userAnswer =
+            com.OhRyue.certpilot.study.domain.UserAnswer.builder()
+                .userId(userId)
+                .questionId(req.questionId())
+                .examMode(ExamMode.WRITTEN)
+                .questionType(QuestionType.MCQ)
+                .userAnswerJson(answerJson)
+                .correct(isCorrect)
+                .score(isCorrect ? 100 : 0)
+                .source("ASSIST_WRITTEN")
+                .sessionId(studySession.getId())
+                .sessionItemId(sessionItem.getId())
+                .build();
+        userAnswerRepository.save(userAnswer);
+
+        // 5. 메타데이터 업데이트 (모든 문제를 풀었는지 확인)
+        List<StudySessionItem> allItems = sessionManager.items(studySession.getId());
+        long answeredCount = allItems.stream()
+            .filter(item -> item.getUserAnswerJson() != null && !item.getUserAnswerJson().isBlank())
+            .count();
+        long totalCount = allItems.size();
+        
+        // 모든 문제를 풀었으면 메타데이터 업데이트
+        if (answeredCount == totalCount && totalCount > 0) {
+          int correctCount = (int) allItems.stream()
+              .filter(item -> Boolean.TRUE.equals(item.getCorrect()))
               .count();
-          long totalCount = allItems.size();
+          List<Long> wrongQuestionIds = allItems.stream()
+              .filter(item -> Boolean.FALSE.equals(item.getCorrect()))
+              .map(StudySessionItem::getQuestionId)
+              .toList();
           
-          // 모든 문제를 풀었으면 메타데이터 업데이트
-          if (answeredCount == totalCount && totalCount > 0) {
-            int correctCount = (int) allItems.stream()
-                .filter(item -> Boolean.TRUE.equals(item.getCorrect()))
-                .count();
-            List<Long> wrongQuestionIds = allItems.stream()
-                .filter(item -> Boolean.FALSE.equals(item.getCorrect()))
-                .map(StudySessionItem::getQuestionId)
-                .toList();
+          Map<String, Object> metadata = new HashMap<>();
+          metadata.put("total", (int) totalCount);
+          metadata.put("correct", correctCount);
+          metadata.put("completed", true);
+          metadata.put("wrongQuestionIds", wrongQuestionIds);
+          metadata.put("lastSubmittedAt", Instant.now().toString());
+          
+          try {
+            learningStep.setMetadataJson(objectMapper.writeValueAsString(metadata));
+            int scorePct = totalCount == 0 ? 0 : (correctCount * 100) / (int) totalCount;
+            learningStep.setScorePct(scorePct);
+            learningStep.setStatus("COMPLETE");
+            learningStep.setUpdatedAt(Instant.now());
+            learningStepRepository.save(learningStep);
             
-            Map<String, Object> metadata = new HashMap<>();
-            metadata.put("total", (int) totalCount);
-            metadata.put("correct", correctCount);
-            metadata.put("completed", true);
-            metadata.put("wrongQuestionIds", wrongQuestionIds);
-            metadata.put("lastSubmittedAt", Instant.now().toString());
-            
-            try {
-              difficultyStep.setMetadataJson(objectMapper.writeValueAsString(metadata));
-              int scorePct = totalCount == 0 ? 0 : (correctCount * 100) / (int) totalCount;
-              difficultyStep.setScorePct(scorePct);
-              difficultyStep.setStatus("COMPLETE");
-              difficultyStep.setUpdatedAt(Instant.now());
-              learningStepRepository.save(difficultyStep);
-              
-              // StudySession 종료
-              if (!"SUBMITTED".equals(studySession.getStatus()) && !"CLOSED".equals(studySession.getStatus())) {
-                boolean allCorrect = wrongQuestionIds.isEmpty();
-                sessionManager.closeSession(studySession, scorePct, allCorrect, metadata);
-              }
-              
-              // 다음 단계 결정 및 활성화
-              String nextStep = wrongQuestionIds.isEmpty() ? "SUMMARY" : "REVIEW_WRONG";
-              var nextLearningStep = learningSessionService.getStep(learningSession, nextStep);
-              if (nextLearningStep != null && "READY".equals(nextLearningStep.getStatus())) {
-                nextLearningStep.setStatus("IN_PROGRESS");
-                nextLearningStep.setUpdatedAt(Instant.now());
-                learningStepRepository.save(nextLearningStep);
-              }
-            } catch (JsonProcessingException e) {
-              log.warn("Failed to update metadata: {}", e.getMessage());
+            // StudySession 종료
+            if (!"SUBMITTED".equals(studySession.getStatus()) && !"CLOSED".equals(studySession.getStatus())) {
+              boolean allCorrect = wrongQuestionIds.isEmpty();
+              sessionManager.closeSession(studySession, scorePct, allCorrect, metadata);
             }
+            
+            // 다음 단계 결정 및 활성화
+            String nextStep = wrongQuestionIds.isEmpty() ? "SUMMARY" : "REVIEW_WRONG";
+            var nextLearningStep = learningSessionService.getStep(learningSession, nextStep);
+            if (nextLearningStep != null && "READY".equals(nextLearningStep.getStatus())) {
+              nextLearningStep.setStatus("IN_PROGRESS");
+              nextLearningStep.setUpdatedAt(Instant.now());
+              learningStepRepository.save(nextLearningStep);
+            }
+          } catch (JsonProcessingException e) {
+            log.warn("Failed to update metadata: {}", e.getMessage());
           }
-        } catch (JsonProcessingException e) {
-          log.warn("Failed to serialize answer for question {}: {}", questionId, e.getMessage());
         }
+      } catch (JsonProcessingException e) {
+        log.warn("Failed to serialize answer for question {}: {}", req.questionId(), e.getMessage());
       }
     }
 

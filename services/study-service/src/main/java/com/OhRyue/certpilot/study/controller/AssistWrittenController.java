@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 보조학습 – 필기(MCQ) 전용 컨트롤러
@@ -94,32 +93,34 @@ public class AssistWrittenController {
   @PostMapping("/difficulty/grade-one")
   public AssistDtos.WrittenGradeOneResp gradeOneDifficulty(
       @RequestParam Long learningSessionId,
-      @RequestParam Long questionId,
-      @RequestBody Map<String, String> body
+      @RequestBody @Valid AssistDtos.WrittenGradeOneReq req
   ) {
-    String label = body.getOrDefault("label", "");
-    return writtenService.gradeOneDifficulty(learningSessionId, questionId, label);
+    return writtenService.gradeOneDifficulty(learningSessionId, req);
   }
 
   @Operation(summary = "필기: 약점 보완 보조학습 단건 즉시 채점")
   @PostMapping("/weakness/grade-one")
   public AssistDtos.WrittenGradeOneResp gradeOneWeakness(
       @RequestParam Long learningSessionId,
-      @RequestParam Long questionId,
-      @RequestBody Map<String, String> body
+      @RequestBody @Valid AssistDtos.WrittenGradeOneReq req
   ) {
-    String label = body.getOrDefault("label", "");
-    return writtenService.gradeOneDifficulty(learningSessionId, questionId, label);
+    return writtenService.gradeOneDifficulty(learningSessionId, req);
   }
 
   @Operation(summary = "필기: 카테고리 기반 보조학습 단건 즉시 채점")
   @PostMapping("/category/grade-one")
   public AssistDtos.WrittenGradeOneResp gradeOneCategory(
       @RequestParam Long learningSessionId,
-      @RequestParam Long questionId,
-      @RequestBody Map<String, String> body
+      @RequestBody @Valid AssistDtos.WrittenGradeOneReq req
   ) {
-    String label = body.getOrDefault("label", "");
-    return writtenService.gradeOneDifficulty(learningSessionId, questionId, label);
+    return writtenService.gradeOneDifficulty(learningSessionId, req);
+  }
+
+  @Operation(summary = "필기: 보조학습 요약 조회")
+  @GetMapping("/summary")
+  public FlowDtos.StepEnvelope<AssistDtos.WrittenSummaryResp> summary(
+      @RequestParam Long learningSessionId
+  ) {
+    return writtenService.summary(learningSessionId);
   }
 }
