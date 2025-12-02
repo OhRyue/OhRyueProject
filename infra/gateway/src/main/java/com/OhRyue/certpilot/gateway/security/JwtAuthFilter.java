@@ -83,6 +83,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     return path.startsWith("/api/account/login")              // 로그인
         || path.startsWith("/api/account/register")           // 회원가입
         || path.startsWith("/api/account/check-userId")       // 아이디 중복 확인
+        || path.startsWith("/api/account/check-nickname")     // 닉네임 중복 확인
         || path.startsWith("/api/account/send-verification")  // 인증 이메일 전송
         || path.startsWith("/api/account/verify-email")       // 이메일 인증 확인
         || path.startsWith("/api/account/reset-password")     // 비밀번호 재설정

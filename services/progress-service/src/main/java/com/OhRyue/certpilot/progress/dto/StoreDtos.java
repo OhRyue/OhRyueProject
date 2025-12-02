@@ -1,6 +1,5 @@
 package com.OhRyue.certpilot.progress.dto;
 
-import com.OhRyue.certpilot.progress.domain.enums.ItemCategory;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
@@ -20,28 +19,18 @@ public class StoreDtos {
   @Schema(description = "상점 아이템 요약")
   public record StoreItemView(
       @Schema(description = "아이템 ID") Long itemId,
-      @Schema(description = "카테고리") ItemCategory category,
       @Schema(description = "아이템명") String name,
       @Schema(description = "설명") String description,
-      @Schema(description = "이미지 URL") String imageUrl,
       @Schema(description = "가격") int price,
       @Schema(description = "보유 여부") boolean owned,
-      @Schema(description = "희귀도") String rarity,
       @Schema(description = "구매 제한 수량") Integer limitPerUser,
       @Schema(description = "활성 여부") boolean active
-  ) {}
-
-  @Schema(description = "카테고리별 아이템 목록")
-  public record StoreCategorySection(
-      @Schema(description = "카테고리") ItemCategory category,
-      @Schema(description = "카테고리 명") String label,
-      @Schema(description = "아이템 목록") List<StoreItemView> items
   ) {}
 
   @Schema(description = "상점 카탈로그 응답")
   public record StoreCatalog(
       StoreUserSummary user,
-      List<StoreCategorySection> categories,
+      List<StoreItemView> items,
       @Schema(description = "카탈로그 생성 시각") Instant generatedAt
   ) {}
 }

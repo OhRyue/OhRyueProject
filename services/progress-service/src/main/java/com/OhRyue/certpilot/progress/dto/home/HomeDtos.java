@@ -2,6 +2,7 @@ package com.OhRyue.certpilot.progress.dto.home;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public final class HomeDtos {
@@ -12,7 +13,7 @@ public final class HomeDtos {
   public record HomeUserCard(
       @Schema(description = "사용자 ID") String userId,
       @Schema(description = "닉네임") String nickname,
-      @Schema(description = "아바타 URL") String avatarUrl,
+      @Schema(description = "스킨 ID") Long skinId,
       @Schema(description = "현재 레벨") int level,
       @Schema(description = "누적 경험치") long xpTotal,
       @Schema(description = "연속 학습 일수") int streakDays
@@ -23,6 +24,7 @@ public final class HomeDtos {
       @Schema(description = "자격증 ID") Long certId,
       @Schema(description = "목표 모드") String targetExamMode,
       @Schema(description = "목표 회차 ID") Long targetRoundId,
+      @Schema(description = "목표 시험 날짜") LocalDate targetExamDate,
       @Schema(description = "D-Day 캐시 값") Integer dday
   ) {}
 
@@ -45,7 +47,7 @@ public final class HomeDtos {
   public record HomeRankingItem(
       @Schema(description = "사용자 ID") String userId,
       @Schema(description = "닉네임") String nickname,
-      @Schema(description = "아바타 URL") String avatarUrl,
+      @Schema(description = "스킨 ID") Long skinId,
       @Schema(description = "레벨") int level,
       @Schema(description = "점수") long score,
       @Schema(description = "누적 경험치") long xpTotal,

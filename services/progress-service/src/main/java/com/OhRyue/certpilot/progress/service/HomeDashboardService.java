@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -59,7 +60,7 @@ public class HomeDashboardService {
       HomeUserCard userCard = new HomeUserCard(
           userId,
           profile == null ? null : profile.nickname(),
-          profile == null ? null : profile.avatarUrl(),
+          profile == null ? null : profile.skinId(),
           wallet.getLevel(),
           wallet.getXpTotal(),
           streak.getCurrentDays()
@@ -67,11 +68,18 @@ public class HomeDashboardService {
 
       HomeGoal goal = null;
       if (me != null && me.goal() != null) {
+        Integer dday = me.goal().ddayCached();
+        // ddayCached가 null이고 targetExamDate가 있으면 계산
+        if (dday == null && me.goal().targetExamDate() != null) {
+          LocalDate today = LocalDate.now(KST);
+          dday = (int) ChronoUnit.DAYS.between(today, me.goal().targetExamDate());
+        }
         goal = new HomeGoal(
             me.goal().certId(),
             me.goal().targetExamMode(),
             me.goal().targetRoundId(),
-            me.goal().ddayCached()
+            me.goal().targetExamDate(),
+            dday
         );
       }
 
@@ -140,7 +148,7 @@ public class HomeDashboardService {
         rankingItems.add(new HomeRankingItem(
             score.getUserId(),
             summary == null ? null : summary.nickname(),
-            summary == null ? null : summary.avatarUrl(),
+            summary == null ? null : summary.skinId(),
             wallet.getLevel(),
             score.getScore(),
             wallet.getXpTotal(),
@@ -158,7 +166,7 @@ public class HomeDashboardService {
         meItem = new HomeRankingItem(
             userId,
             summary == null ? null : summary.nickname(),
-            summary == null ? null : summary.avatarUrl(),
+            summary == null ? null : summary.skinId(),
             wallet.getLevel(),
             myScore.getScore(),
             wallet.getXpTotal(),

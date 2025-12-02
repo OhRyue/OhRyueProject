@@ -143,11 +143,8 @@ CREATE TABLE IF NOT EXISTS user_point_ledger (
 
 CREATE TABLE IF NOT EXISTS store_item (
   id             BIGINT AUTO_INCREMENT PRIMARY KEY,
-  category       ENUM('HAT','CLOTHES','ACC','BG','SPECIAL') NOT NULL,
   name           VARCHAR(255) NOT NULL,
-  image_url      VARCHAR(500) NULL,
   price          INT NOT NULL,
-  rarity         ENUM('common','rare','epic') NOT NULL DEFAULT 'common',
   limit_per_user INT NULL,
   is_active      TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

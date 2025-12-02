@@ -3,6 +3,7 @@ package com.OhRyue.certpilot.account.domain;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -36,6 +37,9 @@ public class UserGoalCert {
 
   @Column(name="target_round_id")
   private Long targetRoundId;
+
+  @Column(name="target_exam_date")
+  private LocalDate targetExamDate;
 
   @Column(name="dday_cached")
   private Integer ddayCached;

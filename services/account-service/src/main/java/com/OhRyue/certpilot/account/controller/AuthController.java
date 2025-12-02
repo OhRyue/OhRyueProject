@@ -19,6 +19,7 @@ import com.OhRyue.certpilot.account.dto.UserRegisterDto;
 import com.OhRyue.certpilot.account.dto.UserResponseDto;
 import com.OhRyue.certpilot.account.dto.VerifyCodeRequest;
 import com.OhRyue.certpilot.account.dto.VerifyEmailRequest;
+import com.OhRyue.certpilot.account.dto.WithdrawRequest;
 import com.OhRyue.certpilot.account.repo.UserAccountRepository;
 import com.OhRyue.certpilot.account.service.EmailService;
 import com.OhRyue.certpilot.account.service.GoalCertService;
@@ -28,6 +29,7 @@ import com.OhRyue.certpilot.account.service.RefreshTokenService;
 import com.OhRyue.certpilot.account.service.SettingsService;
 import com.OhRyue.certpilot.account.service.UserService;
 import com.OhRyue.certpilot.account.service.VerificationCodeService;
+import com.OhRyue.certpilot.account.feign.ProgressClient;
 import com.OhRyue.common.auth.AuthUserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -60,6 +62,7 @@ public class AuthController {
   private final OnboardingService onboardingService;
   private final UserAccountRepository userAccountRepository;
   private final PasswordEncoder passwordEncoder;
+  private final ProgressClient progressClient;
 
   /* ===================== 회원가입 & 이메일 인증 ===================== */
 
@@ -70,6 +73,13 @@ public class AuthController {
   ) {
     String userId = req.getUserId().trim();
     String email = normalizeEmail(req.getEmail());
+
+    // 이메일 형식 검증
+    if (email == null || email.isBlank() || !isValidEmailFormat(email)) {
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+          "message", "올바른 이메일 형식이 아닙니다."
+      ));
+    }
 
     // 이미 가입된 계정인지 체크
     if (userService.isUserIdDuplicate(userId) || userService.isEmailDuplicate(email)) {
@@ -119,17 +129,29 @@ public class AuthController {
     profileService.get(user.getId());
     settingsService.getSnapshot(user.getId());
     onboardingService.getStatus(user.getId());
+    
+    // 기본 인벤토리 초기화
+    try {
+      log.info("기본 인벤토리 초기화 시작: userId={}", user.getId());
+      String result = progressClient.initializeDefaultInventory(user.getId());
+      log.info("기본 인벤토리 초기화 완료: userId={}, result={}", user.getId(), result);
+    } catch (Exception e) {
+      log.error("기본 인벤토리 초기화 실패: userId={}, error={}", user.getId(), e.getMessage(), e);
+      // 회원가입은 성공했으므로 예외를 던지지 않음
+    }
 
     String accessToken = jwtTokenProvider.generateToken(user.getId());
     String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
     refreshTokenService.save(user.getId(), refreshToken);
 
+    // 회원가입 시점에는 온보딩이 완료되지 않았으므로 항상 false
     LoginResponseDto body = new LoginResponseDto(
         accessToken,
         refreshToken,
         user.getId(),
         user.getEmail(),
-        "USER"
+        "USER",
+        false
     );
 
     return ResponseEntity.ok(body);
@@ -146,12 +168,16 @@ public class AuthController {
     String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
     refreshTokenService.save(user.getId(), refreshToken);
 
+    UserProfile profile = profileService.get(user.getId());
+    Boolean onboardingCompleted = profile.getOnboardingCompleted() != null ? profile.getOnboardingCompleted() : false;
+
     return ResponseEntity.ok(new LoginResponseDto(
         accessToken,
         refreshToken,
         user.getId(),
         user.getEmail(),
-        "USER"
+        "USER",
+        onboardingCompleted
     ));
   }
 
@@ -190,6 +216,38 @@ public class AuthController {
     return ResponseEntity.noContent().build();
   }
 
+  @Operation(summary = "계정 탈퇴")
+  @DeleteMapping("/withdraw")
+  public ResponseEntity<Map<String, String>> withdraw(@Valid @RequestBody WithdrawRequest req) {
+    String userId;
+    try {
+      userId = AuthUserUtil.getCurrentUserId();
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
+    try {
+      // 비밀번호 확인 후 계정 상태를 DELETED로 변경
+      userService.withdraw(userId, req.getPassword());
+      
+      // Refresh Token 삭제
+      refreshTokenService.delete(userId);
+      
+      log.info("✅ 계정 탈퇴 완료 - userId: {}", userId);
+      return ResponseEntity.ok(Map.of(
+          "message", "계정이 성공적으로 탈퇴되었습니다."
+      ));
+    } catch (IllegalArgumentException e) {
+      log.warn("❌ 계정 탈퇴 실패 - userId: {}, reason: {}", userId, e.getMessage());
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+          .body(Map.of("message", e.getMessage()));
+    } catch (IllegalStateException e) {
+      log.warn("❌ 계정 탈퇴 실패 - userId: {}, reason: {}", userId, e.getMessage());
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+          .body(Map.of("message", e.getMessage()));
+    }
+  }
+
   /* ===================== 아이디 중복 확인 ===================== */
 
   @Operation(summary = "아이디 중복 확인")
@@ -199,6 +257,18 @@ public class AuthController {
     return ResponseEntity.ok(Map.of(
         "available", !isDuplicate,
         "message", isDuplicate ? "이미 존재하는 아이디입니다." : "사용 가능한 아이디입니다."
+    ));
+  }
+
+  /* ===================== 닉네임 중복 확인 ===================== */
+
+  @Operation(summary = "닉네임 중복 확인")
+  @GetMapping("/check-nickname")
+  public ResponseEntity<Map<String, Object>> checkNickname(@RequestParam String nickname) {
+    boolean isDuplicate = profileService.isNicknameDuplicate(nickname);
+    return ResponseEntity.ok(Map.of(
+        "available", !isDuplicate,
+        "message", isDuplicate ? "이미 존재하는 닉네임입니다." : "사용 가능한 닉네임입니다."
     ));
   }
 
@@ -292,7 +362,7 @@ public class AuthController {
         .profile(ProfileResponse.builder()
             .userId(profile.getUserId())
             .nickname(profile.getNickname())
-            .avatarUrl(profile.getAvatarUrl())
+            .skinId(profile.getSkinId())
             .timezone(profile.getTimezone())
             .lang(profile.getLang())
             .build())
@@ -308,6 +378,15 @@ public class AuthController {
     return email == null ? null : email.trim().toLowerCase();
   }
 
+  private boolean isValidEmailFormat(String email) {
+    if (email == null || email.isBlank()) {
+      return false;
+    }
+    // 기본적인 이메일 형식 검증 (RFC 5322의 간단한 버전)
+    String emailRegex = "^[A-Za-z0-9+_.-]+@([A-Za-z0-9.-]+\\.[A-Za-z]{2,})$";
+    return email.matches(emailRegex);
+  }
+
   private GoalResponse mapGoal(UserGoalCert goal) {
     return GoalResponse.builder()
         .id(goal.getId())
@@ -315,6 +394,7 @@ public class AuthController {
         .certId(goal.getCertId())
         .targetExamMode(goal.getTargetExamMode())
         .targetRoundId(goal.getTargetRoundId())
+        .targetExamDate(goal.getTargetExamDate())
         .ddayCached(goal.getDdayCached())
         .build();
   }

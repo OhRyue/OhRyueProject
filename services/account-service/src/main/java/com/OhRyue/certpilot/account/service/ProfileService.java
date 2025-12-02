@@ -18,9 +18,10 @@ public class ProfileService {
         .orElseGet(() -> profileRepository.save(UserProfile.builder()
             .userId(userId)
             .nickname(defaultNickname(userId))
-            .avatarUrl(null)
+            .skinId(1L)
             .timezone("Asia/Seoul")
             .lang("ko-KR")
+            .onboardingCompleted(false)
             .build()));
   }
 
@@ -33,6 +34,33 @@ public class ProfileService {
       return java.util.List.of();
     }
     return profileRepository.findAllById(userIds);
+  }
+
+  /**
+   * 닉네임 중복 확인
+   * @param nickname 확인할 닉네임
+   * @param excludeUserId 중복 확인에서 제외할 사용자 ID (자기 자신의 닉네임은 제외하기 위해)
+   * @return 중복이면 true, 사용 가능하면 false
+   */
+  public boolean isNicknameDuplicate(String nickname, String excludeUserId) {
+    if (nickname == null || nickname.isBlank()) {
+      return false;
+    }
+    return profileRepository.findByNickname(nickname.trim())
+        .map(profile -> !profile.getUserId().equals(excludeUserId))
+        .orElse(false);
+  }
+
+  /**
+   * 닉네임 중복 확인 (제외 사용자 없이)
+   * @param nickname 확인할 닉네임
+   * @return 중복이면 true, 사용 가능하면 false
+   */
+  public boolean isNicknameDuplicate(String nickname) {
+    if (nickname == null || nickname.isBlank()) {
+      return false;
+    }
+    return profileRepository.existsByNickname(nickname.trim());
   }
 
   private String defaultNickname(String userId) {

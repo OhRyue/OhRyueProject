@@ -219,57 +219,83 @@ INSERT INTO user_point_ledger (user_id, delta, reason, ref_id)
 SELECT @u2,  +150, 'REWARD',  'as:goal-2025-11-07' FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM user_point_ledger WHERE user_id=@u2 AND ref_id='as:goal-2025-11-07');
 
--- 상점 아이템 (카테고리별 1~2개)
-INSERT INTO store_item (category, name, image_url, price, rarity, limit_per_user, is_active)
-SELECT 'HAT','픽셀 비니','/img/shop/hat_beanie.png',200,'common',NULL,1 FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE category='HAT' AND name='픽셀 비니');
-INSERT INTO store_item (category, name, image_url, price, rarity, limit_per_user, is_active)
-SELECT 'CLOTHES','레트로 점퍼','/img/shop/cloth_retro.png',350,'rare',NULL,1 FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE category='CLOTHES' AND name='레트로 점퍼');
-INSERT INTO store_item (category, name, image_url, price, rarity, limit_per_user, is_active)
-SELECT 'ACC','네온 안경','/img/shop/acc_neon.png',150, 'common',NULL,1 FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE category='ACC' AND name='네온 안경');
-INSERT INTO store_item (category, name, image_url, price, rarity, limit_per_user, is_active)
-SELECT 'BG','보라 그라디언트','/img/shop/bg_violet.png',250,'common',NULL,1 FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE category='BG' AND name='보라 그라디언트');
-INSERT INTO store_item (category, name, image_url, price, rarity, limit_per_user, is_active)
-SELECT 'SPECIAL','왕관 이펙트','/img/shop/sp_crown.png',800,'epic',1,1 FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE category='SPECIAL' AND name='왕관 이펙트');
+-- 상점 아이템 (스킨)
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '기본(여)', 0, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='기본(여)');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '너드(남)', 1500, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='너드(남)');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '교복', 1000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='교복');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '파자마', 1000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='파자마');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '웨딩드레스', 2000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='웨딩드레스');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '너드(여)', 2500, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='너드(여)');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '아이돌', 3000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='아이돌');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '귀신', 3000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='귀신');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '사이버펑크', 3000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='사이버펑크');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '차이나걸', 3000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='차이나걸');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '고양이', 2500, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='고양이');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '세일즈맨', 1000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='세일즈맨');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '경찰관', 3000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='경찰관');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '힙합 소년', 2000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='힙합 소년');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '강아지', 25000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='강아지');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '기본(남)', 0, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='기본(남)');
+INSERT INTO store_item (name, price, limit_per_user, is_active)
+SELECT '에이전트', 3000, NULL, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM store_item WHERE name='에이전트');
 
--- 아이템ID 변수
-SET @i_hat   := (SELECT id FROM store_item WHERE name='픽셀 비니' LIMIT 1);
-SET @i_cloth := (SELECT id FROM store_item WHERE name='레트로 점퍼' LIMIT 1);
-SET @i_acc   := (SELECT id FROM store_item WHERE name='네온 안경' LIMIT 1);
-SET @i_bg    := (SELECT id FROM store_item WHERE name='보라 그라디언트' LIMIT 1);
-SET @i_sp    := (SELECT id FROM store_item WHERE name='왕관 이펙트' LIMIT 1);
-
--- 인벤토리 보유
+-- 인벤토리 (모든 계정이 item_id 1, 16 소지)
 INSERT INTO user_inventory (user_id, item_id)
-SELECT @u1, @i_hat FROM DUAL
-WHERE @i_hat IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u1 AND item_id=@i_hat);
+SELECT @u1, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u1 AND item_id=1);
 INSERT INTO user_inventory (user_id, item_id)
-SELECT @u1, @i_bg FROM DUAL
-WHERE @i_bg IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u1 AND item_id=@i_bg);
+SELECT @u1, 16 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u1 AND item_id=16);
 INSERT INTO user_inventory (user_id, item_id)
-SELECT @u2, @i_acc FROM DUAL
-WHERE @i_acc IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u2 AND item_id=@i_acc);
+SELECT @u2, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u2 AND item_id=1);
 INSERT INTO user_inventory (user_id, item_id)
-SELECT @u4, @i_sp FROM DUAL
-WHERE @i_sp IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u4 AND item_id=@i_sp);
-
--- 로드아웃(착용)
-INSERT INTO user_loadout (user_id, hat_id, clothes_id, acc_id, bg_id, special_id)
-SELECT @u1, @i_hat, NULL, NULL, @i_bg, NULL FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM user_loadout WHERE user_id=@u1);
-INSERT INTO user_loadout (user_id, hat_id, clothes_id, acc_id, bg_id, special_id)
-SELECT @u2, NULL, NULL, @i_acc, NULL, NULL FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM user_loadout WHERE user_id=@u2);
-INSERT INTO user_loadout (user_id, hat_id, clothes_id, acc_id, bg_id, special_id)
-SELECT @u4, NULL, NULL, NULL, NULL, @i_sp FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM user_loadout WHERE user_id=@u4);
+SELECT @u2, 16 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u2 AND item_id=16);
+INSERT INTO user_inventory (user_id, item_id)
+SELECT @u3, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u3 AND item_id=1);
+INSERT INTO user_inventory (user_id, item_id)
+SELECT @u3, 16 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u3 AND item_id=16);
+INSERT INTO user_inventory (user_id, item_id)
+SELECT @u4, 1 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u4 AND item_id=1);
+INSERT INTO user_inventory (user_id, item_id)
+SELECT @u4, 16 FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM user_inventory WHERE user_id=@u4 AND item_id=16);
 
 SET FOREIGN_KEY_CHECKS = 1;

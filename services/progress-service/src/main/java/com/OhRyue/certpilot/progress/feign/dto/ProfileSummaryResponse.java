@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 public record ProfileSummaryResponse(
     String userId,
     String nickname,
-    String avatarUrl,
+    Long skinId,
     String timezone,
     String lang
 ) {}

@@ -13,11 +13,12 @@ CREATE TABLE IF NOT EXISTS user_account (
 
 -- 프로필(계정 신원)
 CREATE TABLE IF NOT EXISTS user_profile (
-  user_id       VARCHAR(100) PRIMARY KEY,
-  nickname      VARCHAR(100) NOT NULL,
-  avatar_url    VARCHAR(500) NULL,
-  timezone      VARCHAR(64)  NULL,
-  lang          VARCHAR(16)  NULL
+  user_id              VARCHAR(100) PRIMARY KEY,
+  nickname             VARCHAR(100) NOT NULL,
+  skin_id              BIGINT NULL,
+  timezone             VARCHAR(64)  NULL,
+  lang                 VARCHAR(16)  NULL,
+  onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 환경설정(UI/알림)
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS user_goal_cert (
   cert_id          BIGINT NOT NULL,
   target_exam_mode ENUM('WRITTEN','PRACTICAL') NOT NULL,
   target_round_id  BIGINT NULL,
+  target_exam_date DATE NULL,
   dday_cached      INT NULL,
   created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_goal_user (user_id),

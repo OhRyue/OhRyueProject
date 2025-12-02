@@ -4,6 +4,8 @@ import com.OhRyue.certpilot.account.domain.ExamMode;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
+import java.time.LocalDate;
+
 public class GoalCertDtos {
 
   @Getter
@@ -17,6 +19,7 @@ public class GoalCertDtos {
     private Long certId;
     private ExamMode targetExamMode;
     private Long targetRoundId;
+    private LocalDate targetExamDate;
     private Integer ddayCached;
   }
 
@@ -33,5 +36,17 @@ public class GoalCertDtos {
     private ExamMode targetExamMode;
 
     private Long targetRoundId;
+
+    private LocalDate targetExamDate;
+  }
+
+  @Getter
+  @Setter
+  @NoArgsConstructor
+  @AllArgsConstructor
+  @Builder
+  public static class GoalDateUpdateRequest {
+    @NotNull
+    private LocalDate targetExamDate;
   }
 }

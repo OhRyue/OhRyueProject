@@ -22,17 +22,18 @@ ON DUPLICATE KEY UPDATE
 -- ---------------------------------------------------------------------
 -- 2) PROFILES (display identity)
 --  timezone: Asia/Seoul, lang: ko-KR 기본 가정
---  avatar_url은 샘플 값(임시)
+--  skin_id: 현재 착용 중인 스킨 ID
+--  구매한 스킨은 user_inventory 테이블에서 관리
 -- ---------------------------------------------------------------------
-INSERT INTO user_profile (user_id, nickname, avatar_url, timezone, lang)
+INSERT INTO user_profile (user_id, nickname, skin_id, timezone, lang)
 VALUES
-  ('ohryue', '오류에',  'https://cdn.example.com/avatars/ohryue.png', 'Asia/Seoul', 'ko-KR'),
-  ('user2',  '코딩러2', 'https://cdn.example.com/avatars/user2.png',  'Asia/Seoul', 'ko-KR'),
-  ('guest',  '게스트',  'https://cdn.example.com/avatars/guest.png',  'Asia/Seoul', 'ko-KR'),
-  ('admin',  '관리자',  'https://cdn.example.com/avatars/admin.png',  'Asia/Seoul', 'ko-KR')
+  ('ohryue', '오류에',  1, 'Asia/Seoul', 'ko-KR'),
+  ('user2',  '코딩러2', 2, 'Asia/Seoul', 'ko-KR'),
+  ('guest',  '게스트',  1, 'Asia/Seoul', 'ko-KR'),
+  ('admin',  '관리자',  3, 'Asia/Seoul', 'ko-KR')
 ON DUPLICATE KEY UPDATE
   nickname = VALUES(nickname),
-  avatar_url = VALUES(avatar_url),
+  skin_id = VALUES(skin_id),
   timezone = VALUES(timezone),
   lang = VALUES(lang);
 
