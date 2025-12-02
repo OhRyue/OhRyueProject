@@ -99,14 +99,18 @@ public class VersusMatchService {
                 "mode", "DUEL",
                 "opponent", VersusBotConst.DUEL_BOT_USER_ID,
                 "opponentNickname", VersusBotConst.DUEL_BOT_NICKNAME,
-                "type", "BOT_MATCH"
+                "type", "BOT_MATCH",
+                "startedAt", Instant.now().toString()
         ));
 
         // 4) 문제 자동 생성은 BotPlayService에서 처리
         // (봇 플레이 시작 시 문제가 없으면 자동 생성)
-
-        // 5) 문제 자동 생성 (봇 플레이 시작 전에 문제 생성하여 questionId 확인 가능)
-        // BotPlayService에서 자동 생성하지만, 여기서도 미리 생성하여 응답에 포함 가능
+        // 하지만 첫 번째 문제 시작 이벤트를 기록하기 위해 문제가 생성될 때까지 기다려야 함
+        // BotPlayService.simulateDuelBotPlayAsync에서 문제 생성 후 첫 번째 문제 시작 이벤트를 기록하도록 수정 필요
+        
+        // 임시 해결책: 문제가 생성될 때까지 대기하지 않고, 
+        // BotPlayService에서 문제 생성 후 첫 번째 문제 시작 이벤트를 기록하도록 함
+        // 또는 여기서 문제를 미리 생성하고 첫 번째 문제 시작 이벤트를 기록
         
         // 6) 응답 DTO
         DuelWithBotResult result = new DuelWithBotResult(

@@ -189,15 +189,60 @@ public class VersusQuestionService {
     }
 
     private VersusDtos.QuestionDto toQuestionDto(Question question) {
-        Map<String, Object> payloadJson = null;
+        Map<String, Object> payloadJson = new HashMap<>();
+        
+        // 기존 payloadJson 파싱
         if (question.getPayloadJson() != null && !question.getPayloadJson().isBlank()) {
             try {
-                payloadJson = objectMapper.readValue(
+                Map<String, Object> existingPayload = objectMapper.readValue(
                     question.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                if (existingPayload != null) {
+                    payloadJson.putAll(existingPayload);
+                }
             } catch (Exception e) {
                 log.warn("Failed to parse payloadJson for question {}: {}", question.getId(), e.getMessage());
             }
         }
+        
+        // MCQ/OX 문제의 경우 선택지 정보 추가
+        if (question.getType() == QuestionType.MCQ || question.getType() == QuestionType.OX) {
+            List<QuestionChoice> choices = choiceRepository.findByQuestionIdOrderByLabelAsc(question.getId());
+            List<Map<String, Object>> choicesList;
+            
+            if (choices.isEmpty() && question.getType() == QuestionType.OX) {
+                // OX 문제의 경우 선택지가 없으면 기본 선택지 생성
+                String correctAnswer = getCorrectAnswer(question);
+                choicesList = new ArrayList<>();
+                
+                Map<String, Object> oChoice = new HashMap<>();
+                oChoice.put("label", "O");
+                oChoice.put("content", "맞음");
+                oChoice.put("correct", "O".equalsIgnoreCase(correctAnswer));
+                choicesList.add(oChoice);
+                
+                Map<String, Object> xChoice = new HashMap<>();
+                xChoice.put("label", "X");
+                xChoice.put("content", "틀림");
+                xChoice.put("correct", "X".equalsIgnoreCase(correctAnswer));
+                choicesList.add(xChoice);
+            } else {
+                // MCQ 문제 또는 DB에 선택지가 있는 OX 문제
+                choicesList = choices.stream()
+                    .map(choice -> {
+                        Map<String, Object> choiceMap = new HashMap<>();
+                        choiceMap.put("label", choice.getLabel());
+                        choiceMap.put("content", choice.getContent());
+                        choiceMap.put("correct", choice.isCorrect());
+                        return choiceMap;
+                    })
+                    .collect(Collectors.toList());
+            }
+            
+            payloadJson.put("choices", choicesList);
+        }
+        
+        // payloadJson이 비어있으면 null로 설정
+        Map<String, Object> finalPayloadJson = payloadJson.isEmpty() ? null : payloadJson;
 
         return new VersusDtos.QuestionDto(
             question.getId(),
@@ -207,7 +252,7 @@ public class VersusQuestionService {
             question.getStem(),
             getCorrectAnswer(question),
             question.getSolutionText(),
-            payloadJson
+            finalPayloadJson
         );
     }
 

@@ -415,7 +415,7 @@ public class VersusService {
         // 사용자가 제출한 답안 내용 저장 (단답식/서술형 표시용)
         answer.setUserAnswer(req.userAnswer());
         answerRepository.save(answer);
-        answerRepository.flush(); // 즉시 DB에 반영하여 computeScoreboard에서 조회 가능하도록
+        answerRepository.flush(); // 즉시 DB에 반영
         
         // 저장 후 검증: 실제 저장된 값 확인
         MatchAnswer savedAnswer = answerRepository.findByRoomIdAndQuestionIdAndUserId(roomId, req.questionId(), userId)
@@ -451,8 +451,18 @@ public class VersusService {
             stateChanged |= processGoldenbellState(room, participant, outcome.correct(), question);
         }
 
-        // 토너먼트 모드: 현재 라운드의 활성 참가자만 표시하도록 필터링
-        VersusDtos.ScoreBoardResp scoreboard = computeScoreboard(room, question, userId);
+        // 스코어보드 계산: DUEL 모드에서는 모든 참가자 표시, TOURNAMENT 모드에서는 현재 라운드의 활성 참가자만 표시
+        // 답안이 저장된 후(flush 후) 계산하므로 최신 답안이 반영됨
+        // flush() 후에도 영속성 컨텍스트에 이전 답안이 캐시되어 있을 수 있으므로,
+        // computeScoreboard 내에서 명시적으로 DB에서 최신 답안을 조회하도록 함
+        VersusDtos.ScoreBoardResp scoreboard;
+        if (room.getMode() == MatchMode.TOURNAMENT) {
+            // 토너먼트 모드: 현재 라운드의 활성 참가자만 표시
+            scoreboard = computeScoreboard(room, question, userId);
+        } else {
+            // DUEL, GOLDENBELL 모드: 모든 참가자 표시
+            scoreboard = computeScoreboard(room);
+        }
         ModeResolution resolution = handleModeAfterAnswer(room, question, scoreboard);
         if (resolution.matchCompleted()) {
             room.setStatus(MatchStatus.DONE);
@@ -586,6 +596,9 @@ public class VersusService {
                                               MatchQuestion question,
                                               VersusDtos.ScoreBoardResp scoreboard) {
         long participants = participantRepository.countByRoomId(room.getId());
+        log.debug("handleDuelProgress 호출: roomId={}, questionId={}, participants={}", 
+                room.getId(), question.getQuestionId(), participants);
+        
         if (participants <= 1) {
             String winner = scoreboard.items().isEmpty() ? null : scoreboard.items().get(0).userId();
             recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
@@ -598,7 +611,13 @@ public class VersusService {
         long answeredForQuestion = answerRepository.countByRoomIdAndQuestionId(room.getId(), question.getQuestionId());
         boolean roundCompleted = participants > 0 && answeredForQuestion >= participants;
 
+        log.info("DUEL 진행 체크: roomId={}, questionId={}, participants={}, answeredForQuestion={}, roundCompleted={}", 
+                room.getId(), question.getQuestionId(), participants, answeredForQuestion, roundCompleted);
+
         if (roundCompleted) {
+            log.info("DUEL 라운드 완료: roomId={}, questionId={}, round={}, phase={}", 
+                    room.getId(), question.getQuestionId(), question.getRoundNo(), question.getPhase().name());
+            
             recordEvent(room.getId(), "ROUND_COMPLETED", Map.of(
                     "mode", "DUEL",
                     "round", question.getRoundNo(),
@@ -610,16 +629,23 @@ public class VersusService {
             if (nextQuestion.isPresent()) {
                 MatchQuestion next = nextQuestion.get();
                 // 다음 문제 시작 이벤트 기록 (모든 참가자 공통)
+                Instant startedAt = Instant.now();
                 recordEvent(room.getId(), "QUESTION_STARTED", Map.of(
                         "questionId", next.getQuestionId(),
                         "roundNo", next.getRoundNo(),
                         "phase", next.getPhase().name(),
-                        "startedAt", Instant.now().toString(),
+                        "startedAt", startedAt.toString(),
                         "allParticipants", true // 모든 참가자 공통 시작
                 ));
-                log.info("1:1 배틀 다음 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}",
-                        room.getId(), next.getQuestionId(), next.getRoundNo());
+                log.info("1:1 배틀 다음 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}, orderNo={}, startedAt={}",
+                        room.getId(), next.getQuestionId(), next.getRoundNo(), next.getOrderNo(), startedAt);
+            } else {
+                log.info("DUEL 다음 문제 없음: roomId={}, currentQuestionId={}, roundNo={}, orderNo={}", 
+                        room.getId(), question.getQuestionId(), question.getRoundNo(), question.getOrderNo());
             }
+        } else {
+            log.debug("DUEL 라운드 미완료: roomId={}, questionId={}, participants={}, answeredForQuestion={}", 
+                    room.getId(), question.getQuestionId(), participants, answeredForQuestion);
         }
 
         boolean matchCompleted = checkAllQuestionsAnswered(room.getId(), participants);
@@ -629,6 +655,7 @@ public class VersusService {
                     "mode", "DUEL",
                     "winner", winner
             ));
+            log.info("DUEL 매치 완료: roomId={}, winner={}", room.getId(), winner);
         }
 
         return new ModeResolution(roundCompleted, matchCompleted, matchCompleted);
@@ -967,6 +994,9 @@ public class VersusService {
         Map<Long, MatchQuestion> questionMap = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId).stream()
                 .collect(Collectors.toMap(MatchQuestion::getQuestionId, q -> q));
 
+        // 답안 조회: flush() 후에도 영속성 컨텍스트에 이전 답안이 캐시되어 있을 수 있으므로
+        // 명시적으로 DB에서 최신 답안을 조회하기 위해 entityManager를 사용하여 쿼리 힌트 추가
+        // 또는 간단하게 answerRepository를 통해 조회 (JPA는 기본적으로 최신 데이터를 조회함)
         List<MatchAnswer> answers = answerRepository.findByRoomId(roomId);
         Map<String, Score> stats = new HashMap<>();
         Map<String, FinalRoundScore> finalScores = new HashMap<>(); // FINAL 라운드 점수 별도 관리
@@ -1173,7 +1203,10 @@ public class VersusService {
 
         participantRepository.saveAll(participantMap.values());
 
-        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems);
+        // 현재 문제 정보 계산
+        VersusDtos.CurrentQuestionInfo currentQuestionInfo = getCurrentQuestionInfo(roomId, room.getStatus());
+
+        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo);
     }
 
     private boolean hasNextRound(Long roomId, int currentRound) {
@@ -1209,6 +1242,50 @@ public class VersusService {
         long totalAnswers = answerRepository.countByRoomId(roomId);
         long questionCount = questionRepository.countByRoomId(roomId);
         return participants > 0 && questionCount > 0 && totalAnswers >= questionCount * participants;
+    }
+
+    /**
+     * 매치 완료 체크 및 완료 처리 (봇 플레이 완료 후 호출용)
+     * @param roomId 방 ID
+     * @return 매치가 완료되어 상태가 변경되었으면 true
+     */
+    @Transactional
+    public boolean checkAndCompleteMatchIfNeeded(Long roomId) {
+        MatchRoom room = findRoomOrThrow(roomId);
+        
+        if (room.getStatus() != MatchStatus.ONGOING) {
+            return false; // 이미 완료되었거나 대기 중
+        }
+        
+        long participants = participantRepository.countByRoomId(roomId);
+        boolean matchCompleted = checkAllQuestionsAnswered(roomId, participants);
+        
+        if (matchCompleted) {
+            log.info("봇 플레이 완료 후 매치 완료 체크: roomId={}, participants={}, status=DONE으로 변경", 
+                    roomId, participants);
+            
+            // 스코어보드 계산
+            VersusDtos.ScoreBoardResp scoreboard = computeScoreboard(room);
+            
+            // 매치 완료 처리
+            room.setStatus(MatchStatus.DONE);
+            roomRepository.save(room);
+            
+            // MATCH_FINISHED 이벤트 기록
+            String winner = scoreboard.items().isEmpty() ? null : scoreboard.items().get(0).userId();
+            recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
+                    "mode", room.getMode().name(),
+                    "winner", winner != null ? winner : "N/A"
+            ));
+            
+            // progress-service에 결과 통지 및 보상 지급
+            notifyProgressService(room, scoreboard);
+            
+            log.info("매치 완료 처리 완료: roomId={}, status=DONE", roomId);
+            return true;
+        }
+        
+        return false;
     }
 
     private void persistBracket(Long roomId,
@@ -3011,6 +3088,100 @@ public class VersusService {
 
         log.debug("Recorded QUESTION_STARTED event for room={}, question={}, user={}",
                 roomId, questionId, userId);
+    }
+
+    /**
+     * 현재 진행 중인 문제 정보 조회
+     * @param roomId 방 ID
+     * @param status 방 상태
+     * @return 현재 문제 정보. 문제가 진행 중이 아니거나 이벤트를 찾을 수 없으면 null
+     */
+    private VersusDtos.CurrentQuestionInfo getCurrentQuestionInfo(Long roomId, MatchStatus status) {
+        // 방이 진행 중이 아니면 null 반환
+        if (status != MatchStatus.ONGOING) {
+            return null;
+        }
+
+        try {
+            // 가장 최근 QUESTION_STARTED 이벤트 찾기
+            List<MatchEvent> startEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                    roomId, "QUESTION_STARTED");
+            
+            // createdAt 기준으로 최신순 정렬
+            Optional<MatchEvent> latestEvent = startEvents.stream()
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+
+            if (latestEvent.isPresent()) {
+                try {
+                    MatchEvent event = latestEvent.get();
+                    if (event.getPayloadJson() == null) {
+                        return null;
+                    }
+                    
+                    Map<String, Object> payload = objectMapper.readValue(
+                            event.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                    
+                    Object questionIdObj = payload.get("questionId");
+                    if (questionIdObj == null) {
+                        return null;
+                    }
+                    
+                    Long questionId = Long.valueOf(questionIdObj.toString());
+                    Integer roundNo = payload.get("roundNo") != null 
+                            ? Integer.valueOf(payload.get("roundNo").toString()) 
+                            : null;
+                    String phaseStr = payload.get("phase") != null 
+                            ? payload.get("phase").toString() 
+                            : null;
+                    MatchPhase phase = phaseStr != null 
+                            ? MatchPhase.valueOf(phaseStr) 
+                            : null;
+                    
+                    // startedAt 시간 가져오기
+                    String startedAtStr = (String) payload.get("startedAt");
+                    Instant startTime = startedAtStr != null 
+                            ? Instant.parse(startedAtStr) 
+                            : event.getCreatedAt();
+                    
+                    // MatchQuestion에서 orderNo와 timeLimitSec 가져오기
+                    Optional<MatchQuestion> matchQuestion = questionRepository.findByRoomIdAndQuestionId(roomId, questionId);
+                    if (matchQuestion.isPresent()) {
+                        MatchQuestion q = matchQuestion.get();
+                        // 종료 시간 계산: 시작 시간 + 시간 제한
+                        Instant endTime = startTime.plusSeconds(q.getTimeLimitSec());
+                        
+                        return new VersusDtos.CurrentQuestionInfo(
+                                questionId,
+                                roundNo != null ? roundNo : q.getRoundNo(),
+                                phase != null ? phase : q.getPhase(),
+                                q.getOrderNo(),
+                                q.getTimeLimitSec(),
+                                endTime
+                        );
+                    } else {
+                        // MatchQuestion을 찾을 수 없으면 이벤트 정보만 사용
+                        if (roundNo != null && phase != null) {
+                            // orderNo와 timeLimitSec은 기본값 사용, endTime은 계산 불가
+                            return new VersusDtos.CurrentQuestionInfo(
+                                    questionId,
+                                    roundNo,
+                                    phase,
+                                    null, // orderNo를 알 수 없음
+                                    null, // timeLimitSec을 알 수 없음
+                                    null  // endTime을 계산할 수 없음
+                            );
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("Failed to parse current question info: {}", e.getMessage());
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to get current question info: {}", e.getMessage());
+        }
+        
+        return null;
     }
 
     private Integer calculateServerTimeMs(Long roomId, Long questionId, String userId, Integer clientTimeMs, Instant answerSubmitTime) {
