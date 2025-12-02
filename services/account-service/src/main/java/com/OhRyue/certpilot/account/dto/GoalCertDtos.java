@@ -39,4 +39,14 @@ public class GoalCertDtos {
 
     private LocalDate targetExamDate;
   }
+
+  @Getter
+  @Setter
+  @NoArgsConstructor
+  @AllArgsConstructor
+  @Builder
+  public static class GoalDateUpdateRequest {
+    @NotNull
+    private LocalDate targetExamDate;
+  }
 }

@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -67,11 +68,18 @@ public class HomeDashboardService {
 
       HomeGoal goal = null;
       if (me != null && me.goal() != null) {
+        Integer dday = me.goal().ddayCached();
+        // ddayCached가 null이고 targetExamDate가 있으면 계산
+        if (dday == null && me.goal().targetExamDate() != null) {
+          LocalDate today = LocalDate.now(KST);
+          dday = (int) ChronoUnit.DAYS.between(today, me.goal().targetExamDate());
+        }
         goal = new HomeGoal(
             me.goal().certId(),
             me.goal().targetExamMode(),
             me.goal().targetRoundId(),
-            me.goal().ddayCached()
+            me.goal().targetExamDate(),
+            dday
         );
       }
 

@@ -2,6 +2,8 @@ package com.OhRyue.certpilot.progress.feign.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.time.LocalDate;
+
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record AccountMeResponse(
     AccountSummary account,
@@ -21,7 +23,7 @@ public record AccountMeResponse(
   public record Settings(String userId, String uiPrefsJson, String notifPrefsJson) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
-  public record Goal(Long id, String userId, Long certId, String targetExamMode, Long targetRoundId, Integer ddayCached) {}
+  public record Goal(Long id, String userId, Long certId, String targetExamMode, Long targetRoundId, LocalDate targetExamDate, Integer ddayCached) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record Onboarding(

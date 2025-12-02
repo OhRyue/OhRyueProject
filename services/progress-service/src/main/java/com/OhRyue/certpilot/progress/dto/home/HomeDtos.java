@@ -2,6 +2,7 @@ package com.OhRyue.certpilot.progress.dto.home;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public final class HomeDtos {
@@ -23,6 +24,7 @@ public final class HomeDtos {
       @Schema(description = "자격증 ID") Long certId,
       @Schema(description = "목표 모드") String targetExamMode,
       @Schema(description = "목표 회차 ID") Long targetRoundId,
+      @Schema(description = "목표 시험 날짜") LocalDate targetExamDate,
       @Schema(description = "D-Day 캐시 값") Integer dday
   ) {}
 

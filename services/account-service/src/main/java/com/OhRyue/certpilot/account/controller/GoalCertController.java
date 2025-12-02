@@ -91,4 +91,40 @@ public class GoalCertController {
         .ddayCached(dday)
         .build());
   }
+
+  /* -------- 목표 시험 날짜 설정 -------- */
+  @Operation(summary = "목표 시험 날짜 설정")
+  @PutMapping("/date")
+  public ResponseEntity<GoalResponse> updateTargetExamDate(
+      @RequestBody @Valid GoalDateUpdateRequest req) {
+    String userId;
+    try {
+      userId = AuthUserUtil.getCurrentUserId();
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
+    try {
+      UserGoalCert saved = goalCertService.updateTargetExamDate(userId, req.getTargetExamDate());
+
+      Integer dday = null;
+      if (saved.getTargetExamDate() != null) {
+        LocalDate today = LocalDate.now();
+        dday = (int) ChronoUnit.DAYS.between(today, saved.getTargetExamDate());
+      }
+
+      return ResponseEntity.ok(GoalResponse.builder()
+          .id(saved.getId())
+          .userId(saved.getUserId())
+          .certId(saved.getCertId())
+          .targetExamMode(saved.getTargetExamMode())
+          .targetRoundId(saved.getTargetRoundId())
+          .targetExamDate(saved.getTargetExamDate())
+          .ddayCached(dday)
+          .build());
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+          .build();
+    }
+  }
 }

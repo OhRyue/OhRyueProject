@@ -394,6 +394,7 @@ public class AuthController {
         .certId(goal.getCertId())
         .targetExamMode(goal.getTargetExamMode())
         .targetRoundId(goal.getTargetRoundId())
+        .targetExamDate(goal.getTargetExamDate())
         .ddayCached(goal.getDdayCached())
         .build();
   }
