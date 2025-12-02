@@ -11,4 +11,5 @@ public class LoginResponseDto {
   private String userId;
   private String email;
   private String role;
+  private Boolean onboardingCompleted;
 }

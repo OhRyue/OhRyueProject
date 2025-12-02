@@ -18,12 +18,16 @@ public class UserProfile {
   @Column(nullable = false, length = 100)
   private String nickname;
 
-  @Column(name = "avatar_url", length = 500)
-  private String avatarUrl;
+  @Column(name = "skin_id")
+  private Long skinId;
 
   @Column(length = 64)
   private String timezone;
 
   @Column(length = 16)
   private String lang;
+
+  @Column(name = "onboarding_completed", nullable = false)
+  @Builder.Default
+  private Boolean onboardingCompleted = false;
 }

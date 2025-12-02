@@ -47,6 +47,8 @@ public class SecurityConfig {
             .requestMatchers(SWAGGER).permitAll()
             .requestMatchers(ACTUATOR).permitAll()
             .requestMatchers("/actuator/**").permitAll()
+            // 내부 서비스 간 통신용 API는 인증 완화 (서비스 간 통신용)
+            .requestMatchers("/api/progress/internal/**").permitAll()
             // Progress API는 항상 로그인 사용자 기준이므로 JWT 필수
             .requestMatchers("/api/progress/**").authenticated()
             .anyRequest().permitAll()

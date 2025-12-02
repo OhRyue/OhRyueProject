@@ -65,8 +65,8 @@ public final class OnboardingDtos {
         @NotBlank(message = "닉네임은 필수입니다.")
         private String nickname;
 
-        @Schema(description = "아바타 이미지 URL", example = "https://example.com/avatar.png")
-        private String avatarUrl;
+        @Schema(description = "스킨 ID", example = "1")
+        private Long skinId;
 
         @Schema(description = "시간대", example = "Asia/Seoul")
         private String timezone;

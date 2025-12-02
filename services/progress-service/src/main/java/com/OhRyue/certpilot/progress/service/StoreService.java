@@ -1,10 +1,8 @@
 package com.OhRyue.certpilot.progress.service;
 
 import com.OhRyue.certpilot.progress.domain.*;
-import com.OhRyue.certpilot.progress.domain.enums.ItemCategory;
 import com.OhRyue.certpilot.progress.domain.enums.PointReason;
 import com.OhRyue.certpilot.progress.dto.StoreDtos;
-import com.OhRyue.certpilot.progress.dto.StoreDtos.StoreCategorySection;
 import com.OhRyue.certpilot.progress.dto.StoreDtos.StoreItemView;
 import com.OhRyue.certpilot.progress.dto.StoreDtos.StoreUserSummary;
 import com.OhRyue.certpilot.progress.repository.*;
@@ -32,26 +30,24 @@ public class StoreService {
   }
 
   @Transactional(readOnly = true)
-  public List<StoreItem> listActive(ItemCategory category, String keyword) {
-    List<StoreItem> items = category == null
-        ? itemRepo.findByIsActiveTrue()
-        : itemRepo.findByIsActiveTrueAndCategory(category);
+  public List<StoreItem> listActive(String keyword) {
+    List<StoreItem> items = itemRepo.findByIsActiveTrue();
 
     if (keyword == null || keyword.isBlank()) {
       return items.stream()
-          .sorted(Comparator.comparing(StoreItem::getCategory).thenComparing(StoreItem::getName))
+          .sorted(Comparator.comparing(StoreItem::getName))
           .toList();
     }
 
     String lowered = keyword.toLowerCase();
     return items.stream()
         .filter(item -> item.getName() != null && item.getName().toLowerCase().contains(lowered))
-        .sorted(Comparator.comparing(StoreItem::getCategory).thenComparing(StoreItem::getName))
+        .sorted(Comparator.comparing(StoreItem::getName))
         .toList();
   }
 
   @Transactional(readOnly = true)
-  public StoreDtos.StoreCatalog catalog(String userId, ItemCategory category, String keyword) {
+  public StoreDtos.StoreCatalog catalog(String userId, String keyword) {
     Objects.requireNonNull(userId, "userId is required");
 
     List<UserInventory> inventory = invRepo.findByUserId(userId);
@@ -59,25 +55,17 @@ public class StoreService {
         .map(UserInventory::getItemId)
         .collect(Collectors.toSet());
 
-    List<StoreItem> items = listActive(category, keyword);
-    Map<ItemCategory, List<StoreItemView>> grouped = new EnumMap<>(ItemCategory.class);
-    for (StoreItem item : items) {
-      grouped.computeIfAbsent(item.getCategory(), key -> new ArrayList<>())
-          .add(toView(item, ownedIds.contains(item.getId())));
-    }
-
-    List<StoreCategorySection> sections = new ArrayList<>();
-    ItemCategory[] categories = category == null ? ItemCategory.values() : new ItemCategory[]{category};
-    for (ItemCategory cat : categories) {
-      List<StoreItemView> catItems = grouped.getOrDefault(cat, List.of());
-      sections.add(new StoreCategorySection(cat, toLabel(cat), catItems));
-    }
+    List<StoreItem> items = listActive(keyword);
+    List<StoreItemView> itemViews = items.stream()
+        .map(item -> toView(item, ownedIds.contains(item.getId())))
+        .sorted(Comparator.comparingInt(StoreItemView::price))
+        .toList();
 
     UserPointWallet wallet = walletRepo.findById(userId)
         .orElseGet(() -> defaultWallet(userId));
     StoreUserSummary userSummary = new StoreUserSummary(userId, wallet.getPointTotal(), ownedIds.size());
 
-    return new StoreDtos.StoreCatalog(userSummary, sections, Instant.now());
+    return new StoreDtos.StoreCatalog(userSummary, itemViews, Instant.now());
   }
 
   /** 포인트 차감 → 인벤토리 지급 → (선택) 자동 로드아웃은 하지 않음 */
@@ -122,6 +110,28 @@ public class StoreService {
     return invRepo.findByUserId(userId);
   }
 
+  @Transactional(readOnly = true)
+  public boolean hasItem(String userId, Long itemId) {
+    return invRepo.existsByUserIdAndItemId(userId, itemId);
+  }
+
+  /** 회원가입 시 기본 인벤토리 아이템 추가 */
+  @Transactional
+  public void initializeDefaultInventory(String userId) {
+    // 기본 스킨 아이템 ID: 1, 16
+    List<Long> defaultItemIds = List.of(1L, 16L);
+    
+    for (Long itemId : defaultItemIds) {
+      if (!invRepo.existsByUserIdAndItemId(userId, itemId)) {
+        UserInventory inventory = UserInventory.builder()
+            .userId(userId)
+            .itemId(itemId)
+            .build();
+        invRepo.save(inventory);
+      }
+    }
+  }
+
   @Transactional
   public UserLoadout setLoadout(String userId,
                                 Long hat,
@@ -148,26 +158,13 @@ public class StoreService {
   private StoreItemView toView(StoreItem item, boolean owned) {
     return new StoreItemView(
         item.getId(),
-        item.getCategory(),
         item.getName(),
         null,
-        item.getImageUrl(),
         item.getPrice(),
         owned,
-        item.getRarity() == null ? null : item.getRarity().name(),
         item.getLimitPerUser(),
         item.isActive()
     );
-  }
-
-  private String toLabel(ItemCategory category) {
-    return switch (category) {
-      case HAT -> "모자";
-      case CLOTHES -> "의상";
-      case ACC -> "액세서리";
-      case BG -> "배경";
-      case SPECIAL -> "특수아이템";
-    };
   }
 
   private UserPointWallet defaultWallet(String userId) {

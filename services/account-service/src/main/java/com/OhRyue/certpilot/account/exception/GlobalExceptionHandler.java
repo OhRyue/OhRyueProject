@@ -3,9 +3,14 @@ package com.OhRyue.certpilot.account.exception;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /*
@@ -40,6 +45,31 @@ public class GlobalExceptionHandler {
         "error", "email_not_verified",
         "message", e.getMessage()   // → "이메일 인증 후 로그인 가능합니다."
     ));
+  }
+
+  // 요청 데이터 유효성 검증 실패 (@Valid 실패)
+  @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+  public ResponseEntity<?> handleValidationException(MethodArgumentNotValidException ex) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("error", "validation_failed");
+    
+    List<Map<String, String>> errors = new ArrayList<>();
+    ex.getBindingResult().getFieldErrors().forEach(error -> {
+      errors.add(Map.of(
+          "field", error.getField(),
+          "message", error.getDefaultMessage() != null ? error.getDefaultMessage() : "유효하지 않은 값입니다."
+      ));
+    });
+    
+    // 첫 번째 에러 메시지를 기본 메시지로 사용
+    String defaultMessage = errors.isEmpty() 
+        ? "입력값이 올바르지 않습니다." 
+        : errors.get(0).get("message");
+    
+    body.put("message", defaultMessage);
+    body.put("errors", errors);
+    
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
   }
 
   // 그 외 예상하지 못한 서버 내부 에러

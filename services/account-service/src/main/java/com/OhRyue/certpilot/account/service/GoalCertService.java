@@ -27,6 +27,7 @@ public class GoalCertService {
           exist.setCertId(req.getCertId());
           exist.setTargetExamMode(req.getTargetExamMode());
           exist.setTargetRoundId(req.getTargetRoundId());
+          exist.setTargetExamDate(req.getTargetExamDate());
           // dday_cached는 외부(cert-service 스케줄) 동기화 시 갱신
           return goalRepo.save(exist);
         })

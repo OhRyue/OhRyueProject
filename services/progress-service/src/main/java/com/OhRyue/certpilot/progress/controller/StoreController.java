@@ -3,7 +3,6 @@ package com.OhRyue.certpilot.progress.controller;
 import com.OhRyue.certpilot.progress.domain.StoreItem;
 import com.OhRyue.certpilot.progress.domain.UserInventory;
 import com.OhRyue.certpilot.progress.domain.UserLoadout;
-import com.OhRyue.certpilot.progress.domain.enums.ItemCategory;
 import com.OhRyue.certpilot.progress.dto.StoreDtos;
 import com.OhRyue.certpilot.progress.service.StoreService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,19 +22,17 @@ public class StoreController {
 
   private final StoreService store;
 
-  @Operation(summary = "상점 카탈로그 조회", description = "사용자 포인트/인벤토리 및 카테고리별 아이템 제공")
+  @Operation(summary = "상점 카탈로그 조회", description = "사용자 포인트/인벤토리 및 아이템 목록 제공")
   @GetMapping("/catalog")
-  public StoreDtos.StoreCatalog catalog(@RequestParam(required = false) ItemCategory category,
-                                        @RequestParam(required = false, name = "q") String keyword) {
+  public StoreDtos.StoreCatalog catalog(@RequestParam(required = false, name = "q") String keyword) {
     String userId = getCurrentUserId();
-    return store.catalog(userId, category, keyword);
+    return store.catalog(userId, keyword);
   }
 
   @Operation(summary = "상점 아이템(활성) 목록")
   @GetMapping("/items")
-  public List<StoreItem> items(@RequestParam(required = false) ItemCategory category,
-                               @RequestParam(required = false, name = "q") String keyword) {
-    return store.listActive(category, keyword);
+  public List<StoreItem> items(@RequestParam(required = false, name = "q") String keyword) {
+    return store.listActive(keyword);
   }
 
   @Operation(summary = "아이템 구매")

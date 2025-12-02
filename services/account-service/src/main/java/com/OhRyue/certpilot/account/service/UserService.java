@@ -111,6 +111,38 @@ public class UserService {
         userAccountRepository.save(user);
     }
 
+    /**
+     * 계정 탈퇴: 비밀번호 확인 후 상태를 DELETED로 변경
+     */
+    public void withdraw(String userId, String rawPassword) {
+        String normalizedUserId = userId.trim();
+
+        UserAccount user = userAccountRepository.findById(normalizedUserId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
+
+        if (user.getStatus() == AccountStatus.DELETED) {
+            throw new IllegalStateException("이미 탈퇴한 계정입니다.");
+        }
+
+        // 비밀번호 확인
+        String hash = user.getPasswordHash();
+        boolean matched;
+        if (hash != null && hash.startsWith("{noop}")) {
+            // 시드 계정 호환용
+            matched = rawPassword.equals(hash.substring("{noop}".length()));
+        } else {
+            matched = passwordEncoder.matches(rawPassword, hash);
+        }
+
+        if (!matched) {
+            throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+        }
+
+        // 계정 상태를 DELETED로 변경
+        user.setStatus(AccountStatus.DELETED);
+        userAccountRepository.save(user);
+    }
+
     private String normalizeEmail(String email) {
         return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
     }

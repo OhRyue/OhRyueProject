@@ -59,7 +59,7 @@ public class HomeDashboardService {
       HomeUserCard userCard = new HomeUserCard(
           userId,
           profile == null ? null : profile.nickname(),
-          profile == null ? null : profile.avatarUrl(),
+          profile == null ? null : profile.skinId(),
           wallet.getLevel(),
           wallet.getXpTotal(),
           streak.getCurrentDays()
@@ -140,7 +140,7 @@ public class HomeDashboardService {
         rankingItems.add(new HomeRankingItem(
             score.getUserId(),
             summary == null ? null : summary.nickname(),
-            summary == null ? null : summary.avatarUrl(),
+            summary == null ? null : summary.skinId(),
             wallet.getLevel(),
             score.getScore(),
             wallet.getXpTotal(),
@@ -158,7 +158,7 @@ public class HomeDashboardService {
         meItem = new HomeRankingItem(
             userId,
             summary == null ? null : summary.nickname(),
-            summary == null ? null : summary.avatarUrl(),
+            summary == null ? null : summary.skinId(),
             wallet.getLevel(),
             myScore.getScore(),
             wallet.getXpTotal(),

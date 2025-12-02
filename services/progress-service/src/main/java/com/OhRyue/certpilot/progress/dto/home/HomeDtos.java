@@ -12,7 +12,7 @@ public final class HomeDtos {
   public record HomeUserCard(
       @Schema(description = "사용자 ID") String userId,
       @Schema(description = "닉네임") String nickname,
-      @Schema(description = "아바타 URL") String avatarUrl,
+      @Schema(description = "스킨 ID") Long skinId,
       @Schema(description = "현재 레벨") int level,
       @Schema(description = "누적 경험치") long xpTotal,
       @Schema(description = "연속 학습 일수") int streakDays
@@ -45,7 +45,7 @@ public final class HomeDtos {
   public record HomeRankingItem(
       @Schema(description = "사용자 ID") String userId,
       @Schema(description = "닉네임") String nickname,
-      @Schema(description = "아바타 URL") String avatarUrl,
+      @Schema(description = "스킨 ID") Long skinId,
       @Schema(description = "레벨") int level,
       @Schema(description = "점수") long score,
       @Schema(description = "누적 경험치") long xpTotal,

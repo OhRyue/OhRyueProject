@@ -32,22 +32,20 @@ public class SidebarService {
 
       UserXpWallet wallet = xpService.getWallet(userId);
       UserStreak streak = streakService.get(userId);
-      StoreDtos.StoreCatalog catalog = storeService.catalog(userId, null, null);
+      StoreDtos.StoreCatalog catalog = storeService.catalog(userId, null);
 
       SidebarUserCard userCard = new SidebarUserCard(
           userId,
           profile == null ? null : profile.nickname(),
-          profile == null ? null : profile.avatarUrl(),
+          profile == null ? null : profile.skinId(),
           wallet.getLevel(),
           wallet.getXpTotal(),
           streak.getCurrentDays(),
           catalog != null && catalog.user() != null ? catalog.user().pointBalance() : 0L
       );
 
-      int itemCount = catalog != null && catalog.categories() != null
-          ? catalog.categories().stream()
-              .mapToInt(section -> section.items() != null ? section.items().size() : 0)
-              .sum()
+      int itemCount = catalog != null && catalog.items() != null
+          ? catalog.items().size()
           : 0;
 
       StorePreview storePreview = new StorePreview(

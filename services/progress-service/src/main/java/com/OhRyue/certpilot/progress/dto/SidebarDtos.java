@@ -12,7 +12,7 @@ public final class SidebarDtos {
   public record SidebarUserCard(
       String userId,
       String nickname,
-      String avatarUrl,
+      Long skinId,
       int level,
       long xpTotal,
       int streakDays,

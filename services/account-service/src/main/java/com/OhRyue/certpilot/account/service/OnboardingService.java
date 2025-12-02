@@ -102,17 +102,22 @@ public class OnboardingService {
 
     /**
      * 온보딩 단계에서 프로필(닉네임 등)과 목표 자격증을 한 번에 설정.
-     * - user_profile.nickname / avatar / timezone / lang 업데이트
+     * - user_profile.nickname / skin_id / timezone / lang 업데이트
      * - user_goal_cert upsert
      * - 최종적으로 최신 온보딩 상태 반환
      */
     @Transactional
     public OnboardingStatusResponse updateProfileAndGoal(String userId, OnboardingProfileRequest req) {
+        // 닉네임 중복 확인 (자기 자신의 닉네임은 제외)
+        if (profileService.isNicknameDuplicate(req.getNickname(), userId)) {
+            throw new IllegalArgumentException("이미 존재하는 닉네임입니다.");
+        }
+
         // 1) 프로필 업데이트
         UserProfile profile = profileService.get(userId); // 없으면 기본값 생성
         profile.setNickname(req.getNickname());
-        if (StringUtils.hasText(req.getAvatarUrl())) {
-            profile.setAvatarUrl(req.getAvatarUrl());
+        if (req.getSkinId() != null) {
+            profile.setSkinId(req.getSkinId());
         }
         if (StringUtils.hasText(req.getTimezone())) {
             profile.setTimezone(req.getTimezone());
@@ -131,8 +136,16 @@ public class OnboardingService {
                 .build();
         goalCertService.upsert(goal);
 
-        // 3) 최신 온보딩 상태 반환
-        return getStatus(userId);
+        // 3) 온보딩 상태 확인 및 완료 처리
+        OnboardingStatusResponse status = getStatus(userId);
+        if (status.isCompleted()) {
+            // 온보딩이 완료되었으면 프로필의 onboarding_completed를 true로 설정
+            profile.setOnboardingCompleted(true);
+            profileService.upsert(profile);
+        }
+
+        // 4) 최신 온보딩 상태 반환
+        return status;
     }
 
     private boolean hasNickname(UserProfile profile) {

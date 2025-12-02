@@ -12,6 +12,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+
 @Tag(name = "Account - GoalCert", description = "목표 자격증 관리 APIs")
 @RestController
 @RequestMapping("/api/account/goal")
@@ -32,14 +35,22 @@ public class GoalCertController {
     }
 
     return goalCertService.getByUser(userId)
-        .map(g -> ResponseEntity.ok(GoalResponse.builder()
-            .id(g.getId())
-            .userId(g.getUserId())
-            .certId(g.getCertId())
-            .targetExamMode(g.getTargetExamMode())
-            .targetRoundId(g.getTargetRoundId())
-            .ddayCached(g.getDdayCached())
-            .build()))
+        .map(g -> {
+          Integer dday = null;
+          if (g.getTargetExamDate() != null) {
+            LocalDate today = LocalDate.now();
+            dday = (int) ChronoUnit.DAYS.between(today, g.getTargetExamDate());
+          }
+          return ResponseEntity.ok(GoalResponse.builder()
+              .id(g.getId())
+              .userId(g.getUserId())
+              .certId(g.getCertId())
+              .targetExamMode(g.getTargetExamMode())
+              .targetRoundId(g.getTargetRoundId())
+              .targetExamDate(g.getTargetExamDate())
+              .ddayCached(dday)
+              .build());
+        })
         .orElse(ResponseEntity.noContent().build());
   }
 
@@ -60,15 +71,24 @@ public class GoalCertController {
             .certId(req.getCertId())
             .targetExamMode(req.getTargetExamMode())
             .targetRoundId(req.getTargetRoundId())
+            .targetExamDate(req.getTargetExamDate())
             .build()
     );
+    
+    Integer dday = null;
+    if (saved.getTargetExamDate() != null) {
+      LocalDate today = LocalDate.now();
+      dday = (int) ChronoUnit.DAYS.between(today, saved.getTargetExamDate());
+    }
+    
     return ResponseEntity.ok(GoalResponse.builder()
         .id(saved.getId())
         .userId(saved.getUserId())
         .certId(saved.getCertId())
         .targetExamMode(saved.getTargetExamMode())
         .targetRoundId(saved.getTargetRoundId())
-        .ddayCached(saved.getDdayCached())
+        .targetExamDate(saved.getTargetExamDate())
+        .ddayCached(dday)
         .build());
   }
 }
