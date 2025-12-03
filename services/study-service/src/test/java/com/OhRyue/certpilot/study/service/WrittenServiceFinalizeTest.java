@@ -2,6 +2,7 @@ package com.OhRyue.certpilot.study.service;
 
 import com.OhRyue.certpilot.study.domain.*;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
+import com.OhRyue.certpilot.study.domain.enums.QuestionType;
 import com.OhRyue.certpilot.study.dto.WrittenDtos;
 import com.OhRyue.certpilot.study.repository.*;
 import com.OhRyue.common.auth.AuthUserUtil;
@@ -47,7 +48,7 @@ class WrittenServiceFinalizeTest {
     private UserProgressRepository userProgressRepository;
     
     @Mock
-    private ProgressHookClient progressHookClient;
+    private com.OhRyue.certpilot.study.client.ProgressHookClient progressHookClient;
     
     @InjectMocks
     private WrittenService writtenService;

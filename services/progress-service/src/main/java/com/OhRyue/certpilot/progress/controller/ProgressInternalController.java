@@ -1,5 +1,8 @@
 package com.OhRyue.certpilot.progress.controller;
 
+import com.OhRyue.certpilot.progress.domain.ProgressActivity;
+import com.OhRyue.certpilot.progress.dto.activity.ActivityDtos.ProgressActivityCreateReq;
+import com.OhRyue.certpilot.progress.service.ActivityService;
 import com.OhRyue.certpilot.progress.service.StoreService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 public class ProgressInternalController {
 
   private final StoreService storeService;
+  private final ActivityService activityService;
 
   @Operation(summary = "사용자 기본 인벤토리 초기화")
   @PostMapping("/inventory/initialize")
@@ -30,6 +34,13 @@ public class ProgressInternalController {
       @RequestParam("itemId") Long itemId) {
     boolean owned = storeService.hasItem(userId, itemId);
     return ResponseEntity.ok(owned);
+  }
+
+  @Operation(summary = "학습 활동 기록 생성 (study-service, versus-service에서 호출)")
+  @PostMapping("/activities")
+  public ResponseEntity<ProgressActivity> createActivity(@RequestBody ProgressActivityCreateReq req) {
+    ProgressActivity activity = activityService.createActivity(req);
+    return ResponseEntity.ok(activity);
   }
 }
 

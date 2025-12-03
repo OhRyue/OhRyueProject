@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.versus.service;
 
+import com.OhRyue.certpilot.versus.client.ProgressActivityClient;
 import com.OhRyue.certpilot.versus.client.ProgressServiceClient;
 import com.OhRyue.certpilot.versus.client.StudyServiceClient;
 import com.OhRyue.certpilot.versus.config.MonitoringConfig;
@@ -60,6 +61,7 @@ public class VersusService {
     private final ObjectMapper objectMapper;
     private final StudyServiceClient studyServiceClient;
     private final ProgressServiceClient progressServiceClient;
+    private final ProgressActivityClient progressActivityClient;
     private final MonitoringConfig monitoringConfig;
     private final RewardRetryService rewardRetryService;
 
@@ -3146,6 +3148,9 @@ public class VersusService {
             progressServiceClient.recordVersusResult(request);
             monitoringConfig.recordTimer(timer, "notifyProgressService", "status", "success");
             log.info("Successfully notified progress-service for room {} completion", room.getId());
+            
+            // 각 참가자별로 ProgressActivity 생성 (비동기)
+            createProgressActivitiesForParticipants(room, scoreboard, examMode);
         } catch (Exception e) {
             monitoringConfig.recordTimer(timer, "notifyProgressService", "status", "failure");
             monitoringConfig.recordRewardFailure(room.getId().toString(), "all", e);
@@ -3288,5 +3293,87 @@ public class VersusService {
         int total;
         int score;
         long totalTimeMs;
+    }
+
+    /**
+     * 각 참가자별로 ProgressActivity 생성 (비동기)
+     */
+    @org.springframework.scheduling.annotation.Async
+    private void createProgressActivitiesForParticipants(
+            MatchRoom room, 
+            VersusDtos.ScoreBoardResp scoreboard,
+            String examMode) {
+        try {
+            Map<String, Object> scope = readScope(room.getScopeJson());
+            Long topicId = scope.get("topicId") != null ? Long.valueOf(scope.get("topicId").toString()) : null;
+            String difficulty = (String) scope.getOrDefault("difficulty", "NORMAL");
+            String topicScope = (String) scope.getOrDefault("topicScope", "ALL");
+            
+            // BattleType 결정
+            String battleType = determineBattleType(room.getMode(), topicScope);
+            
+            // topicName은 나중에 cert-service에서 가져올 수 있음 (현재는 null)
+            String topicName = null;
+            
+            // 매치 시작/종료 시간
+            java.time.LocalDateTime startedAt = room.getCreatedAt() != null
+                    ? room.getCreatedAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toLocalDateTime()
+                    : java.time.LocalDateTime.now();
+            java.time.LocalDateTime finishedAt = java.time.LocalDateTime.now();
+            
+            // 각 참가자별로 Activity 생성
+            for (VersusDtos.ScoreBoardItem item : scoreboard.items()) {
+                try {
+                    double accuracyPct = item.totalCount() > 0
+                            ? (double) item.correctCount() / item.totalCount() * 100.0
+                            : 0.0;
+                    
+                    ProgressActivityClient.ProgressActivityCreateReq req = 
+                            new ProgressActivityClient.ProgressActivityCreateReq(
+                            item.userId(),
+                            "BATTLE",
+                            null, // mainType
+                            null, // assistType
+                            battleType,
+                            examMode != null ? examMode : "WRITTEN",
+                            topicId,
+                            topicName,
+                            null, // weaknessTagName
+                            "ALL".equals(topicScope) ? difficulty : null,
+                            item.totalCount(),
+                            item.correctCount(),
+                            accuracyPct,
+                            item.rank(),
+                            null, // xpGained (기존 보상 지급 로직과 연동 필요)
+                            "versus",
+                            room.getId(),
+                            startedAt,
+                            finishedAt
+                    );
+                    
+                    progressActivityClient.createActivity(req);
+                    log.debug("ProgressActivity created for participant: roomId={}, userId={}, rank={}", 
+                            room.getId(), item.userId(), item.rank());
+                } catch (Exception e) {
+                    log.error("Failed to create ProgressActivity for participant: roomId={}, userId={}", 
+                            room.getId(), item.userId(), e);
+                    // 개별 실패해도 다른 참가자 처리는 계속 진행
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to create ProgressActivities for room: roomId={}", room.getId(), e);
+        }
+    }
+    
+    /**
+     * MatchMode와 topicScope를 기반으로 BattleType 결정
+     */
+    private String determineBattleType(MatchMode mode, String topicScope) {
+        return switch (mode) {
+            case DUEL -> "CATEGORY".equals(topicScope) || "SPECIFIC".equals(topicScope)
+                    ? "DUEL_CATEGORY" : "DUEL_DIFFICULTY";
+            case TOURNAMENT -> "TOURNAMENT";
+            case GOLDENBELL -> "GOLDENBELL";
+        };
     }
 }

@@ -10,6 +10,7 @@ import com.OhRyue.certpilot.study.repository.LearningStepRepository;
 import com.OhRyue.certpilot.study.repository.QuestionRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionRepository;
+import com.OhRyue.certpilot.study.service.ProgressActivityService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,6 +33,7 @@ public class StudySessionManager {
     private final QuestionRepository questionRepository;
     private final LearningStepRepository learningStepRepository;
     private final ObjectMapper objectMapper;
+    private final ProgressActivityService progressActivityService;
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
@@ -420,6 +422,14 @@ public class StudySessionManager {
             learningStep.setStatus("COMPLETE");
             learningStep.setUpdatedAt(Instant.now());
             learningStepRepository.save(learningStep);
+        }
+        
+        // 8. ProgressActivity 생성 (비동기)
+        try {
+            progressActivityService.createActivityForSession(session, total, correct, scorePct);
+        } catch (Exception e) {
+            // Activity 생성 실패해도 세션 종료는 계속 진행
+            // 로그는 ProgressActivityService에서 처리
         }
         
         return new FinalizeResult(total, correct, scorePct, passed);

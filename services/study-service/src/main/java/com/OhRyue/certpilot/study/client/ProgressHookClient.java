@@ -6,14 +6,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.List;
 
-@FeignClient(name = "progress-service", path = "/api/progress")
+@FeignClient(
+    name = "progress-hook-client",
+    url = "${GATEWAY_BASE_URL:http://gateway:8080}"
+)
 public interface ProgressHookClient {
 
     /**
      * 개별 문제 제출용 Hook
      *  - question / tag 기반으로 세부 통계(XP, 리포트)에 반영
      */
-    @PostMapping("/hook/submit")
+    @PostMapping("/api/progress/hook/submit")
     void submit(@RequestBody SubmitPayload payload);
 
     record SubmitPayload(
@@ -33,7 +36,7 @@ public interface ProgressHookClient {
      *  - flowType: "MICRO" / "REVIEW"
      *  - topicId:  필기 → 세부 토픽 id, 실기 Review → rootTopicId
      */
-    @PostMapping("/hook/flow-complete")
+    @PostMapping("/api/progress/hook/flow-complete")
     void flowComplete(@RequestBody FlowCompletePayload payload);
 
     record FlowCompletePayload(
