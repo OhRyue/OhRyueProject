@@ -992,7 +992,11 @@ public class VersusService {
                 .collect(Collectors.toMap(GoldenbellState::getUserId, g -> g));
 
         Map<Long, MatchQuestion> questionMap = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId).stream()
-                .collect(Collectors.toMap(MatchQuestion::getQuestionId, q -> q));
+                .collect(Collectors.toMap(
+                    MatchQuestion::getQuestionId, 
+                    q -> q,
+                    (existing, replacement) -> existing  // 중복 키 발생 시 기존 값 유지
+                ));
 
         // 답안 조회: flush() 후에도 영속성 컨텍스트에 이전 답안이 캐시되어 있을 수 있으므로
         // 명시적으로 DB에서 최신 답안을 조회하기 위해 entityManager를 사용하여 쿼리 힌트 추가
