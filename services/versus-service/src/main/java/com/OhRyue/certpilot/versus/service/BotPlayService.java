@@ -80,6 +80,21 @@ public class BotPlayService {
                     .toList();
             log.info("생성된 문제 ID 목록: roomId={}, questionIds={}", roomId, questionIds);
             
+            // 첫 번째 문제 시작 이벤트 기록 (봇전의 경우 자동으로 시작되므로)
+            if (!questions.isEmpty() && room.getMode() == MatchMode.DUEL) {
+                MatchQuestion firstQuestion = questions.get(0);
+                // 첫 번째 문제의 시작 시점을 기록 (모든 참가자 공통)
+                saveEvent(roomId, "QUESTION_STARTED", Map.of(
+                        "questionId", firstQuestion.getQuestionId(),
+                        "roundNo", firstQuestion.getRoundNo(),
+                        "phase", firstQuestion.getPhase().name(),
+                        "startedAt", Instant.now().toString(),
+                        "allParticipants", true // 모든 참가자 공통 시작
+                ));
+                log.info("봇전 첫 번째 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}",
+                        roomId, firstQuestion.getQuestionId(), firstQuestion.getRoundNo());
+            }
+            
             // 이벤트 기반 봇 플레이: 각 문제가 시작될 때만 답안 제출
             playQuestionsEventDriven(roomId, botUserId, questions, room.getMode());
             
@@ -374,8 +389,22 @@ public class BotPlayService {
             // 점수 계산
             int scoreDelta = calculateScore(question, correct, (int) actualTimeMs);
             
+            log.info("봇 답안 제출: roomId={}, botUserId={}, questionId={}, correct={}, timeMs={}, scoreDelta={}, difficulty={}", 
+                    roomId, botUserId, question.getQuestionId(), correct, actualTimeMs, scoreDelta, difficulty.getCode());
+            
             // 답안 저장
             saveBotAnswer(roomId, botUserId, question, correct, (int) actualTimeMs, scoreDelta);
+            
+            // 저장 후 검증: 실제 저장된 값 확인
+            MatchAnswer savedAnswer = answerRepository.findByRoomIdAndQuestionIdAndUserId(roomId, question.getQuestionId(), botUserId)
+                    .orElse(null);
+            if (savedAnswer != null) {
+                log.info("봇 답안 저장 확인: roomId={}, botUserId={}, questionId={}, savedCorrect={}, savedScoreDelta={}", 
+                        roomId, botUserId, question.getQuestionId(), savedAnswer.isCorrect(), savedAnswer.getScoreDelta());
+            } else {
+                log.error("봇 답안 저장 실패: roomId={}, botUserId={}, questionId={}", 
+                        roomId, botUserId, question.getQuestionId());
+            }
             
             // 이벤트 기록
             saveEvent(roomId, "BOT_ANSWERED", Map.of(
@@ -387,6 +416,24 @@ public class BotPlayService {
                     "timeMs", actualTimeMs,
                     "scoreDelta", scoreDelta
             ));
+            
+            // DUEL 모드인 경우 진행 상태 확인 및 다음 문제 시작
+            // 봇이 답안을 제출한 후에도 handleDuelProgress가 호출되어야 다음 문제로 넘어감
+            if (mode == MatchMode.DUEL) {
+                try {
+                    // 스코어보드 계산 후 진행 상태 확인
+                    com.OhRyue.certpilot.versus.domain.MatchRoom room = roomRepository.findById(roomId)
+                            .orElseThrow(() -> new IllegalStateException("Room not found: " + roomId));
+                    VersusDtos.ScoreBoardResp scoreboard = versusService.computeScoreboard(room);
+                    // handleModeAfterAnswer를 호출하여 다음 문제로 진행
+                    versusService.handleModeAfterAnswer(room, question, scoreboard);
+                    log.debug("봇 답안 제출 후 진행 상태 확인 완료: roomId={}, questionId={}, botUserId={}", 
+                            roomId, question.getQuestionId(), botUserId);
+                } catch (Exception e) {
+                    log.error("봇 답안 제출 후 진행 상태 확인 실패: roomId={}, questionId={}, botUserId={}, error={}", 
+                            roomId, question.getQuestionId(), botUserId, e.getMessage(), e);
+                }
+            }
             
             return correct;
             
@@ -446,6 +493,19 @@ public class BotPlayService {
         }
         
         log.info("이벤트 기반 봇 플레이 완료: roomId={}, botUserId={}", roomId, botUserId);
+        
+        // 봇이 모든 문제에 답안을 제출한 후 매치 완료 체크 (DUEL 모드만)
+        if (mode == MatchMode.DUEL) {
+            try {
+                boolean completed = versusService.checkAndCompleteMatchIfNeeded(roomId);
+                if (completed) {
+                    log.info("봇 플레이 완료 후 매치 완료 처리됨: roomId={}, botUserId={}", roomId, botUserId);
+                }
+            } catch (Exception e) {
+                log.error("매치 완료 체크 중 오류: roomId={}, botUserId={}, error={}", 
+                        roomId, botUserId, e.getMessage(), e);
+            }
+        }
     }
 
     /**
@@ -630,14 +690,21 @@ public class BotPlayService {
             log.info("문제 자동 생성 시작: roomId={}, scopeJson={}", room.getId(), room.getScopeJson());
             
             if (room.getScopeJson() == null || room.getScopeJson().isBlank()) {
+                log.error("scopeJson이 null이거나 비어있음: roomId={}, scopeJson={}", room.getId(), room.getScopeJson());
                 throw new IllegalStateException("scopeJson is null or empty for roomId=" + room.getId());
             }
             
+            log.info("study-service 호출 시도: roomId={}, scopeJson={}", room.getId(), room.getScopeJson());
             List<VersusDtos.QuestionInfo> questionInfos = versusService.generateQuestionsFromScope(room, room.getScopeJson());
             
             if (questionInfos.isEmpty()) {
+                log.error("study-service에서 문제를 받지 못함: roomId={}, scopeJson={}", room.getId(), room.getScopeJson());
                 throw new IllegalStateException("No questions generated from study-service");
             }
+            
+            log.info("study-service에서 문제 받음: roomId={}, count={}, questionIds={}", 
+                    room.getId(), questionInfos.size(), 
+                    questionInfos.stream().map(q -> q.questionId()).toList());
             
             List<MatchQuestion> questions = questionInfos.stream()
                     .map(q -> MatchQuestion.builder()
@@ -657,12 +724,63 @@ public class BotPlayService {
                     "source", "STUDY_SERVICE"
             ));
             
-            log.info("문제 자동 생성 완료 (study-service): roomId={}, count={}", room.getId(), questions.size());
+            log.info("문제 자동 생성 완료 (study-service): roomId={}, count={}, questionIds={}", 
+                    room.getId(), questions.size(), 
+                    questions.stream().map(q -> q.getQuestionId()).toList());
             
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            // ResponseStatusException은 HTTP 상태 코드가 포함된 예외
+            // 원인 예외 확인 (UnknownHostException 등)
+            Throwable cause = e.getCause();
+            if (cause != null && cause.getCause() instanceof java.net.UnknownHostException) {
+                java.net.UnknownHostException uhe = (java.net.UnknownHostException) cause.getCause();
+                log.error("study-service 호스트를 찾을 수 없음 (UnknownHostException): roomId={}, scopeJson={}, host={}", 
+                        room.getId(), room.getScopeJson(), uhe.getMessage());
+                log.error("study-service가 실행 중이지 않거나 Eureka에 등록되지 않았을 수 있습니다. 네트워크 설정을 확인하세요.");
+            }
+            log.error("study-service 연동 실패 (ResponseStatusException): roomId={}, scopeJson={}, status={}, reason={}", 
+                    room.getId(), room.getScopeJson(), e.getStatusCode(), e.getReason());
+            log.error("예외 상세 정보: ", e);
+            log.warn("더미 문제 생성 시작: roomId={}, mode={} (study-service 연동 실패로 인한 fallback)", room.getId(), room.getMode());
+            createDummyQuestionsForRoom(room.getId(), room.getMode());
+        } catch (feign.RetryableException e) {
+            // Feign RetryableException (네트워크 오류, 호스트를 찾을 수 없음 등)
+            Throwable cause = e.getCause();
+            if (cause instanceof java.net.UnknownHostException) {
+                java.net.UnknownHostException uhe = (java.net.UnknownHostException) cause;
+                log.error("study-service 호스트를 찾을 수 없음 (UnknownHostException): roomId={}, scopeJson={}, host={}", 
+                        room.getId(), room.getScopeJson(), uhe.getMessage());
+                log.error("study-service가 실행 중이지 않거나 Eureka에 등록되지 않았을 수 있습니다. 네트워크 설정을 확인하세요.");
+            }
+            log.error("study-service 연동 실패 (RetryableException): roomId={}, scopeJson={}, message={}", 
+                    room.getId(), room.getScopeJson(), e.getMessage());
+            log.error("예외 상세 정보: ", e);
+            log.warn("더미 문제 생성 시작: roomId={}, mode={} (study-service 연동 실패로 인한 fallback)", room.getId(), room.getMode());
+            createDummyQuestionsForRoom(room.getId(), room.getMode());
+        } catch (feign.FeignException e) {
+            // Feign Client 예외 (네트워크 오류, 서비스 미응답 등)
+            log.error("study-service 연동 실패 (FeignException): roomId={}, scopeJson={}, status={}, message={}, content={}", 
+                    room.getId(), room.getScopeJson(), e.status(), e.getMessage(), 
+                    e.contentUTF8() != null ? e.contentUTF8().substring(0, Math.min(500, e.contentUTF8().length())) : "null");
+            log.error("예외 상세 정보: ", e);
+            log.warn("더미 문제 생성 시작: roomId={}, mode={} (study-service 연동 실패로 인한 fallback)", room.getId(), room.getMode());
+            createDummyQuestionsForRoom(room.getId(), room.getMode());
         } catch (Exception e) {
-            log.error("study-service 연동 실패, 더미 문제로 대체합니다. roomId={}, scopeJson={}, error={}, stackTrace={}", 
-                    room.getId(), room.getScopeJson(), e.getMessage(), 
-                    java.util.Arrays.toString(e.getStackTrace()).substring(0, Math.min(500, java.util.Arrays.toString(e.getStackTrace()).length())));
+            // 기타 예외
+            Throwable cause = e.getCause();
+            if (cause instanceof java.net.UnknownHostException) {
+                java.net.UnknownHostException uhe = (java.net.UnknownHostException) cause;
+                log.error("study-service 호스트를 찾을 수 없음 (UnknownHostException): roomId={}, scopeJson={}, host={}", 
+                        room.getId(), room.getScopeJson(), uhe.getMessage());
+                log.error("study-service가 실행 중이지 않거나 Eureka에 등록되지 않았을 수 있습니다. 네트워크 설정을 확인하세요.");
+            }
+            log.error("study-service 연동 실패 (기타 예외): roomId={}, scopeJson={}, errorClass={}, errorMessage={}", 
+                    room.getId(), room.getScopeJson(), e.getClass().getName(), e.getMessage());
+            log.error("예외 상세 정보: ", e);
+            if (cause != null) {
+                log.error("원인 예외: causeClass={}, causeMessage={}", cause.getClass().getName(), cause.getMessage());
+            }
+            log.warn("더미 문제 생성 시작: roomId={}, mode={} (study-service 연동 실패로 인한 fallback)", room.getId(), room.getMode());
             createDummyQuestionsForRoom(room.getId(), room.getMode());
         }
     }
@@ -791,20 +909,27 @@ public class BotPlayService {
         // 단답식/서술형을 위한 답안 텍스트 생성
         String userAnswerText = generateBotAnswerText(q.getQuestionId(), correct);
         
-        MatchAnswer answer = MatchAnswer.builder()
-                .roomId(roomId)
-                .roundNo(q.getRoundNo())
-                .phase(q.getPhase())
-                .questionId(q.getQuestionId())
-                .userId(botUserId)
-                .submittedAt(Instant.now())
-                .correct(correct)
-                .timeMs(timeMs)
-                .scoreDelta(scoreDelta)
-                .userAnswer(userAnswerText)
-                .build();
+        // 기존 답안이 있으면 업데이트, 없으면 생성
+        MatchAnswer answer = answerRepository.findByRoomIdAndQuestionIdAndUserId(roomId, q.getQuestionId(), botUserId)
+                .orElse(MatchAnswer.builder()
+                        .roomId(roomId)
+                        .questionId(q.getQuestionId())
+                        .userId(botUserId)
+                        .build());
+        
+        answer.setRoundNo(q.getRoundNo());
+        answer.setPhase(q.getPhase());
+        answer.setSubmittedAt(Instant.now());
+        answer.setCorrect(correct);
+        answer.setTimeMs(timeMs);
+        answer.setScoreDelta(scoreDelta);
+        answer.setUserAnswer(userAnswerText);
         
         answerRepository.save(answer);
+        answerRepository.flush(); // 즉시 DB에 반영
+        
+        log.debug("봇 답안 저장 완료: roomId={}, botUserId={}, questionId={}, correct={}, scoreDelta={}, userAnswer={}", 
+                roomId, botUserId, q.getQuestionId(), correct, scoreDelta, userAnswerText);
     }
 
     /**

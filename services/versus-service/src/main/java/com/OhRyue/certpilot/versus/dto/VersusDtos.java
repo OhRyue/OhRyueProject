@@ -131,10 +131,27 @@ public class VersusDtos {
       boolean revived
   ) {}
 
+  public record CurrentQuestionInfo(
+      @Schema(description = "현재 진행 중인 문제 ID", example = "92")
+      Long questionId,
+      @Schema(description = "현재 라운드 번호", example = "1")
+      Integer roundNo,
+      @Schema(description = "현재 페이즈 (MAIN, FINAL, REVIVAL)", example = "MAIN")
+      MatchPhase phase,
+      @Schema(description = "문제 순서 번호", example = "1")
+      Integer orderNo,
+      @Schema(description = "시간 제한 (초)", example = "5")
+      Integer timeLimitSec,
+      @Schema(description = "문제 종료 시간 (ISO 8601 형식). 문제가 진행 중이 아니면 null", example = "2025-12-02T03:15:06Z")
+      Instant endTime
+  ) {}
+
   public record ScoreBoardResp(
       Long roomId,
       MatchStatus status,
-      List<ScoreBoardItem> items
+      List<ScoreBoardItem> items,
+      @Schema(description = "현재 진행 중인 문제 정보. 문제가 진행 중이 아니면 null")
+      CurrentQuestionInfo currentQuestion
   ) {}
 
   public record TimelineEvent(

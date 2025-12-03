@@ -11,15 +11,19 @@ import com.OhRyue.certpilot.versus.repository.MatchEventRepository;
 import com.OhRyue.certpilot.versus.repository.MatchParticipantRepository;
 import com.OhRyue.certpilot.versus.repository.MatchQuestionRepository;
 import com.OhRyue.certpilot.versus.repository.MatchRoomRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -39,6 +43,7 @@ public class TimeoutAnswerService {
     private final MatchParticipantRepository participantRepository;
     private final MatchEventRepository eventRepository;
     private final VersusService versusService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 매 10초마다 실행: 시간 초과 답안 자동 처리
@@ -65,12 +70,11 @@ public class TimeoutAnswerService {
      * 특정 방의 시간 초과 답안 처리
      */
     private void processRoomTimeoutAnswers(MatchRoom room, Instant now) {
-        // 현재 라운드의 문제들 찾기
-        List<MatchQuestion> currentQuestions = questionRepository.findByRoomIdAndRoundNo(
-            room.getId(), getCurrentRound(room));
+        // 현재 진행 중인 문제 찾기 (가장 최근 QUESTION_STARTED 이벤트 사용)
+        MatchQuestion currentQuestion = getCurrentQuestion(room.getId());
         
-        if (currentQuestions.isEmpty()) {
-            return;
+        if (currentQuestion == null) {
+            return; // 현재 진행 중인 문제가 없음
         }
 
         // 모든 참가자 목록
@@ -79,42 +83,38 @@ public class TimeoutAnswerService {
             .map(p -> p.getUserId())
             .collect(Collectors.toSet());
 
-        for (MatchQuestion question : currentQuestions) {
-            // 이미 답안을 제출한 사용자들
-            Set<String> answeredUsers = answerRepository
-                .findByRoomId(room.getId())
-                .stream()
-                .filter(a -> a.getQuestionId().equals(question.getQuestionId()))
-                .map(MatchAnswer::getUserId)
-                .collect(Collectors.toSet());
+        // 이미 답안을 제출한 사용자들
+        Set<String> answeredUsers = answerRepository
+            .findByRoomId(room.getId())
+            .stream()
+            .filter(a -> a.getQuestionId().equals(currentQuestion.getQuestionId()))
+            .map(MatchAnswer::getUserId)
+            .collect(Collectors.toSet());
 
-            // 답안을 제출하지 않은 사용자들
-            Set<String> unansweredUsers = allParticipants.stream()
-                .filter(userId -> !answeredUsers.contains(userId))
-                .collect(Collectors.toSet());
+        // 답안을 제출하지 않은 사용자들
+        Set<String> unansweredUsers = allParticipants.stream()
+            .filter(userId -> !answeredUsers.contains(userId))
+            .collect(Collectors.toSet());
 
-            if (unansweredUsers.isEmpty()) {
-                continue; // 모든 사용자가 답안 제출
-            }
+        if (unansweredUsers.isEmpty()) {
+            return; // 모든 사용자가 답안 제출
+        }
 
-            // 문제 시작 시점 확인 (QUESTION_STARTED 이벤트)
-            Instant questionStartTime = getQuestionStartTime(room.getId(), question.getQuestionId());
-            if (questionStartTime == null) {
-                continue; // 문제 시작 이벤트가 없으면 스킵
-            }
+        // 문제 시작 시점 및 종료 시간 확인 (QUESTION_STARTED 이벤트)
+        QuestionTimeInfo timeInfo = getQuestionTimeInfo(room.getId(), currentQuestion.getQuestionId());
+        if (timeInfo == null || timeInfo.endTime == null) {
+            return; // 문제 시작 이벤트가 없거나 종료 시간을 계산할 수 없음
+        }
 
-            // 시간 제한 확인
-            Duration elapsed = Duration.between(questionStartTime, now);
-            int timeLimitSec = question.getTimeLimitSec();
+        // endTime이 지났는지 확인
+        if (now.isAfter(timeInfo.endTime) || now.equals(timeInfo.endTime)) {
+            // 시간 초과: 자동 오답 처리
+            log.info("Processing timeout answers for room {}, question {} (orderNo: {}): {} users, endTime: {}, now: {}", 
+                room.getId(), currentQuestion.getQuestionId(), currentQuestion.getOrderNo(), 
+                unansweredUsers.size(), timeInfo.endTime, now);
             
-            if (elapsed.getSeconds() >= timeLimitSec) {
-                // 시간 초과: 자동 오답 처리
-                log.info("Processing timeout answers for room {}, question {}: {} users", 
-                    room.getId(), question.getQuestionId(), unansweredUsers.size());
-                
-                for (String userId : unansweredUsers) {
-                    processTimeoutAnswer(room, question, userId, timeLimitSec);
-                }
+            for (String userId : unansweredUsers) {
+                processTimeoutAnswer(room, currentQuestion, userId, currentQuestion.getTimeLimitSec());
             }
         }
     }
@@ -172,30 +172,119 @@ public class TimeoutAnswerService {
     }
 
     /**
-     * 문제 시작 시점 조회
+     * 현재 진행 중인 문제 찾기 (가장 최근 QUESTION_STARTED 이벤트 사용)
      */
-    private Instant getQuestionStartTime(Long roomId, Long questionId) {
-        return eventRepository.findByRoomIdAndEventTypeContaining(roomId, "QUESTION_STARTED")
-            .stream()
-            .filter(e -> {
-                if (e.getPayloadJson() == null) return false;
-                return e.getPayloadJson().contains("\"questionId\":" + questionId);
-            })
-            .map(e -> e.getCreatedAt())
-            .findFirst()
-            .orElse(null);
+    private MatchQuestion getCurrentQuestion(Long roomId) {
+        try {
+            // 가장 최근 QUESTION_STARTED 이벤트 찾기
+            List<MatchEvent> startEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                    roomId, "QUESTION_STARTED");
+            
+            // createdAt 기준으로 최신순 정렬
+            Optional<MatchEvent> latestEvent = startEvents.stream()
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+
+            if (latestEvent.isPresent()) {
+                try {
+                    MatchEvent event = latestEvent.get();
+                    if (event.getPayloadJson() == null) {
+                        return null;
+                    }
+                    
+                    Map<String, Object> payload = objectMapper.readValue(
+                            event.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                    
+                    Object questionIdObj = payload.get("questionId");
+                    if (questionIdObj == null) {
+                        return null;
+                    }
+                    
+                    Long questionId = Long.valueOf(questionIdObj.toString());
+                    return questionRepository.findByRoomIdAndQuestionId(roomId, questionId)
+                            .orElse(null);
+                } catch (Exception e) {
+                    log.debug("Failed to parse current question from event: {}", e.getMessage());
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to get current question: {}", e.getMessage());
+        }
+        
+        return null;
     }
 
     /**
-     * 현재 라운드 번호 조회 (간단한 구현)
+     * 문제 시작 시점 및 종료 시간 조회
      */
-    private int getCurrentRound(MatchRoom room) {
-        // 가장 최근에 제출된 답안의 라운드 번호 사용
-        return answerRepository.findByRoomId(room.getId())
-            .stream()
-            .mapToInt(a -> a.getRoundNo() != null ? a.getRoundNo() : 1)
-            .max()
-            .orElse(1);
+    private QuestionTimeInfo getQuestionTimeInfo(Long roomId, Long questionId) {
+        try {
+            List<MatchEvent> startEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                    roomId, "QUESTION_STARTED");
+            
+            Optional<MatchEvent> questionEvent = startEvents.stream()
+                    .filter(e -> {
+                        if (e.getPayloadJson() == null) return false;
+                        try {
+                            Map<String, Object> payload = objectMapper.readValue(
+                                    e.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                            Object qId = payload.get("questionId");
+                            return qId != null && questionId.equals(Long.valueOf(qId.toString()));
+                        } catch (Exception ex) {
+                            return false;
+                        }
+                    })
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+
+            if (questionEvent.isPresent()) {
+                try {
+                    MatchEvent event = questionEvent.get();
+                    if (event.getPayloadJson() == null) {
+                        return null;
+                    }
+                    
+                    Map<String, Object> payload = objectMapper.readValue(
+                            event.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                    
+                    // startedAt 시간 가져오기
+                    String startedAtStr = (String) payload.get("startedAt");
+                    Instant startTime = startedAtStr != null 
+                            ? Instant.parse(startedAtStr) 
+                            : event.getCreatedAt();
+                    
+                    // MatchQuestion에서 timeLimitSec 가져오기
+                    Optional<MatchQuestion> matchQuestion = questionRepository.findByRoomIdAndQuestionId(roomId, questionId);
+                    if (matchQuestion.isPresent()) {
+                        MatchQuestion q = matchQuestion.get();
+                        // 종료 시간 계산: 시작 시간 + 시간 제한
+                        Instant endTime = startTime.plusSeconds(q.getTimeLimitSec());
+                        return new QuestionTimeInfo(startTime, endTime);
+                    }
+                } catch (Exception e) {
+                    log.debug("Failed to parse question time info: {}", e.getMessage());
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to get question time info: {}", e.getMessage());
+        }
+        
+        return null;
+    }
+
+    /**
+     * 문제 시간 정보를 담는 내부 클래스
+     */
+    @SuppressWarnings("unused")
+    private static class QuestionTimeInfo {
+        @SuppressWarnings("unused")
+        final Instant startTime;
+        final Instant endTime;
+
+        QuestionTimeInfo(Instant startTime, Instant endTime) {
+            this.startTime = startTime;
+            this.endTime = endTime;
+        }
     }
 }
 
