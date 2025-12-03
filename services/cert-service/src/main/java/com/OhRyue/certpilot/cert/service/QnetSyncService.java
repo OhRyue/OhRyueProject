@@ -19,6 +19,7 @@ import com.OhRyue.certpilot.cert.config.QnetProperties;
 import com.OhRyue.certpilot.cert.domain.ExamScheduleEntity;
 import com.OhRyue.certpilot.cert.domain.OpenQuestionEntity;
 import com.OhRyue.certpilot.cert.domain.QualificationEntity;
+import com.OhRyue.certpilot.cert.domain.QnetQualificationInfoEntity;
 import com.OhRyue.certpilot.cert.dto.api.ExternalCertDto;
 import com.OhRyue.certpilot.cert.dto.external.ContentsItem;
 import com.OhRyue.certpilot.cert.dto.external.CurriculumItem;
@@ -29,6 +30,7 @@ import com.OhRyue.certpilot.cert.dto.external.QualificationItem;
 import com.OhRyue.certpilot.cert.repository.ExamScheduleRepository;
 import com.OhRyue.certpilot.cert.repository.OpenQuestionRepository;
 import com.OhRyue.certpilot.cert.repository.QualificationRepository;
+import com.OhRyue.certpilot.cert.repository.QnetQualificationInfoRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,6 +53,7 @@ public class QnetSyncService {
     private final QualificationRepository qualificationRepository;
     private final ExamScheduleRepository examScheduleRepository;
     private final OpenQuestionRepository openQuestionRepository;
+    private final QnetQualificationInfoRepository qnetQualificationInfoRepository;
     private final QnetMapper mapper;
     private final ObjectMapper objectMapper;
     private final XmlMapper xmlMapper;
@@ -61,6 +64,7 @@ public class QnetSyncService {
                            QualificationRepository qualificationRepository,
                            ExamScheduleRepository examScheduleRepository,
                            OpenQuestionRepository openQuestionRepository,
+                           QnetQualificationInfoRepository qnetQualificationInfoRepository,
                            QnetMapper mapper,
                            @Qualifier("jacksonObjectMapper") ObjectMapper objectMapper,
                            XmlMapper xmlMapper) {
@@ -70,6 +74,7 @@ public class QnetSyncService {
         this.qualificationRepository = qualificationRepository;
         this.examScheduleRepository = examScheduleRepository;
         this.openQuestionRepository = openQuestionRepository;
+        this.qnetQualificationInfoRepository = qnetQualificationInfoRepository;
         this.mapper = mapper;
         this.objectMapper = objectMapper;
         this.xmlMapper = xmlMapper;
@@ -361,6 +366,11 @@ public class QnetSyncService {
         
         // XML을 파싱해서 JSON으로 변환 (UTF-8 인코딩 명시)
         try {
+            if (raw == null || raw.isEmpty()) {
+                log.warn("[information-trade-ntq] API 응답이 비어있음");
+                return raw;
+            }
+            
             // XML 응답을 UTF-8 바이트로 읽어서 UTF-8 문자열로 변환 (Feign이 잘못된 인코딩으로 읽을 수 있음)
             byte[] bytes = raw.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
             String utf8Raw = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
@@ -371,6 +381,14 @@ public class QnetSyncService {
             if (resolvedResponse == null || resolvedResponse.getHeader() == null) {
                 log.warn("[information-trade-ntq] 응답 구조가 올바르지 않음, 원본 반환");
                 return raw;
+            }
+            
+            // contents 필드에서 HTML 태그 및 엔티티 제거
+            cleanContentsInResponse(resolvedResponse);
+            
+            // 정보처리기사(jmCd=1320)인 경우 DB에 저장
+            if ("1320".equals(jmCd)) {
+                saveQualificationInfoToDb(jmCd, resolvedResponse);
             }
             
             // JSON으로 변환 (UTF-8 인코딩)
@@ -952,5 +970,218 @@ public class QnetSyncService {
 
     private enum SyncAction {
         INSERTED, UPDATED, SKIPPED
+    }
+
+    /**
+     * 응답의 contents 필드에서 HTML 태그와 엔티티를 제거하여 순수 텍스트만 남깁니다.
+     */
+    private void cleanContentsInResponse(QnetApiResponse.Response response) {
+        if (response == null || response.getBody() == null) {
+            return;
+        }
+        
+        JsonNode itemsNode = response.getBody().getItems();
+        if (itemsNode == null || itemsNode.isNull()) {
+            return;
+        }
+        
+        JsonNode itemNode = itemsNode.has("item") ? itemsNode.get("item") : itemsNode;
+        if (itemNode == null || itemNode.isNull()) {
+            return;
+        }
+        
+        // item이 배열인 경우
+        if (itemNode.isArray()) {
+            for (JsonNode item : itemNode) {
+                cleanContentsInItem(item);
+            }
+        } else {
+            // item이 단일 객체인 경우
+            cleanContentsInItem(itemNode);
+        }
+        
+        // JsonNode는 직접 수정되므로 별도로 설정할 필요 없음
+    }
+    
+    /**
+     * 개별 item의 contents 필드를 정리합니다.
+     */
+    private void cleanContentsInItem(JsonNode item) {
+        if (item == null || !item.has("contents")) {
+            return;
+        }
+        
+        JsonNode contentsNode = item.get("contents");
+        if (contentsNode == null || !contentsNode.isTextual()) {
+            return;
+        }
+        
+        String contents = contentsNode.asText();
+        if (contents == null || contents.isEmpty()) {
+            return;
+        }
+        
+        // HTML 태그 제거 및 HTML 엔티티 디코딩
+        String cleaned = cleanHtmlContent(contents);
+        
+        // JsonNode는 불변 객체이므로, ObjectNode로 변환하여 수정
+        if (item.isObject()) {
+            ((com.fasterxml.jackson.databind.node.ObjectNode) item).put("contents", cleaned);
+        }
+    }
+    
+    /**
+     * HTML 태그와 CSS 스타일 블록을 제거하고 HTML 엔티티를 디코딩합니다.
+     */
+    private String cleanHtmlContent(String html) {
+        if (html == null || html.isEmpty()) {
+            return html;
+        }
+        
+        // 1. HTML 태그 제거 (정규식 사용)
+        String cleaned = html.replaceAll("</?[^>]+>", "");
+        
+        // 2. CSS 스타일 블록 제거 (예: "BODY { ... }", "P { ... }", "LI { ... }")
+        // 선택자 이름(대문자로 시작)과 중괄호로 감싸진 스타일 블록 제거
+        cleaned = cleaned.replaceAll("[A-Z]+\\s*\\{[^}]*\\}", "");
+        
+        // 3. HTML 엔티티 디코딩
+        cleaned = decodeHtmlEntities(cleaned);
+        
+        // 4. 연속된 공백을 하나로 줄이기
+        cleaned = cleaned.replaceAll("\\s+", " ").trim();
+        
+        return cleaned;
+    }
+    
+    /**
+     * HTML 엔티티를 디코딩합니다.
+     * 주요 엔티티와 숫자 엔티티를 처리합니다.
+     */
+    private String decodeHtmlEntities(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        
+        String result = text;
+        
+        // 기본 HTML 엔티티 (순서 중요: &amp;를 먼저 처리하면 안 됨)
+        result = result.replace("&lt;", "<");
+        result = result.replace("&gt;", ">");
+        result = result.replace("&quot;", "\"");
+        result = result.replace("&apos;", "'");
+        result = result.replace("&nbsp;", " ");
+        
+        // 숫자 엔티티 처리 (&#숫자; 같은 경우, 예: &#9312;)
+        java.util.regex.Pattern decimalPattern = java.util.regex.Pattern.compile("&#(\\d+);");
+        java.util.regex.Matcher decimalMatcher = decimalPattern.matcher(result);
+        StringBuffer decimalBuffer = new StringBuffer();
+        while (decimalMatcher.find()) {
+            try {
+                int codePoint = Integer.parseInt(decimalMatcher.group(1));
+                decimalMatcher.appendReplacement(decimalBuffer, String.valueOf((char) codePoint));
+            } catch (NumberFormatException e) {
+                // 변환 실패 시 원본 유지
+                decimalMatcher.appendReplacement(decimalBuffer, decimalMatcher.group(0));
+            }
+        }
+        decimalMatcher.appendTail(decimalBuffer);
+        result = decimalBuffer.toString();
+        
+        // 16진수 엔티티 처리 (&#x숫자;)
+        java.util.regex.Pattern hexPattern = java.util.regex.Pattern.compile("&#x([0-9a-fA-F]+);");
+        java.util.regex.Matcher hexMatcher = hexPattern.matcher(result);
+        StringBuffer hexBuffer = new StringBuffer();
+        while (hexMatcher.find()) {
+            try {
+                int codePoint = Integer.parseInt(hexMatcher.group(1), 16);
+                hexMatcher.appendReplacement(hexBuffer, String.valueOf((char) codePoint));
+            } catch (NumberFormatException e) {
+                // 변환 실패 시 원본 유지
+                hexMatcher.appendReplacement(hexBuffer, hexMatcher.group(0));
+            }
+        }
+        hexMatcher.appendTail(hexBuffer);
+        result = hexBuffer.toString();
+        
+        // &amp;는 마지막에 처리 (다른 엔티티가 깨지지 않도록)
+        result = result.replace("&amp;", "&");
+        
+        return result;
+    }
+    
+    /**
+     * Q-Net 자격정보를 DB에 저장합니다.
+     * 정보처리기사(jmCd=1320) 데이터만 저장합니다.
+     */
+    private void saveQualificationInfoToDb(String jmCd, QnetApiResponse.Response response) {
+        if (response == null || response.getBody() == null) {
+            log.warn("[save-qualification-info] 응답 body가 없음");
+            return;
+        }
+        
+        JsonNode itemsNode = response.getBody().getItems();
+        if (itemsNode == null || itemsNode.isNull()) {
+            log.warn("[save-qualification-info] items가 없음");
+            return;
+        }
+        
+        JsonNode itemNode = itemsNode.has("item") ? itemsNode.get("item") : itemsNode;
+        if (itemNode == null || itemNode.isNull()) {
+            log.warn("[save-qualification-info] item이 없음");
+            return;
+        }
+        
+        // 기존 데이터 삭제 (jmCd=1320인 경우만)
+        if ("1320".equals(jmCd)) {
+            qnetQualificationInfoRepository.deleteByJmCd(jmCd);
+            log.info("[save-qualification-info] 기존 데이터 삭제 완료: jmCd={}", jmCd);
+        }
+        
+        List<QnetQualificationInfoEntity> entities = new ArrayList<>();
+        
+        // item이 배열인 경우
+        if (itemNode.isArray()) {
+            for (JsonNode item : itemNode) {
+                QnetQualificationInfoEntity entity = convertToEntity(jmCd, item);
+                if (entity != null) {
+                    entities.add(entity);
+                }
+            }
+        } else {
+            // item이 단일 객체인 경우
+            QnetQualificationInfoEntity entity = convertToEntity(jmCd, itemNode);
+            if (entity != null) {
+                entities.add(entity);
+            }
+        }
+        
+        if (!entities.isEmpty()) {
+            qnetQualificationInfoRepository.saveAll(entities);
+            log.info("[save-qualification-info] 저장 완료: jmCd={}, count={}", jmCd, entities.size());
+        } else {
+            log.warn("[save-qualification-info] 저장할 데이터가 없음: jmCd={}", jmCd);
+        }
+    }
+    
+    /**
+     * JsonNode를 QnetQualificationInfoEntity로 변환합니다.
+     */
+    private QnetQualificationInfoEntity convertToEntity(String jmCd, JsonNode item) {
+        try {
+            QnetQualificationInfoEntity entity = new QnetQualificationInfoEntity();
+            entity.setJmCd(jmCd);
+            entity.setInfogb(item.has("infogb") ? item.get("infogb").asText(null) : null);
+            entity.setContents(item.has("contents") ? item.get("contents").asText(null) : null);
+            entity.setJmfldnm(item.has("jmfldnm") ? item.get("jmfldnm").asText(null) : null);
+            entity.setMdobligfldcd(item.has("mdobligfldcd") ? item.get("mdobligfldcd").asText(null) : null);
+            entity.setMdobligfldnm(item.has("mdobligfldnm") ? item.get("mdobligfldnm").asText(null) : null);
+            entity.setObligfldcd(item.has("obligfldcd") ? item.get("obligfldcd").asText(null) : null);
+            entity.setObligfldnm(item.has("obligfldnm") ? item.get("obligfldnm").asText(null) : null);
+            return entity;
+        } catch (Exception e) {
+            log.error("[save-qualification-info] Entity 변환 실패: {}", e.getMessage(), e);
+            return null;
+        }
     }
 }

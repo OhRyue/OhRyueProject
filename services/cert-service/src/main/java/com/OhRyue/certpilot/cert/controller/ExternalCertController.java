@@ -203,27 +203,92 @@ public class ExternalCertController {
         }
     }
 
-    @Operation(summary = "종목별 자격정보 조회 (✅ Q-Net API - HTTP 연결 가능)",
+    @Operation(summary = "종목별 자격정보 조회 (✅ DB 조회 - 빠른 응답)",
             description = """
-                    Q-Net API를 사용하여 종목별 자격정보를 조회합니다.
-                    ✅ HTTP (포트 80) 연결 가능 (HTTPS는 연결 불가)
-                    
+                    DB에 저장된 종목별 자격정보를 조회합니다.
                     정보처리기사(jmCd=1320)의 출제경향, 출제기준, 취득방법 등의 정보를 조회할 수 있습니다.
+                    
+                    ⚠️ 정보처리기사(jmCd=1320) 데이터만 DB에 저장되어 있습니다.
+                    다른 종목코드는 Q-Net API를 직접 호출하거나 데이터가 없을 수 있습니다.
                     """)
     @GetMapping("/qualification-info-qnet")
     public ResponseEntity<String> getQualificationInfoQnet(@RequestParam String jmCd) {
         try {
-            String result = qnetSyncService.getInformationTradeNTQ(jmCd);
-            log.info("종목별 자격정보 조회 성공 (Q-Net): jmCd={}", jmCd);
-            // XML을 JSON으로 변환한 결과를 반환 (UTF-8 인코딩 명시)
-            return ResponseEntity.ok()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("Content-Type", "application/json; charset=UTF-8")
-                    .body(result);
+            // 정보처리기사(jmCd=1320)인 경우 DB에서 조회
+            if ("1320".equals(jmCd)) {
+                List<com.OhRyue.certpilot.cert.domain.QnetQualificationInfoEntity> infoList = 
+                        certificationQueryService.findQnetQualificationInfoByJmCd(jmCd);
+                
+                if (infoList.isEmpty()) {
+                    log.warn("종목별 자격정보를 찾을 수 없음 (DB): jmCd={}", jmCd);
+                    // DB에 없으면 API 호출하여 저장 후 반환
+                    String result = qnetSyncService.getInformationTradeNTQ(jmCd);
+                    return ResponseEntity.ok()
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Content-Type", "application/json; charset=UTF-8")
+                            .body(result);
+                }
+                
+                // DB 데이터를 응답 형식에 맞게 변환
+                Map<String, Object> response = buildQnetResponse(infoList);
+                log.info("종목별 자격정보 조회 성공 (DB): jmCd={}, count={}", jmCd, infoList.size());
+                return ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Content-Type", "application/json; charset=UTF-8")
+                        .body(toJson(response));
+            } else {
+                // 다른 종목코드는 기존대로 API 호출
+                String result = qnetSyncService.getInformationTradeNTQ(jmCd);
+                log.info("종목별 자격정보 조회 성공 (Q-Net API): jmCd={}", jmCd);
+                return ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Content-Type", "application/json; charset=UTF-8")
+                        .body(result);
+            }
         } catch (Exception e) {
-            log.error("종목별 자격정보 조회 실패 (Q-Net): jmCd={}, error: {}", jmCd, e.getMessage(), e);
+            log.error("종목별 자격정보 조회 실패: jmCd={}, error: {}", jmCd, e.getMessage(), e);
             return ResponseEntity.status(500).body(toJson(Map.of("error", e.getMessage())));
         }
+    }
+    
+    /**
+     * DB 데이터를 Q-Net API 응답 형식에 맞게 변환합니다.
+     */
+    private Map<String, Object> buildQnetResponse(List<com.OhRyue.certpilot.cert.domain.QnetQualificationInfoEntity> infoList) {
+        List<Map<String, Object>> items = infoList.stream()
+                .map(entity -> {
+                    Map<String, Object> item = new java.util.HashMap<>();
+                    item.put("contents", entity.getContents() != null ? entity.getContents() : "");
+                    item.put("infogb", entity.getInfogb() != null ? entity.getInfogb() : "");
+                    item.put("jmfldnm", entity.getJmfldnm() != null ? entity.getJmfldnm() : "");
+                    item.put("mdobligfldcd", entity.getMdobligfldcd() != null ? entity.getMdobligfldcd() : "");
+                    item.put("mdobligfldnm", entity.getMdobligfldnm() != null ? entity.getMdobligfldnm() : "");
+                    item.put("obligfldcd", entity.getObligfldcd() != null ? entity.getObligfldcd() : "");
+                    item.put("obligfldnm", entity.getObligfldnm() != null ? entity.getObligfldnm() : "");
+                    return item;
+                })
+                .toList();
+        
+        Map<String, Object> itemsMap = new java.util.HashMap<>();
+        itemsMap.put("item", items);
+        
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("items", itemsMap);
+        body.put("numOfRows", null);
+        body.put("pageNo", null);
+        body.put("totalCount", null);
+        
+        Map<String, Object> header = Map.of(
+                "resultCode", "00",
+                "resultMsg", "NORMAL SERVICE."
+        );
+        
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("response", null);
+        response.put("header", header);
+        response.put("body", body);
+        
+        return response;
     }
 
     @Operation(summary = "Q-Net 컨텐츠 정보 조회 (✅ Q-Net API - HTTP 연결 가능)",

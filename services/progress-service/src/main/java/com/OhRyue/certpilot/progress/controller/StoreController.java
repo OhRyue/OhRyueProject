@@ -8,9 +8,11 @@ import com.OhRyue.certpilot.progress.service.StoreService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 import static com.OhRyue.common.auth.AuthUserUtil.getCurrentUserId;
 
@@ -37,10 +39,29 @@ public class StoreController {
 
   @Operation(summary = "아이템 구매")
   @PostMapping("/purchase")
-  public String purchase(@RequestParam Long itemId) {
+  public ResponseEntity<String> purchase(@RequestParam Long itemId) {
+    try {
+      String userId = getCurrentUserId();
+      store.purchase(userId, itemId);
+      return ResponseEntity.ok("구매가 완료되었습니다.");
+    } catch (IllegalArgumentException e) {
+      return ResponseEntity.badRequest().body(e.getMessage());
+    } catch (IllegalStateException e) {
+      return ResponseEntity.badRequest().body(e.getMessage());
+    } catch (Exception e) {
+      return ResponseEntity.status(500).body("구매 중 오류가 발생했습니다: " + e.getMessage());
+    }
+  }
+
+  @Operation(summary = "포인트 잔액 조회")
+  @GetMapping("/points")
+  public ResponseEntity<Map<String, Object>> getPoints() {
     String userId = getCurrentUserId();
-    store.purchase(userId, itemId);
-    return "OK";
+    long balance = store.getPointBalance(userId);
+    return ResponseEntity.ok(Map.of(
+        "userId", userId,
+        "pointBalance", balance
+    ));
   }
 
   @Operation(summary = "인벤토리 조회")

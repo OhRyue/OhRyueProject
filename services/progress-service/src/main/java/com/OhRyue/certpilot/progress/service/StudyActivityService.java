@@ -40,6 +40,7 @@ public class StudyActivityService {
     private final XpService xpService;
     private final StreakService streakService;
     private final RankService rankService;
+    private final BadgeService badgeService;
 
     @Transactional
     public void ingest(StudySubmitReq payload) {
@@ -140,6 +141,28 @@ public class StudyActivityService {
                 skill.setAccuracy(calculateAccuracy(skill.getCorrect(), skill.getTotal()));
                 tagSkillRepository.save(skill);
             }
+        }
+        
+        // 정답률 배지 체크 (report_daily의 accuracy 사용)
+        // 일일 리포트가 업데이트된 후 정답률 80% 이상인지 확인
+        try {
+            ReportDaily updatedDaily = dailyRepository.findByUserIdAndDate(payload.userId(), today)
+                .orElse(null);
+            if (updatedDaily != null && updatedDaily.getAccuracy() != null) {
+                double accuracy = updatedDaily.getAccuracy().doubleValue();
+                if (accuracy >= 80.0) {
+                    // 정답률 80% 이상이면 skill counter 업데이트 및 배지 체크
+                    badgeService.updateSkillCounterOnStudyComplete(
+                        payload.userId(), 
+                        payload.examMode(), 
+                        null,  // flowType은 없음 (개별 문제 제출)
+                        accuracy
+                    );
+                }
+            }
+        } catch (Exception e) {
+            // 배지 체크 실패는 치명적이지 않으므로 로깅만
+            log.warn("Failed to check accuracy badge for user {}: {}", payload.userId(), e.getMessage());
         }
     }
 

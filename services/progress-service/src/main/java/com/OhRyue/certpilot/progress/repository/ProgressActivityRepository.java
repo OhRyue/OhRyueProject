@@ -39,6 +39,36 @@ public interface ProgressActivityRepository extends JpaRepository<ProgressActivi
         @Param("sourceService") String sourceService,
         @Param("sourceSessionId") Long sourceSessionId
     );
+
+    /**
+     * 사용자의 특정 examMode와 flowType에 해당하는 최근 활동 조회
+     * 필기/실기 배지 체크용
+     */
+    @Query("""
+        select a from ProgressActivity a
+        where a.userId = :userId
+          and a.mode = :examMode
+          and a.mainType = :mainType
+          and a.activityGroup = 'MAIN'
+        order by a.finishedAt desc
+    """)
+    List<ProgressActivity> findByUserIdAndExamModeAndMainType(
+        @Param("userId") String userId,
+        @Param("examMode") com.OhRyue.certpilot.progress.domain.enums.ExamMode examMode,
+        @Param("mainType") com.OhRyue.certpilot.progress.domain.enums.MainType mainType
+    );
+
+    /**
+     * 사용자의 정답률 80% 이상 활동 개수 조회
+     * ACCURACY_MASTER 배지 체크용
+     */
+    @Query("""
+        select count(a) from ProgressActivity a
+        where a.userId = :userId
+          and a.accuracyPct >= 80.0
+          and a.activityGroup = 'MAIN'
+    """)
+    long countByUserIdAndAccuracyPctGreaterThanEqual80(String userId);
 }
 
 

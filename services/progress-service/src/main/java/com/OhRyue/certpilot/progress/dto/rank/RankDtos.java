@@ -11,6 +11,7 @@ public class RankDtos {
 
   public record LeaderboardEntry(
       String userId,
+      String nickname,
       long score,
       int rank,
       Long xp,

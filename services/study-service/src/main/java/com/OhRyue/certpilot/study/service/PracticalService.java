@@ -1250,7 +1250,8 @@ public class PracticalService {
                 userId,
                 ExamMode.PRACTICAL.name(),
                 "REVIEW",
-                rootTopicId
+                rootTopicId,
+                scorePct  // 정답률 전달
             ));
           } catch (Exception hookEx) {
             // hook 실패는 학습 흐름을 막지 않음
@@ -1565,7 +1566,8 @@ public class PracticalService {
                   userId,
                   ExamMode.PRACTICAL.name(),
                   "MICRO",
-                  topicId
+                  topicId,
+                  scorePct  // 정답률 전달
               ));
             } catch (Exception hookEx) {
               // hook 실패는 학습 흐름을 막지 않음

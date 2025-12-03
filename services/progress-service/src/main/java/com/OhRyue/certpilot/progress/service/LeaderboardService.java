@@ -3,6 +3,8 @@ package com.OhRyue.certpilot.progress.service;
 import com.OhRyue.certpilot.progress.domain.*;
 import com.OhRyue.certpilot.progress.domain.enums.RankScope;
 import com.OhRyue.certpilot.progress.dto.rank.RankDtos;
+import com.OhRyue.certpilot.progress.feign.AccountClient;
+import com.OhRyue.certpilot.progress.feign.dto.ProfileSummaryResponse;
 import com.OhRyue.certpilot.progress.repository.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -38,6 +40,7 @@ public class LeaderboardService {
   private final LeaderboardSnapshotRepository snapshotRepository;
   private final ObjectMapper objectMapper;
   private final RankService rankService;
+  private final AccountClient accountClient;
 
   @Transactional(readOnly = true)
   public RankDtos.LeaderboardResponse leaderboard(RankScope scope,
@@ -139,13 +142,27 @@ public class LeaderboardService {
     Map<String, UserStreak> streaks = userStreakRepository.findAllById(userIds).stream()
         .collect(Collectors.toMap(UserStreak::getUserId, s -> s));
 
+    // 닉네임 조회
+    Map<String, String> nicknameMap = new HashMap<>();
+    try {
+      List<ProfileSummaryResponse> summaries = userIds.isEmpty()
+          ? List.of()
+          : accountClient.summaries(userIds);
+      nicknameMap = summaries.stream()
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s.nickname() != null ? s.nickname() : "", (a, b) -> a));
+    } catch (Exception e) {
+      log.warn("닉네임 조회 실패: {}", e.getMessage());
+    }
+
     int rank = rankOffset + 1;
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     for (UserRankScore score : scores) {
       UserXpWallet wallet = wallets.get(score.getUserId());
       UserStreak streak = streaks.get(score.getUserId());
+      String nickname = nicknameMap.getOrDefault(score.getUserId(), "");
       entries.add(new RankDtos.LeaderboardEntry(
           score.getUserId(),
+          nickname,
           score.getScore(),
           rank++,
           wallet == null ? null : wallet.getXpTotal(),
@@ -165,8 +182,21 @@ public class LeaderboardService {
           long higher = rankScoreRepository.countByScoreGreaterThan(score.getScore());
           UserXpWallet wallet = xpWalletRepository.findById(userId).orElse(null);
           UserStreak streak = userStreakRepository.findById(userId).orElse(null);
+          
+          // 닉네임 조회
+          String nickname = "";
+          try {
+            List<ProfileSummaryResponse> summaries = accountClient.summaries(List.of(userId));
+            if (!summaries.isEmpty()) {
+              nickname = summaries.get(0).nickname() != null ? summaries.get(0).nickname() : "";
+            }
+          } catch (Exception e) {
+            log.warn("닉네임 조회 실패 (userId: {}): {}", userId, e.getMessage());
+          }
+          
           return new RankDtos.LeaderboardEntry(
               score.getUserId(),
+              nickname,
               score.getScore(),
               (int) higher + 1,
               wallet == null ? null : wallet.getXpTotal(),
@@ -196,8 +226,21 @@ public class LeaderboardService {
                 .findByWeekIsoOrderByXpGainedDesc(weekIso, Pageable.unpaged()).stream()
                 .filter(r -> r.getXpGained() > report.getXpGained())
                 .count();
+            
+            // 닉네임 조회
+            String nickname = "";
+            try {
+              List<ProfileSummaryResponse> summaries = accountClient.summaries(List.of(report.getUserId()));
+              if (!summaries.isEmpty()) {
+                nickname = summaries.get(0).nickname() != null ? summaries.get(0).nickname() : "";
+              }
+            } catch (Exception e) {
+              log.warn("닉네임 조회 실패 (userId: {}): {}", report.getUserId(), e.getMessage());
+            }
+            
             return new RankDtos.LeaderboardEntry(
                 report.getUserId(),
+                nickname,
                 report.getXpGained(),
                 (int) higher + 1,
                 (long) report.getXpGained(),
@@ -232,8 +275,21 @@ public class LeaderboardService {
             long higher = userStreakRepository.findTop10ByOrderByBestDaysDesc().stream()
                 .filter(s -> s.getBestDays() > streak.getBestDays())
                 .count();
+            
+            // 닉네임 조회
+            String nickname = "";
+            try {
+              List<ProfileSummaryResponse> summaries = accountClient.summaries(List.of(streak.getUserId()));
+              if (!summaries.isEmpty()) {
+                nickname = summaries.get(0).nickname() != null ? summaries.get(0).nickname() : "";
+              }
+            } catch (Exception e) {
+              log.warn("닉네임 조회 실패 (userId: {}): {}", streak.getUserId(), e.getMessage());
+            }
+            
             return new RankDtos.LeaderboardEntry(
                 streak.getUserId(),
+                nickname,
                 streak.getBestDays(),
                 (int) higher + 1,
                 null,
@@ -313,11 +369,27 @@ public class LeaderboardService {
   private List<RankDtos.LeaderboardEntry> weeklyEntries(String weekIso, int limit) {
     Pageable pageable = PageRequest.of(0, limit);
     List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
+    List<String> userIds = weekly.stream().map(ReportWeekly::getUserId).toList();
+    
+    // 닉네임 조회
+    Map<String, String> nicknameMap = new HashMap<>();
+    try {
+      List<ProfileSummaryResponse> summaries = userIds.isEmpty()
+          ? List.of()
+          : accountClient.summaries(userIds);
+      nicknameMap = summaries.stream()
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s.nickname() != null ? s.nickname() : "", (a, b) -> a));
+    } catch (Exception e) {
+      log.warn("닉네임 조회 실패: {}", e.getMessage());
+    }
+    
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     int rank = 1;
     for (ReportWeekly report : weekly) {
+      String nickname = nicknameMap.getOrDefault(report.getUserId(), "");
       entries.add(new RankDtos.LeaderboardEntry(
           report.getUserId(),
+          nickname,
           report.getXpGained(),
           rank++,
           (long) report.getXpGained(),
@@ -331,11 +403,27 @@ public class LeaderboardService {
   private List<RankDtos.LeaderboardEntry> weeklyEntries(String weekIso, int page, int size) {
     Pageable pageable = PageRequest.of(page, size);
     List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
+    List<String> userIds = weekly.stream().map(ReportWeekly::getUserId).toList();
+    
+    // 닉네임 조회
+    Map<String, String> nicknameMap = new HashMap<>();
+    try {
+      List<ProfileSummaryResponse> summaries = userIds.isEmpty()
+          ? List.of()
+          : accountClient.summaries(userIds);
+      nicknameMap = summaries.stream()
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s.nickname() != null ? s.nickname() : "", (a, b) -> a));
+    } catch (Exception e) {
+      log.warn("닉네임 조회 실패: {}", e.getMessage());
+    }
+    
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     int rank = page * size + 1;
     for (ReportWeekly report : weekly) {
+      String nickname = nicknameMap.getOrDefault(report.getUserId(), "");
       entries.add(new RankDtos.LeaderboardEntry(
           report.getUserId(),
+          nickname,
           report.getXpGained(),
           rank++,
           (long) report.getXpGained(),
@@ -348,11 +436,27 @@ public class LeaderboardService {
 
   private List<RankDtos.LeaderboardEntry> hallEntries(int limit) {
     List<UserStreak> streaks = userStreakRepository.findTop10ByOrderByBestDaysDesc();
+    List<String> userIds = streaks.stream().limit(limit).map(UserStreak::getUserId).toList();
+    
+    // 닉네임 조회
+    Map<String, String> nicknameMap = new HashMap<>();
+    try {
+      List<ProfileSummaryResponse> summaries = userIds.isEmpty()
+          ? List.of()
+          : accountClient.summaries(userIds);
+      nicknameMap = summaries.stream()
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s.nickname() != null ? s.nickname() : "", (a, b) -> a));
+    } catch (Exception e) {
+      log.warn("닉네임 조회 실패: {}", e.getMessage());
+    }
+    
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     int rank = 1;
     for (UserStreak streak : streaks.stream().limit(limit).toList()) {
+      String nickname = nicknameMap.getOrDefault(streak.getUserId(), "");
       entries.add(new RankDtos.LeaderboardEntry(
           streak.getUserId(),
+          nickname,
           streak.getBestDays(),
           rank++,
           null,

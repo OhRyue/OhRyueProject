@@ -72,6 +72,10 @@ public class VersusResultService {
                 // 배틀 기록 저장
                 saveBattleRecord(request, participant, examMode);
                 
+                // 배지 체크 (대전 결과 반영)
+                boolean isWinner = participant.userId().equals(request.winner());
+                badgeService.updateSkillCounterOnVersusResult(participant.userId(), mode, isWinner);
+                
                 successCount++;
             } catch (Exception e) {
                 log.error("Failed to process reward for participant {} in room {}: {}", 

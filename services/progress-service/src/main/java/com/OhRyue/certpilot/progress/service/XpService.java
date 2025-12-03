@@ -1,15 +1,10 @@
 // src/main/java/com/OhRyue/certpilot/progress/service/XpService.java
 package com.OhRyue.certpilot.progress.service;
 
-import com.OhRyue.certpilot.progress.domain.UserPointLedger;
-import com.OhRyue.certpilot.progress.domain.UserPointWallet;
 import com.OhRyue.certpilot.progress.domain.UserXpLedger;
 import com.OhRyue.certpilot.progress.domain.UserXpWallet;
-import com.OhRyue.certpilot.progress.domain.enums.PointReason;
 import com.OhRyue.certpilot.progress.domain.enums.XpReason;
 import com.OhRyue.certpilot.progress.dto.XpDtos;
-import com.OhRyue.certpilot.progress.repository.UserPointLedgerRepository;
-import com.OhRyue.certpilot.progress.repository.UserPointWalletRepository;
 import com.OhRyue.certpilot.progress.repository.UserXpLedgerRepository;
 import com.OhRyue.certpilot.progress.repository.UserXpWalletRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,11 +25,7 @@ public class XpService {
 
     private final UserXpWalletRepository walletRepo;
     private final UserXpLedgerRepository ledgerRepo;
-    private final UserPointWalletRepository pointWalletRepo;
-    private final UserPointLedgerRepository pointLedgerRepo;
-    
-    // 레벨업 시 지급할 포인트
-    private static final int POINTS_PER_LEVEL = 100;
+    private final BadgeService badgeService;
     
     // XP 규칙 테이블: activityType → 기본 XP (100% 완벽 클리어 시)
     private static final Map<String, Integer> BASE_XP_RULES = Map.ofEntries(
@@ -234,12 +225,10 @@ public class XpService {
             w.setLevel(newLv);
             w.setLastLevelupAt(Instant.now());
             
-            // 레벨업 시 포인트 지급
-            int levelsGained = newLv - beforeLv;
-            int pointsToAward = levelsGained * POINTS_PER_LEVEL;
-            awardPointsOnLevelUp(userId, pointsToAward, newLv);
+            // 레벨업 시 포인트 지급 제거 (레벨 × 500 방식으로 변경)
+            // 포인트는 조회 시 실시간 계산: 현재 레벨 × 500 - 구매한 아이템 총액
             
-            log.info("User {} leveled up from {} to {}! Awarded {} points", userId, beforeLv, newLv, pointsToAward);
+            log.info("User {} leveled up from {} to {}!", userId, beforeLv, newLv);
         }
         walletRepo.save(w);
 
@@ -254,45 +243,13 @@ public class XpService {
 
         // 경험치 지급 로그
         log.info("XP granted: userId={}, delta={}, reason={}, refId={}, beforeXp={}, afterXp={}, level={}", 
-                userId, delta, reason, refId, before, w.getXpTotal(), w.getLevel());
+            userId, delta, reason, refId, before, w.getXpTotal(), w.getLevel());
 
         return w;
     }
 
-    /**
-     * 레벨업 시 포인트 지급
-     */
-    private void awardPointsOnLevelUp(String userId, int points, int newLevel) {
-        try {
-            UserPointWallet pointWallet = pointWalletRepo.findById(userId)
-                    .orElseGet(() -> {
-                        UserPointWallet newWallet = UserPointWallet.builder()
-                                .userId(userId)
-                                .pointTotal(0L)
-                                .updatedAt(Instant.now())
-                                .build();
-                        return pointWalletRepo.save(newWallet);
-                    });
-            
-            long beforePoints = pointWallet.getPointTotal();
-            pointWallet.setPointTotal(beforePoints + points);
-            pointWalletRepo.save(pointWallet);
-            
-            // 포인트 지급 기록
-            pointLedgerRepo.save(UserPointLedger.builder()
-                    .userId(userId)
-                    .delta(points)
-                    .reason(PointReason.REWARD)
-                    .refId("levelup:" + newLevel)
-                    .createdAt(Instant.now())
-                    .build());
-            
-            log.info("Awarded {} points to user {} for leveling up to level {}", points, userId, newLevel);
-        } catch (Exception e) {
-            log.error("Failed to award points on level up for user {}: {}", userId, e.getMessage(), e);
-            // 포인트 지급 실패는 치명적이지 않으므로 예외를 던지지 않음
-        }
-    }
+    // 레벨업 시 포인트 지급 메서드 제거 (레벨 × 500 방식으로 변경)
+    // 포인트는 조회 시 실시간 계산: 현재 레벨 × 500 - 구매한 아이템 총액
 
     @Transactional(readOnly = true)
     public UserXpWallet getWallet(String userId) {
@@ -357,10 +314,20 @@ public class XpService {
         
         int earnedXp = (int) (xpAfter - xpBefore);
         boolean leveledUp = levelAfter > levelBefore;
-        int levelUpRewardPoints = leveledUp ? (levelAfter - levelBefore) * POINTS_PER_LEVEL : 0;
+        // 레벨업 보상 포인트는 더 이상 지급하지 않음 (레벨 × 500 방식으로 변경)
+        int levelUpRewardPoints = 0;
         
         log.info("XP earned: userId={}, activityType={}, sessionId={}, scorePct={}, earnedXp={}, totalXp={}, level={}->{}, leveledUp={}", 
                 userId, req.activityType(), req.sessionId(), req.scorePct(), earnedXp, xpAfter, levelBefore, levelAfter, leveledUp);
+        
+        // XP 10000 배지 체크 (비동기로 처리하여 성능 영향 최소화)
+        if (xpAfter >= 10_000 && xpBefore < 10_000) {
+            try {
+                badgeService.evaluate(userId);
+            } catch (Exception e) {
+                log.warn("Failed to check XP_10000 badge for user {}: {}", userId, e.getMessage());
+            }
+        }
         
         return new XpDtos.XpEarnResponse(
                 earnedXp,

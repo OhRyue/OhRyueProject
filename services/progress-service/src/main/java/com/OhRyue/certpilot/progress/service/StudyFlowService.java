@@ -31,6 +31,7 @@ public class StudyFlowService {
     private final ReportDailyRepository dailyRepository;
     private final ReportWeeklyRepository weeklyRepository;
     private final RankService rankService;
+    private final BadgeService badgeService;
 
     @Transactional
     public void handleFlowComplete(StudyFlowCompleteReq req) {
@@ -100,6 +101,11 @@ public class StudyFlowService {
                 .build());
         weekly.setXpGained(weekly.getXpGained() + xpDelta);
         weeklyRepository.save(weekly);
+
+        // 6) 배지 체크 (학습 완료 시 skill counter 업데이트)
+        // accuracyPct가 제공되면 사용하고, 없으면 progress_activity에서 조회
+        Double accuracyPct = req.accuracyPct();
+        badgeService.updateSkillCounterOnStudyComplete(req.userId(), req.examMode(), flowType, accuracyPct);
     }
 
     /* ================= 내부 유틸 ================= */

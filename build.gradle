@@ -14,7 +14,11 @@ subprojects {
     apply plugin: 'io.spring.dependency-management'
 
 
-    repositories { mavenCentral() }
+    repositories {
+        mavenCentral()
+        // 네트워크 문제 시 대체 저장소
+        maven { url 'https://repo1.maven.org/maven2/' }
+    }
 
 
     dependencies {
@@ -37,7 +41,11 @@ ext {
 subprojects {
     apply plugin: 'java'
     apply plugin: 'io.spring.dependency-management'
-    repositories { mavenCentral() }
+    repositories {
+        mavenCentral()
+        // 네트워크 문제 시 대체 저장소
+        maven { url 'https://repo1.maven.org/maven2/' }
+    }
 
     dependencyManagement {
         imports {

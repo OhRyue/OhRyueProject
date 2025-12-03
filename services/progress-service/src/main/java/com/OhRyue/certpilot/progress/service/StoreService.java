@@ -18,11 +18,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StoreService {
 
+  private static final int POINTS_PER_LEVEL = 500;
+
   private final StoreItemRepository itemRepo;
-  private final UserPointWalletRepository walletRepo;
   private final UserPointLedgerRepository ledgerRepo;
   private final UserInventoryRepository invRepo;
   private final UserLoadoutRepository loadoutRepo;
+  private final XpService xpService;
 
   @Transactional(readOnly = true)
   public List<StoreItem> listActive() {
@@ -61,9 +63,9 @@ public class StoreService {
         .sorted(Comparator.comparingInt(StoreItemView::price))
         .toList();
 
-    UserPointWallet wallet = walletRepo.findById(userId)
-        .orElseGet(() -> defaultWallet(userId));
-    StoreUserSummary userSummary = new StoreUserSummary(userId, wallet.getPointTotal(), ownedIds.size());
+    // 포인트 잔액 계산 (레벨 × 500 - 구매 총액)
+    long pointBalance = calculatePointBalance(userId);
+    StoreUserSummary userSummary = new StoreUserSummary(userId, pointBalance, ownedIds.size());
 
     return new StoreDtos.StoreCatalog(userSummary, itemViews, Instant.now());
   }
@@ -72,27 +74,33 @@ public class StoreService {
   @Transactional
   public void purchase(String userId, Long itemId) {
     StoreItem item = itemRepo.findById(itemId)
-        .orElseThrow(() -> new IllegalArgumentException("아이템 없음"));
+        .orElseThrow(() -> new IllegalArgumentException("아이템을 찾을 수 없습니다. itemId: " + itemId));
+    
     if (!item.isActive()) {
-      throw new IllegalStateException("비활성화 아이템");
+      throw new IllegalStateException("비활성화된 아이템입니다. itemId: " + itemId);
+    }
+
+    // 이미 구매한 아이템인지 확인
+    if (invRepo.existsByUserIdAndItemId(userId, itemId)) {
+      throw new IllegalStateException("이미 구매한 아이템입니다. itemId: " + itemId);
     }
 
     if (item.getLimitPerUser() != null && item.getLimitPerUser() > 0) {
       long owned = invRepo.countByUserIdAndItemId(userId, itemId);
       if (owned >= item.getLimitPerUser()) {
-        throw new IllegalStateException("구매 제한 수량 도달");
+        throw new IllegalStateException("구매 제한 수량에 도달했습니다. itemId: " + itemId);
       }
     }
 
-    UserPointWallet wallet = walletRepo.findById(userId)
-        .orElseGet(() -> defaultWallet(userId));
-    if (wallet.getPointTotal() < item.getPrice()) {
-      throw new IllegalStateException("포인트 부족");
+    // 포인트 잔액 확인 (레벨 × 500 - 구매 총액)
+    long currentBalance = calculatePointBalance(userId);
+    if (currentBalance < item.getPrice()) {
+      throw new IllegalStateException(
+          String.format("포인트가 부족합니다. 필요: %d, 보유: %d", item.getPrice(), currentBalance)
+      );
     }
 
-    wallet.setPointTotal(wallet.getPointTotal() - item.getPrice());
-    walletRepo.save(wallet);
-
+    // 포인트 차감하지 않고 구매 기록만 저장 (레벨 × 500 방식)
     ledgerRepo.save(UserPointLedger.builder()
         .userId(userId)
         .delta(-item.getPrice())
@@ -100,9 +108,8 @@ public class StoreService {
         .refId("shop:" + itemId)
         .build());
 
-    if (!invRepo.existsByUserIdAndItemId(userId, itemId)) {
-      invRepo.save(UserInventory.builder().userId(userId).itemId(itemId).build());
-    }
+    // 인벤토리에 추가
+    invRepo.save(UserInventory.builder().userId(userId).itemId(itemId).build());
   }
 
   @Transactional(readOnly = true)
@@ -113,6 +120,30 @@ public class StoreService {
   @Transactional(readOnly = true)
   public boolean hasItem(String userId, Long itemId) {
     return invRepo.existsByUserIdAndItemId(userId, itemId);
+  }
+
+  /**
+   * 포인트 잔액 계산: 현재 레벨 × 500 - 구매한 아이템 총액
+   */
+  @Transactional(readOnly = true)
+  public long getPointBalance(String userId) {
+    return calculatePointBalance(userId);
+  }
+  
+  /**
+   * 포인트 잔액 계산: 현재 레벨 × 500 - 구매한 아이템 총액
+   */
+  private long calculatePointBalance(String userId) {
+    // 현재 레벨 조회
+    int currentLevel = xpService.getWallet(userId).getLevel();
+    
+    // 구매한 아이템 총액 조회
+    long purchaseTotal = ledgerRepo.sumPurchaseTotal(userId, PointReason.PURCHASE);
+    
+    // 포인트 = 레벨 × 500 - 구매 총액
+    long balance = (long) currentLevel * POINTS_PER_LEVEL - purchaseTotal;
+    
+    return Math.max(0, balance); // 음수 방지
   }
 
   /** 회원가입 시 기본 인벤토리 아이템 추가 */
@@ -167,7 +198,4 @@ public class StoreService {
     );
   }
 
-  private UserPointWallet defaultWallet(String userId) {
-    return new UserPointWallet(userId, 0L, Instant.now());
-  }
 }
