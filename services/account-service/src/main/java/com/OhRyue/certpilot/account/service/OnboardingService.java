@@ -27,6 +27,7 @@ public class OnboardingService {
     private final GoalCertService goalCertService;
     private final UserOnboardingRepository onboardingRepository;
 
+    @Transactional
     public OnboardingStatusResponse getStatus(String userId) {
         UserAccount account = userService.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));

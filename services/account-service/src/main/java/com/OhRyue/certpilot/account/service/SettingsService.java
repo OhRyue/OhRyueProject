@@ -29,7 +29,7 @@ public class SettingsService {
       .goalReminderEnabled(false)
       .build();
 
-  @Transactional(readOnly = true)
+  @Transactional
   public SettingsDtos.SettingsResponse getSnapshot(String userId) {
     UserSettings entity = ensureEntity(userId);
     SettingsDtos.UiPreferences ui = readUiPrefs(entity);
