@@ -27,4 +27,21 @@ public interface AccountClient {
    */
   @GetMapping("/internal/users/summaries")
   List<ProfileSummaryResponse> summaries(@RequestParam("ids") List<String> userIds);
+
+  /**
+   * 일일 학습 알림을 받을 사용자 목록 조회
+   * - Authorization 헤더 역시 인터셉터를 통해 자동 전달.
+   */
+  @GetMapping("/internal/users/daily-reminder-enabled")
+  List<UserSummary> getUsersWithDailyReminderEnabled();
+
+  /**
+   * 주간 리포트를 받을 사용자 목록 조회 (이메일 포함)
+   * - Authorization 헤더 역시 인터셉터를 통해 자동 전달.
+   */
+  @GetMapping("/internal/users/weekly-report-enabled")
+  List<UserWithEmail> getUsersWithWeeklyReportEnabled();
+
+  record UserSummary(String userId) {}
+  record UserWithEmail(String userId, String email) {}
 }

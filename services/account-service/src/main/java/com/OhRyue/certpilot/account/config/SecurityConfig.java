@@ -73,6 +73,8 @@ public class SecurityConfig {
                 "/api/account/refresh",
                 "/api/mail/**"
             ).permitAll()
+            // 내부 서비스 간 통신용 API (서비스 간 통신용)
+            .requestMatchers("/api/account/internal/**").permitAll()
             // 그 외는 모두 인증 필요
             .anyRequest().authenticated()
         )

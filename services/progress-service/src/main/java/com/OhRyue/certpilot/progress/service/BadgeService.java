@@ -27,36 +27,14 @@ import java.util.stream.Collectors;
 @Slf4j
 public class BadgeService {
 
-  private static final List<BadgeSeed> DEFAULT_BADGES = List.of(
-      new BadgeSeed("FIRST_SOLVE", "첫 문제 해결", Rarity.common, Map.of(
-          "criteria", "user_answer_count>=1",
-          "description", "첫 문제를 풀면 획득합니다."
-      )),
-      new BadgeSeed("STREAK_BRONZE", "7일 연속 학습", Rarity.rare, Map.of(
-          "criteria", "streak_current>=7",
-          "description", "연속 학습 7일을 달성하면 획득합니다."
-      )),
-      new BadgeSeed("XP_MASTER", "누적 XP 3000", Rarity.epic, Map.of(
-          "criteria", "xp_total>=3000",
-          "description", "누적 XP 3000을 돌파하면 획득합니다."
-      )),
-      new BadgeSeed("WEEKLY_WARRIOR", "주간 학습 매니아", Rarity.rare, Map.of(
-          "criteria", "weekly_solved>=70",
-          "description", "한 주 동안 70문제를 해결하면 획득합니다."
-      )),
-      new BadgeSeed("TAG_SPECIALIST", "태그 스페셜리스트", Rarity.rare, Map.of(
-          "criteria", "tag_accuracy>=90,total>=20",
-          "description", "특정 태그에서 정답률 90% · 누적 20문제를 달성하면 획득합니다."
-      ))
-  );
+  // 10개 배지만 사용하므로 DEFAULT_BADGES 비활성화
+  // V6 마이그레이션에서 등록한 10개 배지만 사용
+  private static final List<BadgeSeed> DEFAULT_BADGES = List.of();
 
   private final BadgeCatalogRepository badgeCatalogRepository;
   private final UserBadgeRepository userBadgeRepository;
-  private final UserAnswerRepository userAnswerRepository;
   private final UserStreakRepository userStreakRepository;
   private final UserXpWalletRepository userXpWalletRepository;
-  private final ReportWeeklyRepository reportWeeklyRepository;
-  private final ReportTagSkillRepository reportTagSkillRepository;
   private final UserSkillCounterRepository userSkillCounterRepository;
   private final ProgressActivityRepository progressActivityRepository;
   private final ApplicationEventPublisher eventPublisher;
@@ -76,13 +54,38 @@ public class BadgeService {
     }
   }
 
+  // 10개 공식 배지 코드 목록
+  private static final Set<String> OFFICIAL_BADGE_CODES = Set.of(
+      "FIRST_STUDY",
+      "CONSISTENT_3DAYS",
+      "ACCURACY_MASTER",
+      "WRITTEN_EXPERT",
+      "PRACTICAL_PERFECT",
+      "DUEL_STREAK_3",
+      "TOURNAMENT_WINNER",
+      "GOLDENBELL_WINNER",
+      "CONSISTENT_7DAYS",
+      "XP_10000"
+  );
+
   @Transactional(readOnly = true)
   public RankDtos.BadgeStatusResponse status(String userId) {
-    List<BadgeCatalog> catalog = badgeCatalogRepository.findAll();
+    // 10개 공식 배지만 조회
+    List<BadgeCatalog> allCatalogs = badgeCatalogRepository.findAll();
+    List<BadgeCatalog> catalog = allCatalogs.stream()
+        .filter(c -> c.getCode() != null && OFFICIAL_BADGE_CODES.contains(c.getCode()))
+        .toList();
+    
     List<UserBadge> earned = userBadgeRepository.findByUserIdOrderByEarnedAtDesc(userId);
     Set<Long> earnedIds = earned.stream().map(UserBadge::getBadgeId).collect(Collectors.toSet());
-
+    
+    // 10개 배지 중 획득한 배지만 필터링
+    Set<Long> officialBadgeIds = catalog.stream()
+        .map(BadgeCatalog::getId)
+        .collect(Collectors.toSet());
+    
     List<RankDtos.BadgeSummary> summaries = earned.stream()
+        .filter(b -> officialBadgeIds.contains(b.getBadgeId()))  // 10개 배지만 포함
         .map(b -> {
           BadgeCatalog meta = catalog.stream()
               .filter(c -> c.getId().equals(b.getBadgeId()))
@@ -118,12 +121,9 @@ public class BadgeService {
   public RankDtos.BadgeStatusResponse evaluate(String userId) {
     log.info("Starting badge evaluation for user: {}", userId);
     
-    // user_answer 테이블 체크는 트랜잭션 밖에서 먼저 수행 (테이블이 없어도 에러가 트랜잭션에 영향을 주지 않도록)
-    boolean hasFirstSolve = checkFirstSolveSafely(userId);
-    
-    // 트랜잭션 내에서 배지 평가 및 저장
+    // 트랜잭션 내에서 배지 평가 및 저장 (10개 배지만 체크)
     try {
-      evaluateAndAwardBadges(userId, hasFirstSolve);
+      evaluateAndAwardBadges(userId);
     } catch (Exception e) {
       log.error("Failed to evaluate and award badges for user {}: {}", userId, e.getMessage(), e);
     }
@@ -132,26 +132,9 @@ public class BadgeService {
     return getStatusSafely(userId);
   }
   
-  /**
-   * user_answer 테이블 체크를 트랜잭션 밖에서 안전하게 수행
-   */
-  private boolean checkFirstSolveSafely(String userId) {
-    try {
-      long count = userAnswerRepository.countByUserId(userId);
-      return count >= 1;
-    } catch (Exception e) {
-      // 테이블이 없거나 다른 에러 발생 시 false 반환 (에러를 로그에만 기록)
-      if (e.getMessage() != null && e.getMessage().contains("doesn't exist")) {
-        log.debug("user_answer table does not exist, skipping FIRST_SOLVE badge check");
-      } else {
-        log.warn("Failed to check FIRST_SOLVE badge for user {}: {}", userId, e.getMessage());
-      }
-      return false;
-    }
-  }
   
   @Transactional
-  private void evaluateAndAwardBadges(String userId, boolean hasFirstSolve) {
+  private void evaluateAndAwardBadges(String userId) {
     try {
       // code가 null인 배지는 제외, 중복 키가 있으면 첫 번째 것만 사용
       List<BadgeCatalog> allCatalogs = badgeCatalogRepository.findAll();
@@ -178,65 +161,7 @@ public class BadgeService {
 
       List<BadgeCatalog> newlyEarned = new ArrayList<>();
 
-      // FIRST_SOLVE 배지 체크 (이미 트랜잭션 밖에서 확인한 결과 사용)
-      maybeAward(userId, "FIRST_SOLVE", catalogByCode, alreadyEarned,
-          () -> hasFirstSolve,
-          newlyEarned);
-
-      maybeAward(userId, "STREAK_BRONZE", catalogByCode, alreadyEarned,
-          () -> {
-            try {
-              return userStreakRepository.findById(userId)
-                  .map(UserStreak::getCurrentDays)
-                  .orElse(0) >= 7;
-            } catch (Exception e) {
-              log.warn("Failed to check STREAK_BRONZE badge for user {}: {}", userId, e.getMessage());
-              return false;
-            }
-          },
-          newlyEarned);
-
-      maybeAward(userId, "XP_MASTER", catalogByCode, alreadyEarned,
-          () -> {
-            try {
-              return userXpWalletRepository.findById(userId)
-                  .map(UserXpWallet::getXpTotal)
-                  .orElse(0L) >= 3_000;
-            } catch (Exception e) {
-              log.warn("Failed to check XP_MASTER badge for user {}: {}", userId, e.getMessage());
-              return false;
-            }
-          },
-          newlyEarned);
-
-      maybeAward(userId, "WEEKLY_WARRIOR", catalogByCode, alreadyEarned,
-          () -> {
-            try {
-              return reportWeeklyRepository.findTopByUserIdOrderByWeekIsoDesc(userId)
-                  .map(ReportWeekly::getSolvedCount)
-                  .orElse(0) >= 70;
-            } catch (Exception e) {
-              log.warn("Failed to check WEEKLY_WARRIOR badge for user {}: {}", userId, e.getMessage());
-              return false;
-            }
-          },
-          newlyEarned);
-
-      maybeAward(userId, "TAG_SPECIALIST", catalogByCode, alreadyEarned,
-          () -> {
-            try {
-              return reportTagSkillRepository.findByUserIdOrderByAccuracyDesc(userId).stream()
-                  .anyMatch(skill -> skill.getAccuracy() != null 
-                      && skill.getAccuracy().doubleValue() >= 90.0 
-                      && skill.getTotal() >= 20);
-            } catch (Exception e) {
-              log.warn("Failed to check TAG_SPECIALIST badge for user {}: {}", userId, e.getMessage());
-              return false;
-            }
-          },
-          newlyEarned);
-
-      // 새로운 10개 배지 체크
+      // 10개 배지만 체크 (V6 마이그레이션에서 등록한 공식 배지)
       log.debug("Checking skill counter for user {}", userId);
       UserSkillCounter skillCounter = userSkillCounterRepository.findByUserId(userId)
           .orElseGet(() -> {

@@ -15,6 +15,21 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.ssl.enable: false
+      mail.smtp.connectiontimeout: 30000
+      mail.smtp.timeout: 60000
+      mail.smtp.writetimeout: 30000
+      mail.debug: false
+      mail.smtp.ssl.trust: smtp.gmail.com
 
 eureka:
   client:
@@ -28,6 +43,9 @@ eureka:
 auth:
   jwt:
     secret: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}
+
+mail:
+  enabled: ${MAIL_ENABLED:true}
 
 management:
   endpoints:

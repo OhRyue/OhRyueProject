@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.community.service;
 
+import com.OhRyue.certpilot.community.client.NotificationClient;
 import com.OhRyue.certpilot.community.domain.Comment;
 import com.OhRyue.certpilot.community.domain.Post;
 import com.OhRyue.certpilot.community.domain.ReactionTargetType;
@@ -11,6 +12,7 @@ import com.OhRyue.certpilot.community.repository.PostRepository;
 import com.OhRyue.certpilot.community.repository.ReactionRepository;
 import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +25,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CommentService {
@@ -30,6 +33,7 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final ReactionRepository reactionRepository;
+    private final NotificationClient notificationClient;
     private final Clock clock = Clock.systemUTC();
 
     @Timed(value = "community.comments.create", histogram = true)
@@ -47,7 +51,77 @@ public class CommentService {
         commentRepository.save(comment);
 
         post.setCommentCount(post.getCommentCount() + 1);
+
+        // 알림 발송
+        sendCommentNotifications(post, comment, authorId);
+
         return comment;
+    }
+
+    private void sendCommentNotifications(Post post, Comment comment, String commentAuthorId) {
+        try {
+            String postAuthorId = post.getAuthorId();
+            String postTitle = post.getTitle();
+            if (postTitle != null && postTitle.length() > 50) {
+                postTitle = postTitle.substring(0, 47) + "...";
+            }
+
+            log.info("Sending comment notifications: postId={}, postAuthorId={}, commentAuthorId={}", 
+                    post.getId(), postAuthorId, commentAuthorId);
+
+            // 1. 게시글 작성자에게 알림 (본인이 댓글 단 경우 제외)
+            if (!postAuthorId.equals(commentAuthorId)) {
+                log.info("Creating POST_COMMENTED notification for user: {}", postAuthorId);
+                try {
+                    notificationClient.create(new com.OhRyue.certpilot.community.client.NotificationClient.NotificationCreateRequest(
+                            postAuthorId,
+                            "POST_COMMENTED",
+                            "게시글에 새 댓글이 달렸어요",
+                            String.format("'%s' 게시글에 새로운 댓글이 달렸습니다.", postTitle != null ? postTitle : "게시글"),
+                            java.util.Map.of(
+                                    "postId", post.getId(),
+                                    "commentId", comment.getId(),
+                                    "actorUserId", commentAuthorId
+                            )
+                    ));
+                    log.info("Successfully created POST_COMMENTED notification for user: {}", postAuthorId);
+                } catch (Exception e) {
+                    log.error("Failed to create POST_COMMENTED notification for user {}: {}", postAuthorId, e.getMessage(), e);
+                }
+            }
+
+            // 2. 이전에 댓글을 단 사용자들에게 알림
+            List<String> priorCommentUserIds = commentRepository.findDistinctUserIdsByPostId(post.getId());
+            log.info("Found {} prior comment users for postId={}", priorCommentUserIds.size(), post.getId());
+            
+            for (String targetUserId : priorCommentUserIds) {
+                // 본인, 게시글 작성자는 제외 (이미 위에서 처리)
+                if (targetUserId.equals(commentAuthorId) || targetUserId.equals(postAuthorId)) {
+                    continue;
+                }
+
+                log.info("Creating COMMENT_REPLIED notification for user: {}", targetUserId);
+                try {
+                    notificationClient.create(new com.OhRyue.certpilot.community.client.NotificationClient.NotificationCreateRequest(
+                            targetUserId,
+                            "COMMENT_REPLIED",
+                            "댓글이 달린 게시글에 새 댓글이 생겼어요",
+                            String.format("'%s' 게시글에 새로운 댓글이 달렸습니다.", postTitle != null ? postTitle : "게시글"),
+                            java.util.Map.of(
+                                    "postId", post.getId(),
+                                    "commentId", comment.getId(),
+                                    "actorUserId", commentAuthorId
+                            )
+                    ));
+                    log.info("Successfully created COMMENT_REPLIED notification for user: {}", targetUserId);
+                } catch (Exception e) {
+                    log.error("Failed to create COMMENT_REPLIED notification for user {}: {}", targetUserId, e.getMessage(), e);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to send comment notifications: postId={}, commentId={}, authorId={}",
+                    post.getId(), comment.getId(), commentAuthorId, e);
+        }
     }
 
     @Timed(value = "community.comments.list", histogram = true)

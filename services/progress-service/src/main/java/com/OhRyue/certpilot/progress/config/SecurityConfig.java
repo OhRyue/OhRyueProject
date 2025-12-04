@@ -49,6 +49,8 @@ public class SecurityConfig {
             .requestMatchers("/actuator/**").permitAll()
             // 내부 서비스 간 통신용 API는 인증 완화 (서비스 간 통신용)
             .requestMatchers("/api/progress/internal/**").permitAll()
+            // 알림 생성 API는 내부 서비스 간 통신용이므로 인증 불필요
+            .requestMatchers("/api/progress/notifications/create").permitAll()
             // Progress API는 항상 로그인 사용자 기준이므로 JWT 필수
             .requestMatchers("/api/progress/**").authenticated()
             .anyRequest().permitAll()

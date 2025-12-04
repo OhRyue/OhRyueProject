@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.community.service;
 
+import com.OhRyue.certpilot.community.client.NotificationClient;
 import com.OhRyue.certpilot.community.domain.Comment;
 import com.OhRyue.certpilot.community.domain.Post;
 import com.OhRyue.certpilot.community.domain.Reaction;
@@ -12,12 +13,15 @@ import com.OhRyue.certpilot.community.repository.PostRepository;
 import com.OhRyue.certpilot.community.repository.ReactionRepository;
 import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReactionService {
@@ -25,6 +29,7 @@ public class ReactionService {
     private final ReactionRepository reactionRepository;
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
+    private final NotificationClient notificationClient;
     private final Clock clock = Clock.systemUTC();
 
     @Timed(value = "community.reactions.toggle", histogram = true)
@@ -55,9 +60,56 @@ public class ReactionService {
             reactionRepository.save(reaction);
             adjustLikeCount(type, targetId, +1);
             toggledOn = true;
+
+            // 좋아요가 추가된 경우 알림 발송 (게시글에만)
+            if (type == ReactionTargetType.POST) {
+                sendPostLikedNotification(userId, targetId);
+            }
         }
         likeCount = reactionRepository.countByTargetTypeAndTargetId(type, targetId);
         return new ReactionDtos.ToggleResponse(type, targetId, toggledOn, likeCount);
+    }
+
+    private void sendPostLikedNotification(String likeUserId, Long postId) {
+        try {
+            Post post = postRepository.findByIdAndDeletedAtIsNull(postId)
+                    .orElse(null);
+            if (post == null) {
+                log.warn("Post not found for notification: postId={}", postId);
+                return;
+            }
+
+            String postAuthorId = post.getAuthorId();
+            // 본인 게시글에 좋아요를 누른 경우 알림 발송하지 않음
+            if (postAuthorId.equals(likeUserId)) {
+                log.debug("Skipping notification: user liked their own post. postId={}, userId={}", postId, likeUserId);
+                return;
+            }
+
+            String postTitle = post.getTitle();
+            if (postTitle != null && postTitle.length() > 50) {
+                postTitle = postTitle.substring(0, 47) + "...";
+            }
+
+            log.info("Creating POST_LIKED notification: postId={}, postAuthorId={}, likeUserId={}", 
+                    postId, postAuthorId, likeUserId);
+            
+            notificationClient.create(new NotificationClient.NotificationCreateRequest(
+                    postAuthorId,
+                    "POST_LIKED",
+                    "게시글에 좋아요가 달렸어요",
+                    String.format("'%s' 게시글에 새로운 좋아요가 달렸습니다.", postTitle != null ? postTitle : "게시글"),
+                    Map.of(
+                            "postId", postId,
+                            "actorUserId", likeUserId
+                    )
+            ));
+            
+            log.info("Successfully created POST_LIKED notification for user: {}", postAuthorId);
+        } catch (Exception e) {
+            log.error("Failed to send post liked notification: postId={}, likeUserId={}, error={}", 
+                    postId, likeUserId, e.getMessage(), e);
+        }
     }
 
     private void adjustLikeCount(ReactionTargetType type, Long targetId, int delta) {
