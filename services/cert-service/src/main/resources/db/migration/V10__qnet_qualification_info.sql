@@ -14,3 +14,4 @@ CREATE TABLE IF NOT EXISTS qnet_qualification_info (
   INDEX ix_qnet_qual_info_jm_infogb (jm_cd, infogb)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+

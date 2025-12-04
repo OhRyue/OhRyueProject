@@ -15,3 +15,4 @@ public interface QnetQualificationInfoRepository extends JpaRepository<QnetQuali
     void deleteByJmCd(String jmCd);
 }
 
+
