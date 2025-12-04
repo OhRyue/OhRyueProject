@@ -1,8 +1,10 @@
 package com.OhRyue.certpilot.versus.service;
 
+import com.OhRyue.certpilot.versus.client.AccountServiceClient;
 import com.OhRyue.certpilot.versus.client.ProgressServiceClient;
 import com.OhRyue.certpilot.versus.client.StudyServiceClient;
 import com.OhRyue.certpilot.versus.config.MonitoringConfig;
+import java.util.Random;
 import com.OhRyue.certpilot.versus.domain.*;
 import com.OhRyue.certpilot.versus.dto.VersusDtos;
 import com.OhRyue.certpilot.versus.repository.*;
@@ -61,8 +63,10 @@ public class VersusService {
     private final ObjectMapper objectMapper;
     private final StudyServiceClient studyServiceClient;
     private final ProgressServiceClient progressServiceClient;
+    private final AccountServiceClient accountServiceClient;
     private final MonitoringConfig monitoringConfig;
     private final RewardRetryService rewardRetryService;
+    private final Random random = new Random();
 
     // 모드별 인원 제한
     private static final int DUEL_MAX_PARTICIPANTS = 2;
@@ -674,15 +678,39 @@ public class VersusService {
         
         List<MatchAnswer> answers = answerRepository.findByRoomIdAndQuestionId(roomId, questionId);
         
+        // 사용자 프로필 정보 조회 (닉네임, 스킨 ID)
+        List<String> userIds = answers.stream()
+                .map(MatchAnswer::getUserId)
+                .distinct()
+                .toList();
+        Map<String, AccountServiceClient.ProfileSummary> profileMap = new HashMap<>();
+        try {
+            List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
+            profileMap = profiles.stream()
+                    .collect(Collectors.toMap(
+                            AccountServiceClient.ProfileSummary::userId, 
+                            profile -> profile,
+                            (a, b) -> a
+                    ));
+        } catch (Exception e) {
+            log.warn("사용자 프로필 조회 실패: roomId={}, questionId={}, error={}", roomId, questionId, e.getMessage());
+        }
+        
+        Map<String, AccountServiceClient.ProfileSummary> finalProfileMap = profileMap;
         List<VersusDtos.AnswerInfo> answerInfos = answers.stream()
-                .map(answer -> new VersusDtos.AnswerInfo(
-                        answer.getUserId(),
-                        answer.getUserAnswer(), // 단답식/서술형 답안 텍스트
-                        answer.isCorrect(),
-                        answer.getTimeMs(),
-                        answer.getScoreDelta(),
-                        answer.getSubmittedAt()
-                ))
+                .map(answer -> {
+                    AccountServiceClient.ProfileSummary profile = finalProfileMap.get(answer.getUserId());
+                    return new VersusDtos.AnswerInfo(
+                            answer.getUserId(),
+                            profile != null ? profile.nickname() : null,
+                            determineSkinId(answer.getUserId(), profile),
+                            answer.getUserAnswer(), // 단답식/서술형 답안 텍스트
+                            answer.isCorrect(),
+                            answer.getTimeMs(),
+                            answer.getScoreDelta(),
+                            answer.getSubmittedAt()
+                    );
+                })
                 .toList();
         
         return new VersusDtos.QuestionAnswersResp(questionId, answerInfos);
@@ -1148,17 +1176,38 @@ public class VersusService {
                 log.info("부활한 사용자가 REVIVAL 문제 정답으로 다시 살아남: roomId={}, userId={}, questionId={}",
                         room.getId(), participant.getUserId(), question.getQuestionId());
                 return true;
-            } else if (!correct && state.isRevived() && !state.isAlive()) {
-                // 부활한 사용자가 REVIVAL 문제를 틀리면 부활 기회 상실 (이미 탈락 상태이므로 변경 없음)
+            } else if (!correct && state.isRevived()) {
+                // 부활한 사용자가 REVIVAL 문제를 틀리면 탈락 처리
+                if (state.isAlive()) {
+                    // alive=true인 경우 false로 변경
+                    state.setAlive(false);
+                }
+                state.setRevived(false); // 부활 기회 상실
+                goldenbellStateRepository.save(state);
                 recordEvent(room.getId(), "GOLDENBELL_REVIVAL_FAILED", Map.of(
                         "userId", participant.getUserId(),
                         "mode", "GOLDENBELL",
                         "round", question.getRoundNo(),
                         "questionId", question.getQuestionId()
                 ));
-                return false;
+                log.info("부활한 사용자가 REVIVAL 문제 오답으로 탈락: roomId={}, userId={}, questionId={}",
+                        room.getId(), participant.getUserId(), question.getQuestionId());
+                return true;
+            } else if (!correct && state.isAlive() && !state.isRevived()) {
+                // 일반 참가자(alive=true, revived=false)가 REVIVAL 문제를 틀리면 탈락
+                state.setAlive(false);
+                goldenbellStateRepository.save(state);
+                recordEvent(room.getId(), "PLAYER_ELIMINATED", Map.of(
+                        "userId", participant.getUserId(),
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "phase", "REVIVAL"
+                ));
+                log.info("일반 참가자가 REVIVAL 문제 오답으로 탈락: roomId={}, userId={}, questionId={}",
+                        room.getId(), participant.getUserId(), question.getQuestionId());
+                return true;
             }
-            // REVIVAL phase에서는 일반 탈락 처리하지 않음 (부활 기회이므로)
+            // REVIVAL phase에서 정답을 맞춘 일반 참가자는 그대로 alive 유지
             return false;
         }
 
@@ -1206,13 +1255,34 @@ public class VersusService {
         Map<String, GoldenbellState> goldenState = goldenbellStateRepository.findByRoomId(roomId).stream()
                 .collect(Collectors.toMap(GoldenbellState::getUserId, g -> g));
 
+        // 사용자 프로필 정보 조회 (닉네임, 스킨 ID)
+        List<String> userIds = participants.stream()
+                .map(MatchParticipant::getUserId)
+                .toList();
+        Map<String, AccountServiceClient.ProfileSummary> profileMap = new HashMap<>();
+        try {
+            List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
+            profileMap = profiles.stream()
+                    .collect(Collectors.toMap(
+                            AccountServiceClient.ProfileSummary::userId, 
+                            profile -> profile,
+                            (a, b) -> a
+                    ));
+        } catch (Exception e) {
+            log.warn("사용자 프로필 조회 실패: roomId={}, error={}", roomId, e.getMessage());
+        }
+
+        Map<String, AccountServiceClient.ProfileSummary> finalProfileMap = profileMap;
         List<VersusDtos.ParticipantSummary> participantSummaries = participants.stream()
                 .map(p -> {
                     GoldenbellState state = goldenState.get(p.getUserId());
                     boolean alive = state != null ? state.isAlive() : !p.isEliminated();
                     boolean revived = state != null && state.isRevived();
+                    AccountServiceClient.ProfileSummary profile = finalProfileMap.get(p.getUserId());
                     return new VersusDtos.ParticipantSummary(
                             p.getUserId(),
+                            profile != null ? profile.nickname() : null,
+                            determineSkinId(p.getUserId(), profile),
                             p.getFinalScore(),
                             p.getPlayerRank(),
                             alive,
@@ -1276,6 +1346,23 @@ public class VersusService {
         List<MatchParticipant> participants = participantRepository.findByRoomId(roomId);
         Map<String, GoldenbellState> goldenState = goldenbellStateRepository.findByRoomId(roomId).stream()
                 .collect(Collectors.toMap(GoldenbellState::getUserId, g -> g));
+
+        // 사용자 프로필 정보 조회 (닉네임, 스킨 ID)
+        List<String> userIds = participants.stream()
+                .map(MatchParticipant::getUserId)
+                .toList();
+        Map<String, AccountServiceClient.ProfileSummary> profileMap = new HashMap<>();
+        try {
+            List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
+            profileMap = profiles.stream()
+                    .collect(Collectors.toMap(
+                            AccountServiceClient.ProfileSummary::userId, 
+                            profile -> profile,
+                            (a, b) -> a
+                    ));
+        } catch (Exception e) {
+            log.warn("사용자 프로필 조회 실패: roomId={}, error={}", roomId, e.getMessage());
+        }
 
         Map<Long, MatchQuestion> questionMap = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId).stream()
                 .collect(Collectors.toMap(
@@ -1458,6 +1545,7 @@ public class VersusService {
         Map<String, MatchParticipant> participantMap = participants.stream()
                 .collect(Collectors.toMap(MatchParticipant::getUserId, p -> p));
 
+        Map<String, AccountServiceClient.ProfileSummary> finalProfileMap = profileMap;
         for (ScoreboardIntermediate intermediate : intermediates) {
             // 토너먼트 모드: 현재 라운드의 활성 참가자만 포함
             if (activeUserIds != null && !activeUserIds.contains(intermediate.userId())) {
@@ -1475,8 +1563,11 @@ public class VersusService {
             previousCorrect = intermediate.correct();
             previousTime = totalTime;
 
+            AccountServiceClient.ProfileSummary profile = finalProfileMap.get(intermediate.userId());
             finalItems.add(new VersusDtos.ScoreBoardItem(
                     intermediate.userId(),
+                    profile != null ? profile.nickname() : null,
+                    determineSkinId(intermediate.userId(), profile),
                     intermediate.correct(),
                     intermediate.total(),
                     intermediate.score(),
@@ -3829,6 +3920,35 @@ public class VersusService {
             List<String> finalParts,
             String scoring
     ) {
+    }
+
+    /**
+     * 스킨 ID 결정 (봇인 경우 userId 기반 고정 스킨 ID 1~17)
+     */
+    private Long determineSkinId(String userId, AccountServiceClient.ProfileSummary profile) {
+        boolean isBot = userId.startsWith("BOT_");
+        
+        if (profile != null && profile.skinId() != null) {
+            return profile.skinId();
+        }
+        
+        // 프로필이 없거나 skinId가 null인 경우
+        if (isBot) {
+            // 봇인 경우 userId 기반 고정 스킨 ID (1~17)
+            return getFixedSkinIdForBot(userId);
+        }
+        
+        // 일반 사용자인 경우 기본값 1
+        return 1L;
+    }
+
+    /**
+     * 봇의 userId를 기반으로 고정된 스킨 ID를 반환 (1~17)
+     */
+    private Long getFixedSkinIdForBot(String userId) {
+        int hash = userId.hashCode();
+        // 음수 방지 및 1~17 범위로 매핑
+        return (long) (Math.abs(hash) % 17 + 1);
     }
 
     private static class FinalRoundScore {

@@ -104,6 +104,10 @@ public class VersusDtos {
 
   public record ParticipantSummary(
       String userId,
+      @Schema(description = "사용자 닉네임", example = "플레이어123")
+      String nickname,
+      @Schema(description = "사용자 스킨 ID", example = "1")
+      Long skinId,
       Integer finalScore,
       Integer rank,
       boolean alive,
@@ -122,6 +126,10 @@ public class VersusDtos {
 
   public record ScoreBoardItem(
       String userId,
+      @Schema(description = "사용자 닉네임", example = "플레이어123")
+      String nickname,
+      @Schema(description = "사용자 스킨 ID", example = "1")
+      Long skinId,
       int correctCount,
       int totalCount,
       int score,
@@ -195,6 +203,10 @@ public class VersusDtos {
    */
   public record AnswerInfo(
       String userId,
+      @Schema(description = "사용자 닉네임", example = "플레이어123")
+      String nickname,
+      @Schema(description = "사용자 스킨 ID", example = "1")
+      Long skinId,
       String userAnswer,
       boolean correct,
       Integer timeMs,

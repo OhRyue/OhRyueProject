@@ -2,7 +2,149 @@
 
 ## 📋 변경 개요
 
-`GET /api/versus/rooms/{roomId}/scoreboard` 엔드포인트의 응답에 **현재 진행 중인 문제 정보**가 추가되었습니다.
+1. (최신) 모든 배틀 API 응답에 **참가자 닉네임과 스킨 ID** 추가
+2. `GET /api/versus/rooms/{roomId}/scoreboard` 엔드포인트의 응답에 **현재 진행 중인 문제 정보** 추가
+
+---
+
+## 🆕 최신 변경사항 (2025-12-04)
+
+### 참가자 닉네임과 스킨 ID 추가
+
+모든 배틀 관련 API 응답에 참가자의 **닉네임**과 **스킨 ID**가 추가되었습니다.
+
+#### 영향을 받는 DTO:
+
+1. **ParticipantSummary** (방 상세 정보, 방 참가)
+   - `nickname` 필드 추가: 사용자 닉네임
+   - `skinId` 필드 추가: 사용자 스킨 ID
+
+2. **ScoreBoardItem** (스코어보드)
+   - `nickname` 필드 추가: 사용자 닉네임
+   - `skinId` 필드 추가: 사용자 스킨 ID
+
+3. **AnswerInfo** (답안 정보, 골든벨 전용)
+   - `nickname` 필드 추가: 사용자 닉네임
+   - `skinId` 필드 추가: 사용자 스킨 ID
+
+#### 변경된 응답 예시:
+
+**방 상세 정보 (`GET /api/versus/rooms/{roomId}`)**
+```json
+{
+  "room": { ... },
+  "participants": [
+    {
+      "userId": "user1",
+      "nickname": "플레이어123",
+      "skinId": 1,
+      "finalScore": 5000,
+      "rank": 1,
+      "alive": true,
+      "revived": false,
+      "joinedAt": "2025-12-04T10:00:00Z"
+    }
+  ],
+  "questions": [ ... ],
+  "scoreboard": { ... }
+}
+```
+
+**스코어보드 (`GET /api/versus/rooms/{roomId}/scoreboard`)**
+```json
+{
+  "roomId": 1313,
+  "status": "ONGOING",
+  "items": [
+    {
+      "userId": "user1",
+      "nickname": "플레이어123",
+      "skinId": 1,
+      "correctCount": 5,
+      "totalCount": 10,
+      "score": 5375,
+      "totalTimeMs": 56822,
+      "rank": 1,
+      "alive": true,
+      "revived": false
+    },
+    {
+      "userId": "user2",
+      "nickname": "게스트456",
+      "skinId": 3,
+      "correctCount": 4,
+      "totalCount": 10,
+      "score": 4800,
+      "totalTimeMs": 62100,
+      "rank": 2,
+      "alive": true,
+      "revived": false
+    }
+  ],
+  "currentQuestion": { ... }
+}
+```
+
+**답안 정보 - 골든벨 전용 (`GET /api/versus/rooms/{roomId}/questions/{questionId}/answers`)**
+```json
+{
+  "questionId": 92,
+  "answers": [
+    {
+      "userId": "user1",
+      "nickname": "플레이어123",
+      "skinId": 1,
+      "userAnswer": "A",
+      "correct": true,
+      "timeMs": 3500,
+      "scoreDelta": 1175,
+      "submittedAt": "2025-12-04T10:00:05Z"
+    },
+    {
+      "userId": "user2",
+      "nickname": "게스트456",
+      "skinId": 3,
+      "userAnswer": "B",
+      "correct": false,
+      "timeMs": 4200,
+      "scoreDelta": 0,
+      "submittedAt": "2025-12-04T10:00:06Z"
+    }
+  ]
+}
+```
+
+#### 필드 설명:
+
+| 필드 | 타입 | 설명 | 예시 | 기본값 |
+|------|------|------|------|--------|
+| `nickname` | `String` | 사용자 닉네임 | `"플레이어123"` | `null` (프로필 조회 실패 시) |
+| `skinId` | `Long` | 사용자 스킨 ID | `1` | `1` (프로필 조회 실패 시) |
+
+#### 주의사항:
+
+- `nickname`이 `null`일 수 있습니다 (account-service 호출 실패 시)
+- `nickname`이 `null`일 때는 `userId`를 대신 표시하는 것을 권장합니다
+- `skinId`는 프로필 조회 실패 시 기본값 `1`이 반환됩니다
+
+#### 사용 예시:
+
+```javascript
+// 스코어보드에서 닉네임과 스킨 표시
+const response = await fetch(`/api/versus/rooms/${roomId}/scoreboard`);
+const scoreboard = await response.json();
+
+scoreboard.items.forEach(item => {
+  const displayName = item.nickname || item.userId; // nickname이 없으면 userId 표시
+  const skinId = item.skinId;
+  
+  console.log(`${displayName} (스킨 ${skinId}): ${item.score}점`);
+  // 예: "플레이어123 (스킨 1): 5375점"
+  
+  // UI에 표시
+  renderPlayer(displayName, skinId, item.score, item.rank);
+});
+```
 
 ---
 
@@ -36,6 +178,8 @@
   "items": [
     {
       "userId": "user1",
+      "nickname": "플레이어123",
+      "skinId": 1,
       "correctCount": 5,
       "totalCount": 10,
       "score": 5375,
