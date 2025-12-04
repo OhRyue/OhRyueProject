@@ -47,6 +47,7 @@ public class VersusService {
     private static final int BASE_SCORE = 1000;
     private static final int SPEED_BONUS_MAX = 200;
     private static final int MAX_TIMELINE_FETCH = 200;
+    private static final int QUESTION_INTERMISSION_SEC = 5; // 문제 간 쉬는 시간 (초)
 
     private final MatchRoomRepository roomRepository;
     private final MatchParticipantRepository participantRepository;
@@ -360,15 +361,18 @@ public class VersusService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Eliminated participant cannot submit answers");
         }
 
+        MatchQuestion question = resolveQuestion(roomId, req.questionId());
+
         if (room.getMode() == MatchMode.GOLDENBELL) {
             GoldenbellState state = goldenbellStateRepository.findByRoomIdAndUserId(roomId, userId)
                     .orElse(null);
             if (state != null && !state.isAlive()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Eliminated participant cannot submit answers");
+                // REVIVAL phase 문제에서는 부활한 사용자(revived=true)도 참여 가능
+                if (question.getPhase() != MatchPhase.REVIVAL || !state.isRevived()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Eliminated participant cannot submit answers");
+                }
             }
         }
-
-        MatchQuestion question = resolveQuestion(roomId, req.questionId());
 
         // 문제 시작 시점 기록 (처음 답안 제출 시)
         // 답안 제출 전에 기록해야 정확한 시간 계산 가능
@@ -488,6 +492,108 @@ public class VersusService {
     public VersusDtos.ScoreBoardResp scoreboard(Long roomId) {
         MatchRoom room = findRoomOrThrow(roomId);
         VersusDtos.ScoreBoardResp resp = computeScoreboard(room);
+        
+        // 골든벨 모드에서 전원 탈락 체크 및 게임 종료 처리
+        if (room.getMode() == MatchMode.GOLDENBELL && room.getStatus() == MatchStatus.ONGOING) {
+            List<GoldenbellState> states = goldenbellStateRepository.findByRoomId(roomId);
+            long aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+            
+            if (aliveCount == 0) {
+                log.warn("골든벨 scoreboard API 호출 시 전원 탈락 감지: roomId={}, aliveCount={}. 게임 종료",
+                        roomId, aliveCount);
+                String winner = resp.items().isEmpty() ? null : resp.items().get(0).userId();
+                recordEvent(roomId, "MATCH_FINISHED", Map.of(
+                        "mode", "GOLDENBELL",
+                        "winner", winner,
+                        "aliveCount", aliveCount,
+                        "reason", "ALL_ELIMINATED_ON_SCOREBOARD_CHECK"
+                ));
+                room.setStatus(MatchStatus.DONE);
+                roomRepository.save(room);
+                
+                // progress-service에 결과 통지 및 보상 지급
+                notifyProgressService(room, resp);
+                
+                // 상태 변경 후 스코어보드 재계산
+                resp = computeScoreboard(room);
+            }
+        }
+        
+        // intermission과 currentQuestion이 모두 null이고 questionStartAt 시간이 지났으면 다음 문제 시작
+        if (room.getStatus() == MatchStatus.ONGOING && resp.currentQuestion() == null && resp.intermission() == null) {
+            try {
+                // 가장 최근 INTERMISSION_STARTED 이벤트 찾기
+                List<MatchEvent> intermissionEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                        roomId, "INTERMISSION_STARTED");
+                
+                Optional<MatchEvent> latestIntermission = intermissionEvents.stream()
+                        .max(Comparator.comparing(MatchEvent::getCreatedAt));
+                
+                if (latestIntermission.isPresent()) {
+                    MatchEvent event = latestIntermission.get();
+                    if (event.getPayloadJson() != null) {
+                        Map<String, Object> payload = objectMapper.readValue(
+                                event.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                        
+                        String questionStartAtStr = (String) payload.get("questionStartAt");
+                        if (questionStartAtStr != null) {
+                            Instant questionStartAt = Instant.parse(questionStartAtStr);
+                            Instant now = Instant.now();
+                            
+                            // questionStartAt 시간이 지났으면 다음 문제 시작
+                            if (now.isAfter(questionStartAt) || now.equals(questionStartAt)) {
+                                Long nextQuestionId = payload.get("nextQuestionId") != null 
+                                        ? Long.valueOf(payload.get("nextQuestionId").toString()) 
+                                        : null;
+                                
+                                if (nextQuestionId != null) {
+                                    Optional<MatchQuestion> nextQuestion = questionRepository.findByRoomIdAndQuestionId(roomId, nextQuestionId);
+                                    if (nextQuestion.isPresent()) {
+                                        MatchQuestion question = nextQuestion.get();
+                                        
+                                        // QUESTION_STARTED 이벤트가 이미 기록되었는지 확인
+                                        List<MatchEvent> questionEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                                                roomId, "QUESTION_STARTED");
+                                        boolean alreadyStarted = questionEvents.stream()
+                                                .anyMatch(e -> {
+                                                    try {
+                                                        if (e.getPayloadJson() == null) return false;
+                                                        Map<String, Object> qPayload = objectMapper.readValue(
+                                                                e.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                                                        Object qId = qPayload.get("questionId");
+                                                        return qId != null && nextQuestionId.equals(Long.valueOf(qId.toString()));
+                                                    } catch (Exception ex) {
+                                                        return false;
+                                                    }
+                                                });
+                                        
+                                        if (!alreadyStarted) {
+                                            // QUESTION_STARTED 이벤트를 현재 시간으로 업데이트 (실제 시작)
+                                            recordEvent(roomId, "QUESTION_STARTED", Map.of(
+                                                    "questionId", nextQuestionId,
+                                                    "roundNo", question.getRoundNo(),
+                                                    "phase", question.getPhase().name(),
+                                                    "startedAt", now.toString(),
+                                                    "allParticipants", true
+                                            ));
+                                            
+                                            log.info("골든벨 scoreboard API에서 다음 문제 시작: roomId={}, questionId={}, roundNo={}, phase={}",
+                                                    roomId, nextQuestionId, question.getRoundNo(), question.getPhase());
+                                            
+                                            // 스코어보드 재계산
+                                            resp = computeScoreboard(room);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("골든벨 scoreboard API에서 다음 문제 시작 처리 중 오류: roomId={}, error={}", roomId, e.getMessage(), e);
+            }
+        }
+        
         realtimeService.pushSnapshot(roomId, resp, null, null);
         return resp;
     }
@@ -628,17 +734,31 @@ public class VersusService {
             Optional<MatchQuestion> nextQuestion = findNextQuestion(room.getId(), question);
             if (nextQuestion.isPresent()) {
                 MatchQuestion next = nextQuestion.get();
-                // 다음 문제 시작 이벤트 기록 (모든 참가자 공통)
-                Instant startedAt = Instant.now();
+                
+                // 쉬는 시간 시작 이벤트 기록
+                Instant intermissionStart = Instant.now();
+                recordEvent(room.getId(), "INTERMISSION_STARTED", Map.of(
+                        "nextQuestionId", next.getQuestionId(),
+                        "nextRoundNo", next.getRoundNo(),
+                        "nextPhase", next.getPhase().name(),
+                        "durationSec", QUESTION_INTERMISSION_SEC,
+                        "startedAt", intermissionStart.toString(),
+                        "questionStartAt", intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC).toString()
+                ));
+                
+                // 5초 후 문제 시작 시간 계산
+                Instant questionStartTime = intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC);
+                
+                // 다음 문제 시작 이벤트 기록 (startedAt을 미래 시간으로 설정)
                 recordEvent(room.getId(), "QUESTION_STARTED", Map.of(
                         "questionId", next.getQuestionId(),
                         "roundNo", next.getRoundNo(),
                         "phase", next.getPhase().name(),
-                        "startedAt", startedAt.toString(),
+                        "startedAt", questionStartTime.toString(),
                         "allParticipants", true // 모든 참가자 공통 시작
                 ));
-                log.info("1:1 배틀 다음 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}, orderNo={}, startedAt={}",
-                        room.getId(), next.getQuestionId(), next.getRoundNo(), next.getOrderNo(), startedAt);
+                log.info("1:1 배틀 쉬는 시간 시작: roomId={}, duration={}초, 다음 문제 시작 시간={}, questionId={}, roundNo={}, orderNo={}",
+                        room.getId(), QUESTION_INTERMISSION_SEC, questionStartTime, next.getQuestionId(), next.getRoundNo(), next.getOrderNo());
             } else {
                 log.info("DUEL 다음 문제 없음: roomId={}, currentQuestionId={}, roundNo={}, orderNo={}", 
                         room.getId(), question.getQuestionId(), question.getRoundNo(), question.getOrderNo());
@@ -755,16 +875,31 @@ public class VersusService {
         Optional<MatchQuestion> nextQuestion = findNextQuestion(roomId, question);
         if (nextQuestion.isPresent()) {
             MatchQuestion next = nextQuestion.get();
-            // 다음 문제 시작 이벤트 기록 (모든 참가자 공통)
+            
+            // 쉬는 시간 시작 이벤트 기록
+            Instant intermissionStart = Instant.now();
+            recordEvent(roomId, "INTERMISSION_STARTED", Map.of(
+                    "nextQuestionId", next.getQuestionId(),
+                    "nextRoundNo", next.getRoundNo(),
+                    "nextPhase", next.getPhase().name(),
+                    "durationSec", QUESTION_INTERMISSION_SEC,
+                    "startedAt", intermissionStart.toString(),
+                    "questionStartAt", intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC).toString()
+            ));
+            
+            // 5초 후 문제 시작 시간 계산
+            Instant questionStartTime = intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC);
+            
+            // 다음 문제 시작 이벤트 기록 (startedAt을 미래 시간으로 설정)
             recordEvent(roomId, "QUESTION_STARTED", Map.of(
                     "questionId", next.getQuestionId(),
                     "roundNo", next.getRoundNo(),
                     "phase", next.getPhase().name(),
-                    "startedAt", Instant.now().toString(),
+                    "startedAt", questionStartTime.toString(),
                     "allParticipants", true // 모든 참가자 공통 시작
             ));
-            log.info("토너먼트 다음 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}",
-                    roomId, next.getQuestionId(), next.getRoundNo());
+            log.info("토너먼트 쉬는 시간 시작: roomId={}, duration={}초, 다음 문제 시작 시간={}, questionId={}, roundNo={}",
+                    roomId, QUESTION_INTERMISSION_SEC, questionStartTime, next.getQuestionId(), next.getRoundNo());
         }
 
         boolean matchCompleted = survivors.size() <= 1 || !hasNextRound(roomId, question.getRoundNo());
@@ -786,74 +921,193 @@ public class VersusService {
         Long roomId = room.getId();
         List<GoldenbellState> states = goldenbellStateRepository.findByRoomId(roomId);
         long aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
-
-        long answeredForQuestion = answerRepository.countByRoomIdAndQuestionId(roomId, question.getQuestionId());
-        long expectedAnswers = Math.max(aliveCount, 1);
+        
+        // REVIVAL phase에서는 부활한 사용자(revived=true)도 포함
+        Set<String> eligibleUserIds;
+        long expectedAnswers;
+        
+        if (question.getPhase() == MatchPhase.REVIVAL) {
+            // REVIVAL phase: 살아있는 사용자 + 부활한 사용자
+            eligibleUserIds = states.stream()
+                    .filter(state -> state.isAlive() || state.isRevived())
+                    .map(GoldenbellState::getUserId)
+                    .collect(Collectors.toSet());
+            long eligibleCount = eligibleUserIds.size();
+            expectedAnswers = Math.max(eligibleCount, 1);
+            log.info("REVIVAL phase 진행 체크: roomId={}, questionId={}, aliveCount={}, eligibleCount={} (alive + revived)",
+                    roomId, question.getQuestionId(), aliveCount, eligibleCount);
+        } else {
+            // 일반 phase: 살아있는 사용자만
+            eligibleUserIds = states.stream()
+                    .filter(GoldenbellState::isAlive)
+                    .map(GoldenbellState::getUserId)
+                    .collect(Collectors.toSet());
+            expectedAnswers = Math.max(aliveCount, 1);
+        }
+        
+        // 답안을 제출한 수 계산
+        long answeredForQuestion = answerRepository.findByRoomIdAndQuestionId(roomId, question.getQuestionId())
+                .stream()
+                .filter(answer -> eligibleUserIds.contains(answer.getUserId()))
+                .count();
+        
         boolean roundCompleted = answeredForQuestion >= expectedAnswers;
         boolean stateChanged = false;
 
-        if (roundCompleted) {
-            // 전원 탈락 방지 규칙: aliveCount == 0이면 문제 무효 처리 및 재출제
-            if (aliveCount == 0) {
-                log.warn("골든벨 전원 탈락 감지: roomId={}, round={}, order={}, questionId={}. 문제 무효 처리 및 재출제",
-                        roomId, question.getRoundNo(), question.getOrderNo(), question.getQuestionId());
-                
-                if (retryQuestionOnFullElimination(room, question)) {
-                    stateChanged = true;
-                    // 재출제 후 상태 재계산
-                    states = goldenbellStateRepository.findByRoomId(roomId);
-                    aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
-                    // 재출제했으므로 roundCompleted는 false로 유지 (같은 라운드에서 재시도)
-                    return new ModeResolution(false, false, true);
+        // 전원 탈락 체크는 roundCompleted와 관계없이 먼저 확인
+        if (aliveCount == 0) {
+            log.warn("골든벨 전원 탈락 감지: roomId={}, round={}, order={}, questionId={}. 게임 종료",
+                    roomId, question.getRoundNo(), question.getOrderNo(), question.getQuestionId());
+            String winner = scoreboard.items().isEmpty() ? null : scoreboard.items().get(0).userId();
+            recordEvent(roomId, "MATCH_FINISHED", Map.of(
+                    "mode", "GOLDENBELL",
+                    "winner", winner,
+                    "aliveCount", aliveCount,
+                    "reason", "ALL_ELIMINATED"
+            ));
+            return new ModeResolution(roundCompleted, true, true);
+        }
+
+        // 현재 문제의 시간 제한이 지났는지 확인
+        boolean timeExpired = false;
+        try {
+            List<MatchEvent> startEvents = eventRepository.findByRoomIdAndEventTypeContaining(roomId, "QUESTION_STARTED");
+            Optional<MatchEvent> currentQuestionEvent = startEvents.stream()
+                    .filter(e -> {
+                        try {
+                            if (e.getPayloadJson() == null) return false;
+                            Map<String, Object> payload = objectMapper.readValue(
+                                    e.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                            Object qId = payload.get("questionId");
+                            return qId != null && question.getQuestionId().equals(Long.valueOf(qId.toString()));
+                        } catch (Exception ex) {
+                            return false;
+                        }
+                    })
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+            
+            if (currentQuestionEvent.isPresent()) {
+                try {
+                    Map<String, Object> payload = objectMapper.readValue(
+                            currentQuestionEvent.get().getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                    String startedAtStr = (String) payload.get("startedAt");
+                    Instant startTime = startedAtStr != null 
+                            ? Instant.parse(startedAtStr) 
+                            : currentQuestionEvent.get().getCreatedAt();
+                    Instant endTime = startTime.plusSeconds(question.getTimeLimitSec());
+                    timeExpired = Instant.now().isAfter(endTime);
+                } catch (Exception e) {
+                    log.debug("Failed to check time expiration: {}", e.getMessage());
                 }
             }
-            
-            recordEvent(roomId, "ROUND_COMPLETED", Map.of(
-                    "mode", "GOLDENBELL",
-                    "round", question.getRoundNo(),
-                    "phase", question.getPhase().name(),
-                    "aliveCount", aliveCount
-            ));
+        } catch (Exception e) {
+            log.debug("Failed to check time expiration: {}", e.getMessage());
+        }
+
+        // roundCompleted가 true이거나 시간이 지났으면 다음 문제로 진행
+        if (roundCompleted || timeExpired) {
+            if (roundCompleted) {
+                recordEvent(roomId, "ROUND_COMPLETED", Map.of(
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "phase", question.getPhase().name(),
+                        "aliveCount", aliveCount
+                ));
+            } else if (timeExpired) {
+                log.warn("골든벨 문제 시간 초과: roomId={}, questionId={}, roundNo={}, orderNo={}. 답안 미완료 상태에서 다음 문제로 진행",
+                        roomId, question.getQuestionId(), question.getRoundNo(), question.getOrderNo());
+                recordEvent(roomId, "ROUND_TIMEOUT", Map.of(
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "phase", question.getPhase().name(),
+                        "aliveCount", aliveCount,
+                        "answeredForQuestion", answeredForQuestion,
+                        "expectedAnswers", expectedAnswers
+                ));
+            }
             
             // 다음 문제가 있으면 시작 이벤트 기록 (모든 참가자 공통)
             Optional<MatchQuestion> nextQuestion = findNextQuestion(roomId, question);
             if (nextQuestion.isPresent()) {
                 MatchQuestion next = nextQuestion.get();
-                // 다음 문제 시작 이벤트 기록 (모든 참가자 공통)
+                
+                // 쉬는 시간 시작 이벤트 기록
+                Instant intermissionStart = Instant.now();
+                recordEvent(roomId, "INTERMISSION_STARTED", Map.of(
+                        "nextQuestionId", next.getQuestionId(),
+                        "nextRoundNo", next.getRoundNo(),
+                        "nextPhase", next.getPhase().name(),
+                        "durationSec", QUESTION_INTERMISSION_SEC,
+                        "startedAt", intermissionStart.toString(),
+                        "questionStartAt", intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC).toString()
+                ));
+                
+                // 5초 후 문제 시작 시간 계산
+                Instant questionStartTime = intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC);
+                
+                // 다음 문제 시작 이벤트 기록 (startedAt을 미래 시간으로 설정)
                 recordEvent(roomId, "QUESTION_STARTED", Map.of(
                         "questionId", next.getQuestionId(),
                         "roundNo", next.getRoundNo(),
                         "phase", next.getPhase().name(),
-                        "startedAt", Instant.now().toString(),
+                        "startedAt", questionStartTime.toString(),
                         "allParticipants", true // 모든 참가자 공통 시작
                 ));
-                log.info("골든벨 다음 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}",
-                        roomId, next.getQuestionId(), next.getRoundNo());
+                
+                log.info("골든벨 쉬는 시간 시작: roomId={}, duration={}초, 다음 문제 시작 시간={}, questionId={}, roundNo={}, roundCompleted={}, timeExpired={}",
+                        roomId, QUESTION_INTERMISSION_SEC, questionStartTime, next.getQuestionId(), next.getRoundNo(), roundCompleted, timeExpired);
             }
 
+            // 라운드 2의 마지막 문제가 완료된 후에만 부활 체크
             if (question.getRoundNo() == GOLDENBELL_REVIVE_CHECK_ROUND) {
-                if (aliveCount <= GOLDENBELL_REVIVE_TARGET) {
-                    if (reviveFastestEliminated(roomId, GOLDENBELL_REVIVE_CHECK_ROUND)) {
-                        stateChanged = true;
-                        states = goldenbellStateRepository.findByRoomId(roomId);
-                        aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+                // 해당 라운드의 모든 문제 조회
+                List<MatchQuestion> roundQuestions = questionRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo());
+                // 현재 문제가 해당 라운드의 마지막 문제인지 확인
+                int maxOrderNo = roundQuestions.stream()
+                        .mapToInt(MatchQuestion::getOrderNo)
+                        .max()
+                        .orElse(0);
+                boolean isLastQuestionInRound = question.getOrderNo() >= maxOrderNo;
+                
+                if (isLastQuestionInRound) {
+                    log.info("골든벨 라운드 {} 마지막 문제 완료: roomId={}, questionId={}, orderNo={}, aliveCount={}",
+                            question.getRoundNo(), roomId, question.getQuestionId(), question.getOrderNo(), aliveCount);
+                    
+                    if (aliveCount <= GOLDENBELL_REVIVE_TARGET) {
+                        if (reviveFastestEliminated(roomId, GOLDENBELL_REVIVE_CHECK_ROUND)) {
+                            stateChanged = true;
+                            states = goldenbellStateRepository.findByRoomId(roomId);
+                            aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+                            log.info("골든벨 부활 처리 완료 (가장 빠른 탈락자): roomId={}, aliveCount={}", roomId, aliveCount);
+                        }
                     }
-                }
-                if (aliveCount == 0) {
-                    if (reviveTopN(room, GOLDENBELL_REVIVE_TARGET)) {
-                        stateChanged = true;
-                        states = goldenbellStateRepository.findByRoomId(roomId);
-                        aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+                    if (aliveCount == 0) {
+                        if (reviveTopN(room, GOLDENBELL_REVIVE_TARGET)) {
+                            stateChanged = true;
+                            states = goldenbellStateRepository.findByRoomId(roomId);
+                            aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+                            log.info("골든벨 부활 처리 완료 (TOP {}): roomId={}, aliveCount={}", GOLDENBELL_REVIVE_TARGET, roomId, aliveCount);
+                        }
                     }
                 }
             }
         }
 
-        boolean hasNext = hasNextRound(roomId, question.getRoundNo());
+        // 다음 문제가 있는지 확인 (같은 라운드 내의 다음 문제 또는 다음 라운드의 첫 문제)
+        Optional<MatchQuestion> nextQuestion = findNextQuestion(roomId, question);
+        boolean hasNext = nextQuestion.isPresent();
         boolean matchCompleted = false;
-        if (aliveCount <= 1) {
+        
+        // 게임 종료 조건 체크 (roundCompleted와 관계없이)
+        if (aliveCount == 0) {
+            // 전원 탈락 시 게임 종료
+            matchCompleted = true;
+        } else if (aliveCount <= 1) {
             matchCompleted = true;
         } else if (!hasNext) {
+            // 모든 문제가 끝났을 때도 게임 종료 (roundCompleted와 관계없이)
+            log.info("골든벨 모든 문제 완료: roomId={}, questionId={}, roundNo={}, orderNo={}, aliveCount={}, hasNext={}. 게임 종료",
+                    roomId, question.getQuestionId(), question.getRoundNo(), question.getOrderNo(), aliveCount, hasNext);
             matchCompleted = true;
         }
 
@@ -862,7 +1116,9 @@ public class VersusService {
             recordEvent(roomId, "MATCH_FINISHED", Map.of(
                     "mode", "GOLDENBELL",
                     "winner", winner,
-                    "aliveCount", aliveCount
+                    "aliveCount", aliveCount,
+                    "roundCompleted", roundCompleted,
+                    "hasNext", hasNext
             ));
             stateChanged = true;
         }
@@ -877,6 +1133,36 @@ public class VersusService {
         GoldenbellState state = goldenbellStateRepository.findByRoomIdAndUserId(room.getId(), participant.getUserId())
                 .orElseGet(() -> goldenbellStateRepository.save(GoldenbellState.alive(room.getId(), participant.getUserId())));
 
+        // REVIVAL phase 처리
+        if (question.getPhase() == MatchPhase.REVIVAL) {
+            if (correct && state.isRevived() && !state.isAlive()) {
+                // 부활한 사용자가 REVIVAL 문제를 맞추면 다시 살아남
+                state.setAlive(true);
+                goldenbellStateRepository.save(state);
+                recordEvent(room.getId(), "GOLDENBELL_REVIVED_BY_ANSWER", Map.of(
+                        "userId", participant.getUserId(),
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "questionId", question.getQuestionId()
+                ));
+                log.info("부활한 사용자가 REVIVAL 문제 정답으로 다시 살아남: roomId={}, userId={}, questionId={}",
+                        room.getId(), participant.getUserId(), question.getQuestionId());
+                return true;
+            } else if (!correct && state.isRevived() && !state.isAlive()) {
+                // 부활한 사용자가 REVIVAL 문제를 틀리면 부활 기회 상실 (이미 탈락 상태이므로 변경 없음)
+                recordEvent(room.getId(), "GOLDENBELL_REVIVAL_FAILED", Map.of(
+                        "userId", participant.getUserId(),
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "questionId", question.getQuestionId()
+                ));
+                return false;
+            }
+            // REVIVAL phase에서는 일반 탈락 처리하지 않음 (부활 기회이므로)
+            return false;
+        }
+
+        // 일반 phase 처리: 오답 시 탈락
         if (!correct && state.isAlive()) {
             state.setAlive(false);
             goldenbellStateRepository.save(state);
@@ -1075,11 +1361,13 @@ public class VersusService {
                         Score score = entry.getValue();
                         FinalRoundScore finalScore = finalScores.getOrDefault(userId, new FinalRoundScore());
 
-                        // FINAL 라운드 점수를 메인 점수에 합산 (또는 별도 처리)
-                        // 여기서는 FINAL 라운드 점수를 우선으로 사용
-                        int finalScoreValue = finalScore.score > 0 ? finalScore.score : score.score;
-                        int finalCorrect = finalScore.correct > 0 ? finalScore.correct : score.correct;
-                        long finalTime = finalScore.totalTimeMs > 0 ? finalScore.totalTimeMs : score.totalTimeMs;
+                        // 전체 점수 합산: 일반 라운드 점수 + FINAL 라운드 점수
+                        int totalScoreValue = score.score + finalScore.score;
+                        // correctCount와 totalCount는 모든 라운드 합계
+                        int totalCorrect = score.correct + finalScore.correct;
+                        int totalCount = score.total + finalScore.total;
+                        // 전체 시간 합산: 일반 라운드 시간 + FINAL 라운드 시간
+                        long totalTime = score.totalTimeMs + finalScore.totalTimeMs;
 
                         GoldenbellState state = goldenState.get(userId);
                         boolean alive = state != null ? state.isAlive() : participants.stream()
@@ -1088,7 +1376,7 @@ public class VersusService {
                                 .map(p -> !p.isEliminated())
                                 .orElse(true);
                         boolean revived = state != null && state.isRevived();
-                        return new ScoreboardIntermediate(userId, finalCorrect, score.total, finalScoreValue, finalTime, alive, revived);
+                        return new ScoreboardIntermediate(userId, totalCorrect, totalCount, totalScoreValue, totalTime, alive, revived);
                     })
                     .sorted((a, b) -> {
                         // alive 상태 우선: alive=true가 항상 alive=false보다 높은 순위
@@ -1209,8 +1497,14 @@ public class VersusService {
 
         // 현재 문제 정보 계산
         VersusDtos.CurrentQuestionInfo currentQuestionInfo = getCurrentQuestionInfo(roomId, room.getStatus());
+        
+        // 쉬는 시간 정보 계산 (현재 문제가 없고 진행 중일 때만)
+        VersusDtos.IntermissionInfo intermissionInfo = null;
+        if (room.getStatus() == MatchStatus.ONGOING && currentQuestionInfo == null) {
+            intermissionInfo = getCurrentIntermissionInfo(roomId);
+        }
 
-        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo);
+        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo, intermissionInfo);
     }
 
     private boolean hasNextRound(Long roomId, int currentRound) {
@@ -3147,6 +3441,12 @@ public class VersusService {
                             ? Instant.parse(startedAtStr) 
                             : event.getCreatedAt();
                     
+                    // startedAt 시간이 아직 지나지 않았으면 null 반환 (아직 시작되지 않은 문제)
+                    Instant now = Instant.now();
+                    if (now.isBefore(startTime)) {
+                        return null;
+                    }
+                    
                     // MatchQuestion에서 orderNo와 timeLimitSec 가져오기
                     Optional<MatchQuestion> matchQuestion = questionRepository.findByRoomIdAndQuestionId(roomId, questionId);
                     if (matchQuestion.isPresent()) {
@@ -3183,6 +3483,79 @@ public class VersusService {
             }
         } catch (Exception e) {
             log.debug("Failed to get current question info: {}", e.getMessage());
+        }
+        
+        return null;
+    }
+
+    /**
+     * 현재 쉬는 시간 정보 조회
+     * INTERMISSION_STARTED 이벤트에서 정보를 가져옵니다.
+     */
+    private VersusDtos.IntermissionInfo getCurrentIntermissionInfo(Long roomId) {
+        try {
+            // 가장 최근 INTERMISSION_STARTED 이벤트 찾기
+            List<MatchEvent> intermissionEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                    roomId, "INTERMISSION_STARTED");
+            
+            Optional<MatchEvent> latestIntermission = intermissionEvents.stream()
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+            
+            if (latestIntermission.isPresent()) {
+                try {
+                    MatchEvent event = latestIntermission.get();
+                    if (event.getPayloadJson() == null) {
+                        return null;
+                    }
+                    
+                    Map<String, Object> payload = objectMapper.readValue(
+                            event.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                    
+                    // questionStartAt이 아직 지나지 않았는지 확인
+                    String questionStartAtStr = (String) payload.get("questionStartAt");
+                    if (questionStartAtStr != null) {
+                        Instant questionStartAt = Instant.parse(questionStartAtStr);
+                        Instant now = Instant.now();
+                        
+                        // 쉬는 시간이 아직 진행 중인지 확인
+                        if (now.isBefore(questionStartAt)) {
+                            Long nextQuestionId = payload.get("nextQuestionId") != null 
+                                    ? Long.valueOf(payload.get("nextQuestionId").toString()) 
+                                    : null;
+                            Integer nextRoundNo = payload.get("nextRoundNo") != null 
+                                    ? Integer.valueOf(payload.get("nextRoundNo").toString()) 
+                                    : null;
+                            String nextPhaseStr = payload.get("nextPhase") != null 
+                                    ? payload.get("nextPhase").toString() 
+                                    : null;
+                            MatchPhase nextPhase = nextPhaseStr != null 
+                                    ? MatchPhase.valueOf(nextPhaseStr) 
+                                    : null;
+                            Integer durationSec = payload.get("durationSec") != null 
+                                    ? Integer.valueOf(payload.get("durationSec").toString()) 
+                                    : QUESTION_INTERMISSION_SEC;
+                            String startedAtStr = (String) payload.get("startedAt");
+                            Instant startedAt = startedAtStr != null 
+                                    ? Instant.parse(startedAtStr) 
+                                    : event.getCreatedAt();
+                            
+                            return new VersusDtos.IntermissionInfo(
+                                    nextQuestionId,
+                                    nextRoundNo,
+                                    nextPhase,
+                                    durationSec,
+                                    startedAt,
+                                    questionStartAt
+                            );
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("Failed to parse intermission info: {}", e.getMessage());
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to get intermission info: {}", e.getMessage());
         }
         
         return null;

@@ -146,12 +146,29 @@ public class VersusDtos {
       Instant endTime
   ) {}
 
+  public record IntermissionInfo(
+      @Schema(description = "다음 문제 ID", example = "205")
+      Long nextQuestionId,
+      @Schema(description = "다음 라운드 번호", example = "4")
+      Integer nextRoundNo,
+      @Schema(description = "다음 페이즈 (MAIN, FINAL, REVIVAL)", example = "FINAL")
+      MatchPhase nextPhase,
+      @Schema(description = "쉬는 시간 (초)", example = "5")
+      Integer durationSec,
+      @Schema(description = "쉬는 시간 시작 시간 (ISO 8601 형식)", example = "2025-12-04T10:26:03.837006519Z")
+      Instant startedAt,
+      @Schema(description = "다음 문제 시작 시간 (ISO 8601 형식)", example = "2025-12-04T10:26:08.837006519Z")
+      Instant questionStartAt
+  ) {}
+
   public record ScoreBoardResp(
       Long roomId,
       MatchStatus status,
       List<ScoreBoardItem> items,
       @Schema(description = "현재 진행 중인 문제 정보. 문제가 진행 중이 아니면 null")
-      CurrentQuestionInfo currentQuestion
+      CurrentQuestionInfo currentQuestion,
+      @Schema(description = "쉬는 시간 정보. 쉬는 시간 중일 때만 null이 아님")
+      IntermissionInfo intermission
   ) {}
 
   public record TimelineEvent(
