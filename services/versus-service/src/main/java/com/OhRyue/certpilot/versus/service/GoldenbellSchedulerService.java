@@ -76,5 +76,22 @@ public class GoldenbellSchedulerService {
         // 10분 전부터 입장 가능
         return now.isAfter(tenMinutesBefore) || now.equals(tenMinutesBefore);
     }
+
+    /**
+     * 매 30초마다 실행: 하트비트 타임아웃된 참가자 자동 제거
+     * 대기 중인 방에서 1분 이상 하트비트가 없는 참가자를 제거
+     */
+    @Scheduled(fixedRate = 30000) // 30초마다
+    @Transactional
+    public void removeTimeoutParticipants() {
+        try {
+            int removedCount = versusService.removeTimeoutParticipants();
+            if (removedCount > 0) {
+                log.info("Removed {} timeout participants from waiting rooms", removedCount);
+            }
+        } catch (Exception e) {
+            log.error("Failed to remove timeout participants: {}", e.getMessage(), e);
+        }
+    }
 }
 

@@ -62,6 +62,26 @@ public class VersusController {
   }
 
   @Operation(
+      summary = "예약된 대전 방 목록 조회",
+      description = "예약 시간이 설정되어 있고 아직 시작하지 않은 대전 방 목록을 조회합니다.\n\n" +
+          "**필터링:**\n" +
+          "- mode: DUEL(1:1), TOURNAMENT(토너먼트), GOLDENBELL(골든벨)\n" +
+          "- 예약 시간이 현재 시간 이후인 방만 조회\n" +
+          "- 예약 시간 순으로 정렬 (가까운 시간부터)\n\n" +
+          "**응답:**\n" +
+          "- scheduledAt: 예약 시작 시간 (ISO 8601 형식, 예약이 없으면 null)"
+  )
+  @ApiResponses(value = {
+      @ApiResponse(responseCode = "200", description = "조회 성공")
+  })
+  @GetMapping("/rooms/scheduled")
+  public List<VersusDtos.RoomSummary> scheduledRooms(
+      @Parameter(description = "대전 모드 (DUEL, TOURNAMENT, GOLDENBELL)", example = "GOLDENBELL")
+      @RequestParam(required = false) MatchMode mode) {
+    return versusService.listScheduledRooms(mode);
+  }
+
+  @Operation(
       summary = "대전 방 생성",
       description = "새로운 대전 방을 생성합니다.\n\n" +
           "**방 생성 방법 2가지:**\n" +
@@ -168,6 +188,34 @@ public class VersusController {
     // 🔹 JWT 에서 현재 로그인한 사용자 ID 추출
     String userId = AuthUserUtil.getCurrentUserId();
     return versusService.joinRoom(roomId, userId);
+  }
+
+  @Operation(
+      summary = "하트비트 업데이트",
+      description = "사용자의 연결 상태를 업데이트합니다.\n\n" +
+          "**용도:**\n" +
+          "- 대기 중인 방(WAIT): 프론트엔드에서 주기적으로(예: 30초마다) 호출하여 사용자가 아직 연결되어 있음을 알림\n" +
+          "- DUEL 모드 진행 중(ONGOING): 게임 진행 중에도 연결 상태를 유지하여 상대방이 떠났는지 감지\n" +
+          "- 사이트를 닫거나 연결이 끊기면 하트비트가 중단되어 자동으로 참가자에서 제거됨\n\n" +
+          "**동작 방식:**\n" +
+          "- WAIT 상태: 모든 모드(DUEL, TOURNAMENT, GOLDENBELL)에서 동작\n" +
+          "- ONGOING 상태: DUEL 모드에서만 동작 (TOURNAMENT, GOLDENBELL은 불필요)\n" +
+          "- DUEL 모드에서 상대방이 하트비트를 보내지 않으면 1분 후 자동으로 게임이 종료됩니다.\n\n" +
+          "**권장 호출 주기:** 30초마다"
+  )
+  @ApiResponses(value = {
+      @ApiResponse(responseCode = "200", description = "하트비트 업데이트 성공"),
+      @ApiResponse(responseCode = "400", description = "하트비트가 허용되지 않는 상태 (ONGOING TOURNAMENT/GOLDENBELL 등)"),
+      @ApiResponse(responseCode = "404", description = "방 또는 참가자를 찾을 수 없음"),
+      @ApiResponse(responseCode = "401", description = "인증 실패 (JWT 토큰 필요)")
+  })
+  @PostMapping("/rooms/{roomId}/heartbeat")
+  public Map<String, Object> heartbeat(
+      @Parameter(description = "방 ID", example = "1", required = true)
+      @PathVariable Long roomId) {
+    String userId = AuthUserUtil.getCurrentUserId();
+    versusService.updateHeartbeat(roomId, userId);
+    return Map.of("success", true, "message", "Heartbeat updated");
   }
 
   @Operation(

@@ -24,5 +24,11 @@ public interface MatchRoomRepository extends JpaRepository<MatchRoom, Long> {
       @Param("status") MatchStatus status,
       @Param("now") Instant now
   );
+
+  @Query("SELECT r FROM MatchRoom r WHERE r.mode = :mode AND r.status = 'WAIT' AND r.scheduledAt IS NOT NULL AND r.scheduledAt > :now ORDER BY r.scheduledAt ASC")
+  List<MatchRoom> findScheduledRoomsByMode(
+      @Param("mode") MatchMode mode,
+      @Param("now") Instant now
+  );
 }
  

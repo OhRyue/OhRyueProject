@@ -91,7 +91,9 @@ public class VersusDtos {
       MatchMode mode,
       MatchStatus status,
       int participantCount,
-      Instant createdAt
+      Instant createdAt,
+      @Schema(description = "예약 시작 시간 (GOLDENBELL 모드용, ISO 8601 형식). 예약이 없으면 null", example = "2024-12-25T14:00:00Z")
+      Instant scheduledAt
   ) {}
 
   public record QuestionInfo(

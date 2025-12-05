@@ -36,10 +36,16 @@ public class MatchParticipant {
   @Column(name = "eliminated", nullable = false)
   private boolean eliminated;
 
+  @Column(name = "last_heartbeat_at")
+  private Instant lastHeartbeatAt;
+
   @PrePersist
   void onJoin() {
     if (joinedAt == null) {
       joinedAt = Instant.now();
+    }
+    if (lastHeartbeatAt == null) {
+      lastHeartbeatAt = Instant.now();
     }
     this.eliminated = false;
   }
