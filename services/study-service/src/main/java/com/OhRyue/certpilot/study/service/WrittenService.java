@@ -1744,12 +1744,37 @@ public class WrittenService {
     // 6. StudySession의 summaryJson에도 저장 (하위 호환성)
     sessionManager.saveStepMeta(session, "mini", miniMeta);
 
-    // 7. 메타데이터만 업데이트 (상태 변경은 advance API를 통해 수행)
-    // MINI 단계의 메타데이터를 LearningStep에 저장 (advance 호출 시 사용)
-    miniStep.setMetadataJson(metadataJson);
-    miniStep.setScorePct(accumulatedScorePct);
-    miniStep.setUpdatedAt(Instant.now());
-    learningStepRepository.save(miniStep);
+    // 7. 세션이 완료되었는지 확인 (모든 문제를 제출했는지)
+    // study_session_item 기준으로 실제 제출된 문제 수 확인
+    List<StudySessionItem> allItems = sessionManager.items(session.getId());
+    long answeredCount = allItems.stream()
+        .filter(sessionItem -> sessionItem.getUserAnswerJson() != null && !sessionItem.getUserAnswerJson().isBlank())
+        .count();
+    boolean allQuestionsAnswered = answeredCount >= MINI_SIZE && answeredCount == allItems.size();
+    
+    // 8. 세션이 완료되었을 때 finalizeStudySession 호출
+    if (allQuestionsAnswered && session != null && !Boolean.TRUE.equals(session.getCompleted())) {
+      // finalizeStudySession: study_session_item 기준으로 정확히 계산
+      StudySessionManager.FinalizeResult result = sessionManager.finalizeStudySession(session);
+      
+      // LearningStep 메타데이터에 wrongQuestionIds 추가 (하위 호환성)
+      miniMeta.put("total", result.total());
+      miniMeta.put("correct", result.correct());
+      miniMeta.put("scorePct", (int) Math.round(result.scorePct()));
+      miniMeta.put("passed", result.passed());
+      miniMeta.put("completed", true);
+      miniMeta.put("wrongQuestionIds", allWrongIds);
+      miniStep.setMetadataJson(toJson(miniMeta));
+      miniStep.setScorePct((int) Math.round(result.scorePct()));
+      miniStep.setUpdatedAt(Instant.now());
+      learningStepRepository.save(miniStep);
+    } else {
+      // 아직 완료되지 않은 경우 기존 로직 유지
+      miniStep.setMetadataJson(metadataJson);
+      miniStep.setScorePct(accumulatedScorePct);
+      miniStep.setUpdatedAt(Instant.now());
+      learningStepRepository.save(miniStep);
+    }
 
     return new WrittenDtos.MiniGradeOneResp(
         isCorrect,
