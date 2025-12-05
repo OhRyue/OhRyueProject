@@ -221,6 +221,21 @@ public class BotPlayService {
                 return;
             }
             
+            // 첫 번째 문제 시작 이벤트 기록 (골든벨 봇전의 경우 자동으로 시작되므로)
+            if (!allQuestions.isEmpty()) {
+                MatchQuestion firstQuestion = allQuestions.get(0);
+                // 첫 번째 문제의 시작 시점을 기록 (모든 참가자 공통)
+                saveEvent(roomId, "QUESTION_STARTED", Map.of(
+                        "questionId", firstQuestion.getQuestionId(),
+                        "roundNo", firstQuestion.getRoundNo(),
+                        "phase", firstQuestion.getPhase().name(),
+                        "startedAt", Instant.now().toString(),
+                        "allParticipants", true // 모든 참가자 공통 시작
+                ));
+                log.info("골든벨 봇전 첫 번째 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}",
+                        roomId, firstQuestion.getQuestionId(), firstQuestion.getRoundNo());
+            }
+            
             // 각 문제에 대해 이벤트를 기다리며 봇이 답 제출
             for (MatchQuestion question : allQuestions) {
                 // 문제가 시작될 때까지 대기 (QUESTION_STARTED 이벤트 확인)

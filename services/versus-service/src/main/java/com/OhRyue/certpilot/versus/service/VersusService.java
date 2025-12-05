@@ -1,9 +1,11 @@
 package com.OhRyue.certpilot.versus.service;
 
 import com.OhRyue.certpilot.versus.client.ProgressActivityClient;
+import com.OhRyue.certpilot.versus.client.AccountServiceClient;
 import com.OhRyue.certpilot.versus.client.ProgressServiceClient;
 import com.OhRyue.certpilot.versus.client.StudyServiceClient;
 import com.OhRyue.certpilot.versus.config.MonitoringConfig;
+import java.util.Random;
 import com.OhRyue.certpilot.versus.domain.*;
 import com.OhRyue.certpilot.versus.dto.VersusDtos;
 import com.OhRyue.certpilot.versus.repository.*;
@@ -48,6 +50,7 @@ public class VersusService {
     private static final int BASE_SCORE = 1000;
     private static final int SPEED_BONUS_MAX = 200;
     private static final int MAX_TIMELINE_FETCH = 200;
+    private static final int QUESTION_INTERMISSION_SEC = 5; // 문제 간 쉬는 시간 (초)
 
     private final MatchRoomRepository roomRepository;
     private final MatchParticipantRepository participantRepository;
@@ -62,8 +65,10 @@ public class VersusService {
     private final StudyServiceClient studyServiceClient;
     private final ProgressServiceClient progressServiceClient;
     private final ProgressActivityClient progressActivityClient;
+    private final AccountServiceClient accountServiceClient;
     private final MonitoringConfig monitoringConfig;
     private final RewardRetryService rewardRetryService;
+    private final Random random = new Random();
 
     // 모드별 인원 제한
     private static final int DUEL_MAX_PARTICIPANTS = 2;
@@ -224,7 +229,40 @@ public class VersusService {
                         room.getMode(),
                         room.getStatus(),
                         participantCount.getOrDefault(room.getId(), 0L).intValue(),
-                        room.getCreatedAt()))
+                        room.getCreatedAt(),
+                        room.getScheduledAt()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<VersusDtos.RoomSummary> listScheduledRooms(MatchMode mode) {
+        Instant now = Instant.now();
+        List<MatchRoom> rooms;
+
+        if (mode != null) {
+            rooms = roomRepository.findScheduledRoomsByMode(mode, now);
+        } else {
+            // 모든 모드의 예약된 방 조회
+            rooms = roomRepository.findAll().stream()
+                    .filter(r -> r.getScheduledAt() != null
+                            && r.getScheduledAt().isAfter(now)
+                            && r.getStatus() == MatchStatus.WAIT)
+                    .sorted(Comparator.comparing(MatchRoom::getScheduledAt))
+                    .toList();
+        }
+
+        Set<Long> roomIds = rooms.stream().map(MatchRoom::getId).collect(Collectors.toSet());
+        Map<Long, Long> participantCount = participantRepository.findByRoomIdIn(roomIds).stream()
+                .collect(Collectors.groupingBy(MatchParticipant::getRoomId, Collectors.counting()));
+
+        return rooms.stream()
+                .map(room -> new VersusDtos.RoomSummary(
+                        room.getId(),
+                        room.getMode(),
+                        room.getStatus(),
+                        participantCount.getOrDefault(room.getId(), 0L).intValue(),
+                        room.getCreatedAt(),
+                        room.getScheduledAt()))
                 .toList();
     }
 
@@ -330,7 +368,7 @@ public class VersusService {
         recordEvent(roomId, "MATCH_STARTED", Map.of(
                 "startedAt", Instant.now().toString()
         ));
-        
+
         // 모든 모드에서 첫 번째 문제 시작 이벤트 기록 (모든 참가자가 동시에 시작)
         List<MatchQuestion> questions = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId);
         if (!questions.isEmpty()) {
@@ -346,7 +384,7 @@ public class VersusService {
             log.info("첫 번째 문제 시작 이벤트 기록: mode={}, roomId={}, questionId={}, roundNo={}",
                     room.getMode(), roomId, firstQuestion.getQuestionId(), firstQuestion.getRoundNo());
         }
-        
+
         return buildRoomDetail(room.getId());
     }
 
@@ -362,15 +400,18 @@ public class VersusService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Eliminated participant cannot submit answers");
         }
 
+        MatchQuestion question = resolveQuestion(roomId, req.questionId());
+
         if (room.getMode() == MatchMode.GOLDENBELL) {
             GoldenbellState state = goldenbellStateRepository.findByRoomIdAndUserId(roomId, userId)
                     .orElse(null);
             if (state != null && !state.isAlive()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Eliminated participant cannot submit answers");
+                // REVIVAL phase 문제에서는 부활한 사용자(revived=true)도 참여 가능
+                if (question.getPhase() != MatchPhase.REVIVAL || !state.isRevived()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Eliminated participant cannot submit answers");
+                }
             }
         }
-
-        MatchQuestion question = resolveQuestion(roomId, req.questionId());
 
         // 문제 시작 시점 기록 (처음 답안 제출 시)
         // 답안 제출 전에 기록해야 정확한 시간 계산 가능
@@ -389,7 +430,7 @@ public class VersusService {
         boolean serverValidatedCorrect = validateAnswerOnServer(question.getQuestionId(), req);
         // 서버 검증 결과를 우선 사용 (클라이언트 값은 참고용)
         boolean finalCorrect = serverValidatedCorrect;
-        
+
         // 디버깅: 정답 검증 결과 로그
         log.info("Answer validation result: roomId={}, userId={}, questionId={}, userAnswer={}, clientCorrect={}, serverCorrect={}, finalCorrect={}",
                 roomId, userId, question.getQuestionId(), req.userAnswer(), req.correct(), serverValidatedCorrect, finalCorrect);
@@ -397,16 +438,16 @@ public class VersusService {
         // 서버 기준 시간 계산 (문제 시작 시점이 있으면 사용)
         // answerSubmitTime을 전달하여 정확한 시간 계산
         Integer serverTimeMs = calculateServerTimeMs(roomId, question.getQuestionId(), userId, req.timeMs(), answerSubmitTime);
-        
+
         // 디버깅: 시간 계산 결과 로그
         log.info("Time calculation: roomId={}, userId={}, questionId={}, clientTimeMs={}, serverTimeMs={}, timeLimitSec={}",
                 roomId, userId, question.getQuestionId(), req.timeMs(), serverTimeMs, question.getTimeLimitSec());
 
         ScoreOutcome outcome = evaluateScore(question, finalCorrect, serverTimeMs);
-        
+
         // 디버깅: 점수 계산 결과 로그
         log.info("Score evaluation: roomId={}, userId={}, questionId={}, correct={}, scoreDelta={}, timeMs={}, timeLimitMs={}",
-                roomId, userId, question.getQuestionId(), outcome.correct(), outcome.scoreDelta(), outcome.timeMs(), 
+                roomId, userId, question.getQuestionId(), outcome.correct(), outcome.scoreDelta(), outcome.timeMs(),
                 question.getTimeLimitSec() * 1000);
 
         answer.setCorrect(outcome.correct());
@@ -418,14 +459,14 @@ public class VersusService {
         answer.setUserAnswer(req.userAnswer());
         answerRepository.save(answer);
         answerRepository.flush(); // 즉시 DB에 반영
-        
+
         // 저장 후 검증: 실제 저장된 값 확인
         MatchAnswer savedAnswer = answerRepository.findByRoomIdAndQuestionIdAndUserId(roomId, req.questionId(), userId)
                 .orElseThrow(() -> new IllegalStateException("Answer not found after save"));
-        
+
         log.info("Answer saved: roomId={}, userId={}, questionId={}, correct={}, scoreDelta={}, timeMs={}, userAnswer={}, savedCorrect={}",
                 roomId, userId, question.getQuestionId(), outcome.correct(), outcome.scoreDelta(), outcome.timeMs(), req.userAnswer(), savedAnswer.isCorrect());
-        
+
         // 저장된 값이 예상과 다른 경우 경고
         if (savedAnswer.isCorrect() != outcome.correct()) {
             log.error("CRITICAL: Saved answer correct value mismatch! Expected={}, Actual={}, roomId={}, userId={}, questionId={}",
@@ -490,6 +531,108 @@ public class VersusService {
     public VersusDtos.ScoreBoardResp scoreboard(Long roomId) {
         MatchRoom room = findRoomOrThrow(roomId);
         VersusDtos.ScoreBoardResp resp = computeScoreboard(room);
+
+        // 골든벨 모드에서 전원 탈락 체크 및 게임 종료 처리
+        if (room.getMode() == MatchMode.GOLDENBELL && room.getStatus() == MatchStatus.ONGOING) {
+            List<GoldenbellState> states = goldenbellStateRepository.findByRoomId(roomId);
+            long aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+
+            if (aliveCount == 0) {
+                log.warn("골든벨 scoreboard API 호출 시 전원 탈락 감지: roomId={}, aliveCount={}. 게임 종료",
+                        roomId, aliveCount);
+                String winner = resp.items().isEmpty() ? null : resp.items().get(0).userId();
+                recordEvent(roomId, "MATCH_FINISHED", Map.of(
+                        "mode", "GOLDENBELL",
+                        "winner", winner,
+                        "aliveCount", aliveCount,
+                        "reason", "ALL_ELIMINATED_ON_SCOREBOARD_CHECK"
+                ));
+                room.setStatus(MatchStatus.DONE);
+                roomRepository.save(room);
+
+                // progress-service에 결과 통지 및 보상 지급
+                notifyProgressService(room, resp);
+
+                // 상태 변경 후 스코어보드 재계산
+                resp = computeScoreboard(room);
+            }
+        }
+
+        // intermission과 currentQuestion이 모두 null이고 questionStartAt 시간이 지났으면 다음 문제 시작
+        if (room.getStatus() == MatchStatus.ONGOING && resp.currentQuestion() == null && resp.intermission() == null) {
+            try {
+                // 가장 최근 INTERMISSION_STARTED 이벤트 찾기
+                List<MatchEvent> intermissionEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                        roomId, "INTERMISSION_STARTED");
+
+                Optional<MatchEvent> latestIntermission = intermissionEvents.stream()
+                        .max(Comparator.comparing(MatchEvent::getCreatedAt));
+
+                if (latestIntermission.isPresent()) {
+                    MatchEvent event = latestIntermission.get();
+                    if (event.getPayloadJson() != null) {
+                        Map<String, Object> payload = objectMapper.readValue(
+                                event.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+
+                        String questionStartAtStr = (String) payload.get("questionStartAt");
+                        if (questionStartAtStr != null) {
+                            Instant questionStartAt = Instant.parse(questionStartAtStr);
+                            Instant now = Instant.now();
+
+                            // questionStartAt 시간이 지났으면 다음 문제 시작
+                            if (now.isAfter(questionStartAt) || now.equals(questionStartAt)) {
+                                Long nextQuestionId = payload.get("nextQuestionId") != null
+                                        ? Long.valueOf(payload.get("nextQuestionId").toString())
+                                        : null;
+
+                                if (nextQuestionId != null) {
+                                    Optional<MatchQuestion> nextQuestion = questionRepository.findByRoomIdAndQuestionId(roomId, nextQuestionId);
+                                    if (nextQuestion.isPresent()) {
+                                        MatchQuestion question = nextQuestion.get();
+
+                                        // QUESTION_STARTED 이벤트가 이미 기록되었는지 확인
+                                        List<MatchEvent> questionEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                                                roomId, "QUESTION_STARTED");
+                                        boolean alreadyStarted = questionEvents.stream()
+                                                .anyMatch(e -> {
+                                                    try {
+                                                        if (e.getPayloadJson() == null) return false;
+                                                        Map<String, Object> qPayload = objectMapper.readValue(
+                                                                e.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                                                        Object qId = qPayload.get("questionId");
+                                                        return qId != null && nextQuestionId.equals(Long.valueOf(qId.toString()));
+                                                    } catch (Exception ex) {
+                                                        return false;
+                                                    }
+                                                });
+
+                                        if (!alreadyStarted) {
+                                            // QUESTION_STARTED 이벤트를 현재 시간으로 업데이트 (실제 시작)
+                                            recordEvent(roomId, "QUESTION_STARTED", Map.of(
+                                                    "questionId", nextQuestionId,
+                                                    "roundNo", question.getRoundNo(),
+                                                    "phase", question.getPhase().name(),
+                                                    "startedAt", now.toString(),
+                                                    "allParticipants", true
+                                            ));
+
+                                            log.info("골든벨 scoreboard API에서 다음 문제 시작: roomId={}, questionId={}, roundNo={}, phase={}",
+                                                    roomId, nextQuestionId, question.getRoundNo(), question.getPhase());
+
+                                            // 스코어보드 재계산
+                                            resp = computeScoreboard(room);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("골든벨 scoreboard API에서 다음 문제 시작 처리 중 오류: roomId={}, error={}", roomId, e.getMessage(), e);
+            }
+        }
+
         realtimeService.pushSnapshot(roomId, resp, null, null);
         return resp;
     }
@@ -501,14 +644,14 @@ public class VersusService {
     @Transactional
     public Map<String, Object> recordQuestionStartEvent(Long roomId, Long questionId) {
         MatchRoom room = findRoomOrThrow(roomId);
-        
+
         // 모든 모드에서 사용 가능 (DUEL, TOURNAMENT, GOLDENBELL)
-        
+
         // 문제 존재 확인
         MatchQuestion question = questionRepository.findByRoomIdAndQuestionId(roomId, questionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Question not found: " + questionId));
-        
+
         // 이미 QUESTION_STARTED 이벤트가 있는지 확인
         List<MatchEvent> existingEvents = eventRepository.findByRoomIdAndEventTypeContaining(
                 roomId, "QUESTION_STARTED");
@@ -527,12 +670,12 @@ public class VersusService {
                         return false;
                     }
                 });
-        
+
         if (alreadyRecorded) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "QUESTION_STARTED event already recorded for this question");
         }
-        
+
         // 문제 시작 이벤트 기록 (모든 참가자 공통)
         recordEvent(roomId, "QUESTION_STARTED", Map.of(
                 "questionId", questionId,
@@ -541,10 +684,10 @@ public class VersusService {
                 "startedAt", Instant.now().toString(),
                 "allParticipants", true // 모든 참가자 공통 시작
         ));
-        
+
         log.info("문제 시작 이벤트 기록 (테스트용): roomId={}, questionId={}, roundNo={}",
                 roomId, questionId, question.getRoundNo());
-        
+
         return Map.of(
                 "success", true,
                 "roomId", roomId,
@@ -562,25 +705,49 @@ public class VersusService {
     @Transactional(readOnly = true)
     public VersusDtos.QuestionAnswersResp getQuestionAnswers(Long roomId, Long questionId) {
         MatchRoom room = findRoomOrThrow(roomId);
-        
+
         // 골든벨 모드가 아니면 빈 리스트 반환 (1:1 배틀, 토너먼트는 상대방 답 안 띄움)
         if (room.getMode() != MatchMode.GOLDENBELL) {
             return new VersusDtos.QuestionAnswersResp(questionId, List.of());
         }
-        
+
         List<MatchAnswer> answers = answerRepository.findByRoomIdAndQuestionId(roomId, questionId);
-        
-        List<VersusDtos.AnswerInfo> answerInfos = answers.stream()
-                .map(answer -> new VersusDtos.AnswerInfo(
-                        answer.getUserId(),
-                        answer.getUserAnswer(), // 단답식/서술형 답안 텍스트
-                        answer.isCorrect(),
-                        answer.getTimeMs(),
-                        answer.getScoreDelta(),
-                        answer.getSubmittedAt()
-                ))
+
+        // 사용자 프로필 정보 조회 (닉네임, 스킨 ID)
+        List<String> userIds = answers.stream()
+                .map(MatchAnswer::getUserId)
+                .distinct()
                 .toList();
-        
+        Map<String, AccountServiceClient.ProfileSummary> profileMap = new HashMap<>();
+        try {
+            List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
+            profileMap = profiles.stream()
+                    .collect(Collectors.toMap(
+                            AccountServiceClient.ProfileSummary::userId,
+                            profile -> profile,
+                            (a, b) -> a
+                    ));
+        } catch (Exception e) {
+            log.warn("사용자 프로필 조회 실패: roomId={}, questionId={}, error={}", roomId, questionId, e.getMessage());
+        }
+
+        Map<String, AccountServiceClient.ProfileSummary> finalProfileMap = profileMap;
+        List<VersusDtos.AnswerInfo> answerInfos = answers.stream()
+                .map(answer -> {
+                    AccountServiceClient.ProfileSummary profile = finalProfileMap.get(answer.getUserId());
+                    return new VersusDtos.AnswerInfo(
+                            answer.getUserId(),
+                            profile != null ? profile.nickname() : null,
+                            determineSkinId(answer.getUserId(), profile),
+                            answer.getUserAnswer(), // 단답식/서술형 답안 텍스트
+                            answer.isCorrect(),
+                            answer.getTimeMs(),
+                            answer.getScoreDelta(),
+                            answer.getSubmittedAt()
+                    );
+                })
+                .toList();
+
         return new VersusDtos.QuestionAnswersResp(questionId, answerInfos);
     }
 
@@ -598,9 +765,9 @@ public class VersusService {
                                               MatchQuestion question,
                                               VersusDtos.ScoreBoardResp scoreboard) {
         long participants = participantRepository.countByRoomId(room.getId());
-        log.debug("handleDuelProgress 호출: roomId={}, questionId={}, participants={}", 
+        log.debug("handleDuelProgress 호출: roomId={}, questionId={}, participants={}",
                 room.getId(), question.getQuestionId(), participants);
-        
+
         if (participants <= 1) {
             String winner = scoreboard.items().isEmpty() ? null : scoreboard.items().get(0).userId();
             recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
@@ -613,40 +780,54 @@ public class VersusService {
         long answeredForQuestion = answerRepository.countByRoomIdAndQuestionId(room.getId(), question.getQuestionId());
         boolean roundCompleted = participants > 0 && answeredForQuestion >= participants;
 
-        log.info("DUEL 진행 체크: roomId={}, questionId={}, participants={}, answeredForQuestion={}, roundCompleted={}", 
+        log.info("DUEL 진행 체크: roomId={}, questionId={}, participants={}, answeredForQuestion={}, roundCompleted={}",
                 room.getId(), question.getQuestionId(), participants, answeredForQuestion, roundCompleted);
 
         if (roundCompleted) {
-            log.info("DUEL 라운드 완료: roomId={}, questionId={}, round={}, phase={}", 
+            log.info("DUEL 라운드 완료: roomId={}, questionId={}, round={}, phase={}",
                     room.getId(), question.getQuestionId(), question.getRoundNo(), question.getPhase().name());
-            
+
             recordEvent(room.getId(), "ROUND_COMPLETED", Map.of(
                     "mode", "DUEL",
                     "round", question.getRoundNo(),
                     "phase", question.getPhase().name()
             ));
-            
+
             // 다음 문제가 있으면 시작 이벤트 기록 (모든 참가자 공통)
             Optional<MatchQuestion> nextQuestion = findNextQuestion(room.getId(), question);
             if (nextQuestion.isPresent()) {
                 MatchQuestion next = nextQuestion.get();
-                // 다음 문제 시작 이벤트 기록 (모든 참가자 공통)
-                Instant startedAt = Instant.now();
+
+                // 쉬는 시간 시작 이벤트 기록
+                Instant intermissionStart = Instant.now();
+                recordEvent(room.getId(), "INTERMISSION_STARTED", Map.of(
+                        "nextQuestionId", next.getQuestionId(),
+                        "nextRoundNo", next.getRoundNo(),
+                        "nextPhase", next.getPhase().name(),
+                        "durationSec", QUESTION_INTERMISSION_SEC,
+                        "startedAt", intermissionStart.toString(),
+                        "questionStartAt", intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC).toString()
+                ));
+
+                // 5초 후 문제 시작 시간 계산
+                Instant questionStartTime = intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC);
+
+                // 다음 문제 시작 이벤트 기록 (startedAt을 미래 시간으로 설정)
                 recordEvent(room.getId(), "QUESTION_STARTED", Map.of(
                         "questionId", next.getQuestionId(),
                         "roundNo", next.getRoundNo(),
                         "phase", next.getPhase().name(),
-                        "startedAt", startedAt.toString(),
+                        "startedAt", questionStartTime.toString(),
                         "allParticipants", true // 모든 참가자 공통 시작
                 ));
-                log.info("1:1 배틀 다음 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}, orderNo={}, startedAt={}",
-                        room.getId(), next.getQuestionId(), next.getRoundNo(), next.getOrderNo(), startedAt);
+                log.info("1:1 배틀 쉬는 시간 시작: roomId={}, duration={}초, 다음 문제 시작 시간={}, questionId={}, roundNo={}, orderNo={}",
+                        room.getId(), QUESTION_INTERMISSION_SEC, questionStartTime, next.getQuestionId(), next.getRoundNo(), next.getOrderNo());
             } else {
-                log.info("DUEL 다음 문제 없음: roomId={}, currentQuestionId={}, roundNo={}, orderNo={}", 
+                log.info("DUEL 다음 문제 없음: roomId={}, currentQuestionId={}, roundNo={}, orderNo={}",
                         room.getId(), question.getQuestionId(), question.getRoundNo(), question.getOrderNo());
             }
         } else {
-            log.debug("DUEL 라운드 미완료: roomId={}, questionId={}, participants={}, answeredForQuestion={}", 
+            log.debug("DUEL 라운드 미완료: roomId={}, questionId={}, participants={}, answeredForQuestion={}",
                     room.getId(), question.getQuestionId(), participants, answeredForQuestion);
         }
 
@@ -692,7 +873,7 @@ public class VersusService {
         // 동점 처리 규칙: 모두 0점인지 체크
         boolean allZeroScore = ordered.stream().allMatch(item -> item.score() == 0);
         int currentRound = question.getRoundNo();
-        
+
         if (allZeroScore) {
             if (currentRound == 1) {
                 // 1라운드: 모두 0점이면 재경기
@@ -752,21 +933,36 @@ public class VersusService {
         ));
 
         persistBracket(roomId, question.getRoundNo(), survivors, eliminatedIds);
-        
+
         // 다음 문제가 있으면 시작 이벤트 기록 (모든 참가자 공통)
         Optional<MatchQuestion> nextQuestion = findNextQuestion(roomId, question);
         if (nextQuestion.isPresent()) {
             MatchQuestion next = nextQuestion.get();
-            // 다음 문제 시작 이벤트 기록 (모든 참가자 공통)
+
+            // 쉬는 시간 시작 이벤트 기록
+            Instant intermissionStart = Instant.now();
+            recordEvent(roomId, "INTERMISSION_STARTED", Map.of(
+                    "nextQuestionId", next.getQuestionId(),
+                    "nextRoundNo", next.getRoundNo(),
+                    "nextPhase", next.getPhase().name(),
+                    "durationSec", QUESTION_INTERMISSION_SEC,
+                    "startedAt", intermissionStart.toString(),
+                    "questionStartAt", intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC).toString()
+            ));
+
+            // 5초 후 문제 시작 시간 계산
+            Instant questionStartTime = intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC);
+
+            // 다음 문제 시작 이벤트 기록 (startedAt을 미래 시간으로 설정)
             recordEvent(roomId, "QUESTION_STARTED", Map.of(
                     "questionId", next.getQuestionId(),
                     "roundNo", next.getRoundNo(),
                     "phase", next.getPhase().name(),
-                    "startedAt", Instant.now().toString(),
+                    "startedAt", questionStartTime.toString(),
                     "allParticipants", true // 모든 참가자 공통 시작
             ));
-            log.info("토너먼트 다음 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}",
-                    roomId, next.getQuestionId(), next.getRoundNo());
+            log.info("토너먼트 쉬는 시간 시작: roomId={}, duration={}초, 다음 문제 시작 시간={}, questionId={}, roundNo={}",
+                    roomId, QUESTION_INTERMISSION_SEC, questionStartTime, next.getQuestionId(), next.getRoundNo());
         }
 
         boolean matchCompleted = survivors.size() <= 1 || !hasNextRound(roomId, question.getRoundNo());
@@ -789,73 +985,192 @@ public class VersusService {
         List<GoldenbellState> states = goldenbellStateRepository.findByRoomId(roomId);
         long aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
 
-        long answeredForQuestion = answerRepository.countByRoomIdAndQuestionId(roomId, question.getQuestionId());
-        long expectedAnswers = Math.max(aliveCount, 1);
+        // REVIVAL phase에서는 부활한 사용자(revived=true)도 포함
+        Set<String> eligibleUserIds;
+        long expectedAnswers;
+
+        if (question.getPhase() == MatchPhase.REVIVAL) {
+            // REVIVAL phase: 살아있는 사용자 + 부활한 사용자
+            eligibleUserIds = states.stream()
+                    .filter(state -> state.isAlive() || state.isRevived())
+                    .map(GoldenbellState::getUserId)
+                    .collect(Collectors.toSet());
+            long eligibleCount = eligibleUserIds.size();
+            expectedAnswers = Math.max(eligibleCount, 1);
+            log.info("REVIVAL phase 진행 체크: roomId={}, questionId={}, aliveCount={}, eligibleCount={} (alive + revived)",
+                    roomId, question.getQuestionId(), aliveCount, eligibleCount);
+        } else {
+            // 일반 phase: 살아있는 사용자만
+            eligibleUserIds = states.stream()
+                    .filter(GoldenbellState::isAlive)
+                    .map(GoldenbellState::getUserId)
+                    .collect(Collectors.toSet());
+            expectedAnswers = Math.max(aliveCount, 1);
+        }
+
+        // 답안을 제출한 수 계산
+        long answeredForQuestion = answerRepository.findByRoomIdAndQuestionId(roomId, question.getQuestionId())
+                .stream()
+                .filter(answer -> eligibleUserIds.contains(answer.getUserId()))
+                .count();
+
         boolean roundCompleted = answeredForQuestion >= expectedAnswers;
         boolean stateChanged = false;
 
-        if (roundCompleted) {
-            // 전원 탈락 방지 규칙: aliveCount == 0이면 문제 무효 처리 및 재출제
-            if (aliveCount == 0) {
-                log.warn("골든벨 전원 탈락 감지: roomId={}, round={}, order={}, questionId={}. 문제 무효 처리 및 재출제",
-                        roomId, question.getRoundNo(), question.getOrderNo(), question.getQuestionId());
-                
-                if (retryQuestionOnFullElimination(room, question)) {
-                    stateChanged = true;
-                    // 재출제 후 상태 재계산
-                    states = goldenbellStateRepository.findByRoomId(roomId);
-                    aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
-                    // 재출제했으므로 roundCompleted는 false로 유지 (같은 라운드에서 재시도)
-                    return new ModeResolution(false, false, true);
+        // 전원 탈락 체크는 roundCompleted와 관계없이 먼저 확인
+        if (aliveCount == 0) {
+            log.warn("골든벨 전원 탈락 감지: roomId={}, round={}, order={}, questionId={}. 게임 종료",
+                    roomId, question.getRoundNo(), question.getOrderNo(), question.getQuestionId());
+            String winner = scoreboard.items().isEmpty() ? null : scoreboard.items().get(0).userId();
+            recordEvent(roomId, "MATCH_FINISHED", Map.of(
+                    "mode", "GOLDENBELL",
+                    "winner", winner,
+                    "aliveCount", aliveCount,
+                    "reason", "ALL_ELIMINATED"
+            ));
+            return new ModeResolution(roundCompleted, true, true);
+        }
+
+        // 현재 문제의 시간 제한이 지났는지 확인
+        boolean timeExpired = false;
+        try {
+            List<MatchEvent> startEvents = eventRepository.findByRoomIdAndEventTypeContaining(roomId, "QUESTION_STARTED");
+            Optional<MatchEvent> currentQuestionEvent = startEvents.stream()
+                    .filter(e -> {
+                        try {
+                            if (e.getPayloadJson() == null) return false;
+                            Map<String, Object> payload = objectMapper.readValue(
+                                    e.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                            Object qId = payload.get("questionId");
+                            return qId != null && question.getQuestionId().equals(Long.valueOf(qId.toString()));
+                        } catch (Exception ex) {
+                            return false;
+                        }
+                    })
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+
+            if (currentQuestionEvent.isPresent()) {
+                try {
+                    Map<String, Object> payload = objectMapper.readValue(
+                            currentQuestionEvent.get().getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                    String startedAtStr = (String) payload.get("startedAt");
+                    Instant startTime = startedAtStr != null
+                            ? Instant.parse(startedAtStr)
+                            : currentQuestionEvent.get().getCreatedAt();
+                    Instant endTime = startTime.plusSeconds(question.getTimeLimitSec());
+                    timeExpired = Instant.now().isAfter(endTime);
+                } catch (Exception e) {
+                    log.debug("Failed to check time expiration: {}", e.getMessage());
                 }
             }
-            
-            recordEvent(roomId, "ROUND_COMPLETED", Map.of(
-                    "mode", "GOLDENBELL",
-                    "round", question.getRoundNo(),
-                    "phase", question.getPhase().name(),
-                    "aliveCount", aliveCount
-            ));
-            
+        } catch (Exception e) {
+            log.debug("Failed to check time expiration: {}", e.getMessage());
+        }
+
+        // roundCompleted가 true이거나 시간이 지났으면 다음 문제로 진행
+        if (roundCompleted || timeExpired) {
+            if (roundCompleted) {
+                recordEvent(roomId, "ROUND_COMPLETED", Map.of(
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "phase", question.getPhase().name(),
+                        "aliveCount", aliveCount
+                ));
+            } else if (timeExpired) {
+                log.warn("골든벨 문제 시간 초과: roomId={}, questionId={}, roundNo={}, orderNo={}. 답안 미완료 상태에서 다음 문제로 진행",
+                        roomId, question.getQuestionId(), question.getRoundNo(), question.getOrderNo());
+                recordEvent(roomId, "ROUND_TIMEOUT", Map.of(
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "phase", question.getPhase().name(),
+                        "aliveCount", aliveCount,
+                        "answeredForQuestion", answeredForQuestion,
+                        "expectedAnswers", expectedAnswers
+                ));
+            }
+
             // 다음 문제가 있으면 시작 이벤트 기록 (모든 참가자 공통)
             Optional<MatchQuestion> nextQuestion = findNextQuestion(roomId, question);
             if (nextQuestion.isPresent()) {
                 MatchQuestion next = nextQuestion.get();
-                // 다음 문제 시작 이벤트 기록 (모든 참가자 공통)
+
+                // 쉬는 시간 시작 이벤트 기록
+                Instant intermissionStart = Instant.now();
+                recordEvent(roomId, "INTERMISSION_STARTED", Map.of(
+                        "nextQuestionId", next.getQuestionId(),
+                        "nextRoundNo", next.getRoundNo(),
+                        "nextPhase", next.getPhase().name(),
+                        "durationSec", QUESTION_INTERMISSION_SEC,
+                        "startedAt", intermissionStart.toString(),
+                        "questionStartAt", intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC).toString()
+                ));
+
+                // 5초 후 문제 시작 시간 계산
+                Instant questionStartTime = intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC);
+
+                // 다음 문제 시작 이벤트 기록 (startedAt을 미래 시간으로 설정)
                 recordEvent(roomId, "QUESTION_STARTED", Map.of(
                         "questionId", next.getQuestionId(),
                         "roundNo", next.getRoundNo(),
                         "phase", next.getPhase().name(),
-                        "startedAt", Instant.now().toString(),
+                        "startedAt", questionStartTime.toString(),
                         "allParticipants", true // 모든 참가자 공통 시작
                 ));
-                log.info("골든벨 다음 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}",
-                        roomId, next.getQuestionId(), next.getRoundNo());
+
+                log.info("골든벨 쉬는 시간 시작: roomId={}, duration={}초, 다음 문제 시작 시간={}, questionId={}, roundNo={}, roundCompleted={}, timeExpired={}",
+                        roomId, QUESTION_INTERMISSION_SEC, questionStartTime, next.getQuestionId(), next.getRoundNo(), roundCompleted, timeExpired);
             }
 
+            // 라운드 2의 마지막 문제가 완료된 후에만 부활 체크
             if (question.getRoundNo() == GOLDENBELL_REVIVE_CHECK_ROUND) {
-                if (aliveCount <= GOLDENBELL_REVIVE_TARGET) {
-                    if (reviveFastestEliminated(roomId, GOLDENBELL_REVIVE_CHECK_ROUND)) {
-                        stateChanged = true;
-                        states = goldenbellStateRepository.findByRoomId(roomId);
-                        aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+                // 해당 라운드의 모든 문제 조회
+                List<MatchQuestion> roundQuestions = questionRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo());
+                // 현재 문제가 해당 라운드의 마지막 문제인지 확인
+                int maxOrderNo = roundQuestions.stream()
+                        .mapToInt(MatchQuestion::getOrderNo)
+                        .max()
+                        .orElse(0);
+                boolean isLastQuestionInRound = question.getOrderNo() >= maxOrderNo;
+
+                if (isLastQuestionInRound) {
+                    log.info("골든벨 라운드 {} 마지막 문제 완료: roomId={}, questionId={}, orderNo={}, aliveCount={}",
+                            question.getRoundNo(), roomId, question.getQuestionId(), question.getOrderNo(), aliveCount);
+
+                    if (aliveCount <= GOLDENBELL_REVIVE_TARGET) {
+                        if (reviveFastestEliminated(roomId, GOLDENBELL_REVIVE_CHECK_ROUND)) {
+                            stateChanged = true;
+                            states = goldenbellStateRepository.findByRoomId(roomId);
+                            aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+                            log.info("골든벨 부활 처리 완료 (가장 빠른 탈락자): roomId={}, aliveCount={}", roomId, aliveCount);
+                        }
                     }
-                }
-                if (aliveCount == 0) {
-                    if (reviveTopN(room, GOLDENBELL_REVIVE_TARGET)) {
-                        stateChanged = true;
-                        states = goldenbellStateRepository.findByRoomId(roomId);
-                        aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+                    if (aliveCount == 0) {
+                        if (reviveTopN(room, GOLDENBELL_REVIVE_TARGET)) {
+                            stateChanged = true;
+                            states = goldenbellStateRepository.findByRoomId(roomId);
+                            aliveCount = states.stream().filter(GoldenbellState::isAlive).count();
+                            log.info("골든벨 부활 처리 완료 (TOP {}): roomId={}, aliveCount={}", GOLDENBELL_REVIVE_TARGET, roomId, aliveCount);
+                        }
                     }
                 }
             }
         }
 
-        boolean hasNext = hasNextRound(roomId, question.getRoundNo());
+        // 다음 문제가 있는지 확인 (같은 라운드 내의 다음 문제 또는 다음 라운드의 첫 문제)
+        Optional<MatchQuestion> nextQuestion = findNextQuestion(roomId, question);
+        boolean hasNext = nextQuestion.isPresent();
         boolean matchCompleted = false;
-        if (aliveCount <= 1) {
+
+        // 게임 종료 조건 체크 (roundCompleted와 관계없이)
+        if (aliveCount == 0) {
+            // 전원 탈락 시 게임 종료
+            matchCompleted = true;
+        } else if (aliveCount <= 1) {
             matchCompleted = true;
         } else if (!hasNext) {
+            // 모든 문제가 끝났을 때도 게임 종료 (roundCompleted와 관계없이)
+            log.info("골든벨 모든 문제 완료: roomId={}, questionId={}, roundNo={}, orderNo={}, aliveCount={}, hasNext={}. 게임 종료",
+                    roomId, question.getQuestionId(), question.getRoundNo(), question.getOrderNo(), aliveCount, hasNext);
             matchCompleted = true;
         }
 
@@ -864,7 +1179,9 @@ public class VersusService {
             recordEvent(roomId, "MATCH_FINISHED", Map.of(
                     "mode", "GOLDENBELL",
                     "winner", winner,
-                    "aliveCount", aliveCount
+                    "aliveCount", aliveCount,
+                    "roundCompleted", roundCompleted,
+                    "hasNext", hasNext
             ));
             stateChanged = true;
         }
@@ -879,6 +1196,57 @@ public class VersusService {
         GoldenbellState state = goldenbellStateRepository.findByRoomIdAndUserId(room.getId(), participant.getUserId())
                 .orElseGet(() -> goldenbellStateRepository.save(GoldenbellState.alive(room.getId(), participant.getUserId())));
 
+        // REVIVAL phase 처리
+        if (question.getPhase() == MatchPhase.REVIVAL) {
+            if (correct && state.isRevived() && !state.isAlive()) {
+                // 부활한 사용자가 REVIVAL 문제를 맞추면 다시 살아남
+                state.setAlive(true);
+                goldenbellStateRepository.save(state);
+                recordEvent(room.getId(), "GOLDENBELL_REVIVED_BY_ANSWER", Map.of(
+                        "userId", participant.getUserId(),
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "questionId", question.getQuestionId()
+                ));
+                log.info("부활한 사용자가 REVIVAL 문제 정답으로 다시 살아남: roomId={}, userId={}, questionId={}",
+                        room.getId(), participant.getUserId(), question.getQuestionId());
+                return true;
+            } else if (!correct && state.isRevived()) {
+                // 부활한 사용자가 REVIVAL 문제를 틀리면 탈락 처리
+                if (state.isAlive()) {
+                    // alive=true인 경우 false로 변경
+                    state.setAlive(false);
+                }
+                state.setRevived(false); // 부활 기회 상실
+                goldenbellStateRepository.save(state);
+                recordEvent(room.getId(), "GOLDENBELL_REVIVAL_FAILED", Map.of(
+                        "userId", participant.getUserId(),
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "questionId", question.getQuestionId()
+                ));
+                log.info("부활한 사용자가 REVIVAL 문제 오답으로 탈락: roomId={}, userId={}, questionId={}",
+                        room.getId(), participant.getUserId(), question.getQuestionId());
+                return true;
+            } else if (!correct && state.isAlive() && !state.isRevived()) {
+                // 일반 참가자(alive=true, revived=false)가 REVIVAL 문제를 틀리면 탈락
+                state.setAlive(false);
+                goldenbellStateRepository.save(state);
+                recordEvent(room.getId(), "PLAYER_ELIMINATED", Map.of(
+                        "userId", participant.getUserId(),
+                        "mode", "GOLDENBELL",
+                        "round", question.getRoundNo(),
+                        "phase", "REVIVAL"
+                ));
+                log.info("일반 참가자가 REVIVAL 문제 오답으로 탈락: roomId={}, userId={}, questionId={}",
+                        room.getId(), participant.getUserId(), question.getQuestionId());
+                return true;
+            }
+            // REVIVAL phase에서 정답을 맞춘 일반 참가자는 그대로 alive 유지
+            return false;
+        }
+
+        // 일반 phase 처리: 오답 시 탈락
         if (!correct && state.isAlive()) {
             state.setAlive(false);
             goldenbellStateRepository.save(state);
@@ -906,9 +1274,120 @@ public class VersusService {
                 .roomId(roomId)
                 .userId(userId)
                 .joinedAt(Instant.now())
+                .lastHeartbeatAt(Instant.now())
                 .eliminated(false)
                 .build();
         return participantRepository.save(participant);
+    }
+
+    /**
+     * 하트비트 업데이트
+     * - WAIT 상태: 모든 모드에서 허용
+     * - ONGOING 상태: DUEL 모드에서만 허용
+     * 사용자가 아직 연결되어 있음을 서버에 알림
+     */
+    @Transactional
+    public void updateHeartbeat(Long roomId, String userId) {
+        MatchRoom room = findRoomOrThrow(roomId);
+
+        // WAIT 상태 또는 DUEL 모드의 ONGOING 상태에서만 하트비트 업데이트 가능
+        if (room.getStatus() == MatchStatus.WAIT) {
+            // WAIT 상태는 모든 모드에서 허용
+        } else if (room.getStatus() == MatchStatus.ONGOING && room.getMode() == MatchMode.DUEL) {
+            // DUEL 모드의 ONGOING 상태에서도 허용
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Heartbeat only allowed in WAIT rooms or ONGOING DUEL rooms");
+        }
+
+        MatchParticipant participant = participantRepository.findByRoomIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Participant not found"));
+
+        participant.setLastHeartbeatAt(Instant.now());
+        participantRepository.save(participant);
+    }
+
+    /**
+     * 타임아웃된 참가자 자동 제거
+     * - WAIT 상태: 참가자 제거
+     * - ONGOING DUEL: 참가자 제거 후 게임 종료 처리
+     * 하트비트가 1분 이상 없는 참가자를 제거
+     */
+    @Transactional
+    public int removeTimeoutParticipants() {
+        Instant thresholdTime = Instant.now().minus(1, ChronoUnit.MINUTES);
+        List<MatchParticipant> timeoutParticipants = participantRepository.findTimeoutParticipants(thresholdTime);
+
+        int removedCount = 0;
+        for (MatchParticipant participant : timeoutParticipants) {
+            try {
+                MatchRoom room = findRoomOrThrow(participant.getRoomId());
+
+                if (room.getStatus() == MatchStatus.WAIT) {
+                    // 대기 중인 방: 참가자 제거
+                    participantRepository.delete(participant);
+                    removedCount++;
+
+                    recordEvent(room.getId(), "PLAYER_TIMEOUT", Map.of(
+                            "userId", participant.getUserId(),
+                            "timeoutAt", Instant.now().toString()
+                    ));
+
+                    log.info("Removed timeout participant from WAIT room: roomId={}, userId={}, lastHeartbeatAt={}",
+                            participant.getRoomId(), participant.getUserId(), participant.getLastHeartbeatAt());
+
+                } else if (room.getStatus() == MatchStatus.ONGOING && room.getMode() == MatchMode.DUEL) {
+                    // DUEL 모드 진행 중: 참가자 제거 후 게임 종료
+                    participantRepository.delete(participant);
+                    removedCount++;
+
+                    recordEvent(room.getId(), "PLAYER_TIMEOUT", Map.of(
+                            "userId", participant.getUserId(),
+                            "timeoutAt", Instant.now().toString(),
+                            "reason", "HEARTBEAT_TIMEOUT"
+                    ));
+
+                    // 남은 참가자 확인
+                    long remainingParticipants = participantRepository.countByRoomId(room.getId());
+
+                    if (remainingParticipants <= 1) {
+                        // 게임 종료 처리
+                        room.setStatus(MatchStatus.DONE);
+                        roomRepository.save(room);
+
+                        // 승자 결정 (남은 참가자가 있으면 승자, 없으면 null)
+                        String winner = null;
+                        if (remainingParticipants == 1) {
+                            List<MatchParticipant> remaining = participantRepository.findByRoomId(room.getId());
+                            if (!remaining.isEmpty()) {
+                                winner = remaining.get(0).getUserId();
+                            }
+                        }
+
+                        recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
+                                "mode", "DUEL",
+                                "winner", winner != null ? winner : "NONE",
+                                "reason", "OPPONENT_TIMEOUT"
+                        ));
+
+                        // 스코어보드 계산하여 보상 지급
+                        VersusDtos.ScoreBoardResp scoreboard = computeScoreboard(room);
+                        notifyProgressService(room, scoreboard);
+
+                        log.info("DUEL game ended due to timeout: roomId={}, timeoutUserId={}, winner={}",
+                                room.getId(), participant.getUserId(), winner);
+                    }
+
+                    log.info("Removed timeout participant from ONGOING DUEL: roomId={}, userId={}, remainingParticipants={}",
+                            participant.getRoomId(), participant.getUserId(), remainingParticipants);
+                }
+            } catch (Exception e) {
+                log.error("Failed to remove timeout participant: roomId={}, userId={}",
+                        participant.getRoomId(), participant.getUserId(), e);
+            }
+        }
+
+        return removedCount;
     }
 
     private MatchQuestion resolveQuestion(Long roomId, Long questionId) {
@@ -922,13 +1401,34 @@ public class VersusService {
         Map<String, GoldenbellState> goldenState = goldenbellStateRepository.findByRoomId(roomId).stream()
                 .collect(Collectors.toMap(GoldenbellState::getUserId, g -> g));
 
+        // 사용자 프로필 정보 조회 (닉네임, 스킨 ID)
+        List<String> userIds = participants.stream()
+                .map(MatchParticipant::getUserId)
+                .toList();
+        Map<String, AccountServiceClient.ProfileSummary> profileMap = new HashMap<>();
+        try {
+            List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
+            profileMap = profiles.stream()
+                    .collect(Collectors.toMap(
+                            AccountServiceClient.ProfileSummary::userId,
+                            profile -> profile,
+                            (a, b) -> a
+                    ));
+        } catch (Exception e) {
+            log.warn("사용자 프로필 조회 실패: roomId={}, error={}", roomId, e.getMessage());
+        }
+
+        Map<String, AccountServiceClient.ProfileSummary> finalProfileMap = profileMap;
         List<VersusDtos.ParticipantSummary> participantSummaries = participants.stream()
                 .map(p -> {
                     GoldenbellState state = goldenState.get(p.getUserId());
                     boolean alive = state != null ? state.isAlive() : !p.isEliminated();
                     boolean revived = state != null && state.isRevived();
+                    AccountServiceClient.ProfileSummary profile = finalProfileMap.get(p.getUserId());
                     return new VersusDtos.ParticipantSummary(
                             p.getUserId(),
+                            profile != null ? profile.nickname() : null,
+                            determineSkinId(p.getUserId(), profile),
                             p.getFinalScore(),
                             p.getPlayerRank(),
                             alive,
@@ -964,7 +1464,8 @@ public class VersusService {
                 room.getMode(),
                 room.getStatus(),
                 participantSummaries.size(),
-                room.getCreatedAt()
+                room.getCreatedAt(),
+                room.getScheduledAt()
         );
 
         return new VersusDtos.RoomDetailResp(
@@ -993,8 +1494,29 @@ public class VersusService {
         Map<String, GoldenbellState> goldenState = goldenbellStateRepository.findByRoomId(roomId).stream()
                 .collect(Collectors.toMap(GoldenbellState::getUserId, g -> g));
 
+        // 사용자 프로필 정보 조회 (닉네임, 스킨 ID)
+        List<String> userIds = participants.stream()
+                .map(MatchParticipant::getUserId)
+                .toList();
+        Map<String, AccountServiceClient.ProfileSummary> profileMap = new HashMap<>();
+        try {
+            List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
+            profileMap = profiles.stream()
+                    .collect(Collectors.toMap(
+                            AccountServiceClient.ProfileSummary::userId,
+                            profile -> profile,
+                            (a, b) -> a
+                    ));
+        } catch (Exception e) {
+            log.warn("사용자 프로필 조회 실패: roomId={}, error={}", roomId, e.getMessage());
+        }
+
         Map<Long, MatchQuestion> questionMap = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId).stream()
-                .collect(Collectors.toMap(MatchQuestion::getQuestionId, q -> q));
+                .collect(Collectors.toMap(
+                        MatchQuestion::getQuestionId,
+                        q -> q,
+                        (existing, replacement) -> existing  // 중복 키 발생 시 기존 값 유지
+                ));
 
         // 답안 조회: flush() 후에도 영속성 컨텍스트에 이전 답안이 캐시되어 있을 수 있으므로
         // 명시적으로 DB에서 최신 답안을 조회하기 위해 entityManager를 사용하여 쿼리 힌트 추가
@@ -1012,7 +1534,7 @@ public class VersusService {
 
             // 디버깅: 답안 정보 로그
             log.debug("Processing answer: roomId={}, userId={}, questionId={}, correct={}, userAnswer=[{}], scoreDelta={}",
-                    roomId, answer.getUserId(), answer.getQuestionId(), answer.isCorrect(), 
+                    roomId, answer.getUserId(), answer.getQuestionId(), answer.isCorrect(),
                     answer.getUserAnswer(), answer.getScoreDelta());
 
             // FINAL 라운드인지 확인
@@ -1051,11 +1573,11 @@ public class VersusService {
                 score.totalTimeMs += Math.min(time, limitMs);
             }
         }
-        
+
         // 디버깅: 최종 통계 로그
-        log.debug("Scoreboard stats for room {}: {}", roomId, 
+        log.debug("Scoreboard stats for room {}: {}", roomId,
                 stats.entrySet().stream()
-                        .map(e -> String.format("%s: correct=%d, total=%d, score=%d", 
+                        .map(e -> String.format("%s: correct=%d, total=%d, score=%d",
                                 e.getKey(), e.getValue().correct, e.getValue().total, e.getValue().score))
                         .collect(Collectors.joining(", ")));
 
@@ -1073,11 +1595,13 @@ public class VersusService {
                         Score score = entry.getValue();
                         FinalRoundScore finalScore = finalScores.getOrDefault(userId, new FinalRoundScore());
 
-                        // FINAL 라운드 점수를 메인 점수에 합산 (또는 별도 처리)
-                        // 여기서는 FINAL 라운드 점수를 우선으로 사용
-                        int finalScoreValue = finalScore.score > 0 ? finalScore.score : score.score;
-                        int finalCorrect = finalScore.correct > 0 ? finalScore.correct : score.correct;
-                        long finalTime = finalScore.totalTimeMs > 0 ? finalScore.totalTimeMs : score.totalTimeMs;
+                        // 전체 점수 합산: 일반 라운드 점수 + FINAL 라운드 점수
+                        int totalScoreValue = score.score + finalScore.score;
+                        // correctCount와 totalCount는 모든 라운드 합계
+                        int totalCorrect = score.correct + finalScore.correct;
+                        int totalCount = score.total + finalScore.total;
+                        // 전체 시간 합산: 일반 라운드 시간 + FINAL 라운드 시간
+                        long totalTime = score.totalTimeMs + finalScore.totalTimeMs;
 
                         GoldenbellState state = goldenState.get(userId);
                         boolean alive = state != null ? state.isAlive() : participants.stream()
@@ -1086,7 +1610,7 @@ public class VersusService {
                                 .map(p -> !p.isEliminated())
                                 .orElse(true);
                         boolean revived = state != null && state.isRevived();
-                        return new ScoreboardIntermediate(userId, finalCorrect, score.total, finalScoreValue, finalTime, alive, revived);
+                        return new ScoreboardIntermediate(userId, totalCorrect, totalCount, totalScoreValue, totalTime, alive, revived);
                     })
                     .sorted((a, b) -> {
                         // alive 상태 우선: alive=true가 항상 alive=false보다 높은 순위
@@ -1153,7 +1677,7 @@ public class VersusService {
             activeUserIds = activeParticipants.stream()
                     .map(MatchParticipant::getUserId)
                     .collect(Collectors.toSet());
-            
+
             // 현재 사용자와 같은 라운드의 활성 참가자만 표시
             // (토너먼트는 라운드별로 경쟁하므로, 같은 라운드의 모든 활성 참가자가 상대방)
             log.debug("토너먼트 라운드 {} 활성 참가자: {}", currentQuestion.getRoundNo(), activeUserIds);
@@ -1168,6 +1692,7 @@ public class VersusService {
         Map<String, MatchParticipant> participantMap = participants.stream()
                 .collect(Collectors.toMap(MatchParticipant::getUserId, p -> p));
 
+        Map<String, AccountServiceClient.ProfileSummary> finalProfileMap = profileMap;
         for (ScoreboardIntermediate intermediate : intermediates) {
             // 토너먼트 모드: 현재 라운드의 활성 참가자만 포함
             if (activeUserIds != null && !activeUserIds.contains(intermediate.userId())) {
@@ -1185,8 +1710,11 @@ public class VersusService {
             previousCorrect = intermediate.correct();
             previousTime = totalTime;
 
+            AccountServiceClient.ProfileSummary profile = finalProfileMap.get(intermediate.userId());
             finalItems.add(new VersusDtos.ScoreBoardItem(
                     intermediate.userId(),
+                    profile != null ? profile.nickname() : null,
+                    determineSkinId(intermediate.userId(), profile),
                     intermediate.correct(),
                     intermediate.total(),
                     intermediate.score(),
@@ -1208,31 +1736,37 @@ public class VersusService {
         // 현재 문제 정보 계산
         VersusDtos.CurrentQuestionInfo currentQuestionInfo = getCurrentQuestionInfo(roomId, room.getStatus());
 
-        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo);
+        // 쉬는 시간 정보 계산 (현재 문제가 없고 진행 중일 때만)
+        VersusDtos.IntermissionInfo intermissionInfo = null;
+        if (room.getStatus() == MatchStatus.ONGOING && currentQuestionInfo == null) {
+            intermissionInfo = getCurrentIntermissionInfo(roomId);
+        }
+
+        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo, intermissionInfo);
     }
 
     private boolean hasNextRound(Long roomId, int currentRound) {
         return questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId).stream()
                 .anyMatch(q -> q.getRoundNo() > currentRound);
     }
-    
+
     /**
      * 현재 문제 다음 문제 찾기
      * 같은 라운드 내의 다음 문제(order 증가) 또는 다음 라운드의 첫 문제를 반환
      */
     private Optional<MatchQuestion> findNextQuestion(Long roomId, MatchQuestion currentQuestion) {
         List<MatchQuestion> allQuestions = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId);
-        
+
         // 같은 라운드 내의 다음 문제 찾기 (order 증가)
         Optional<MatchQuestion> sameRoundNext = allQuestions.stream()
                 .filter(q -> q.getRoundNo().equals(currentQuestion.getRoundNo())
                         && q.getOrderNo() > currentQuestion.getOrderNo())
                 .min(Comparator.comparing(MatchQuestion::getOrderNo));
-        
+
         if (sameRoundNext.isPresent()) {
             return sameRoundNext;
         }
-        
+
         // 같은 라운드에 다음 문제가 없으면 다음 라운드의 첫 문제 찾기
         return allQuestions.stream()
                 .filter(q -> q.getRoundNo() > currentQuestion.getRoundNo())
@@ -1240,6 +1774,18 @@ public class VersusService {
                         .thenComparing(MatchQuestion::getOrderNo));
     }
 
+    /**
+     * 모든 참가자가 모든 문제에 답변했는지 확인
+     *
+     * 주의: GOLDENBELL 모드에서는 이 메서드를 사용하지 않습니다.
+     * GOLDENBELL은 중간에 탈락자가 생기는 구조이므로,
+     * 생존자 수와 다음 문제 존재 여부를 기준으로 게임 종료를 판단합니다.
+     * (handleGoldenbellProgress 참고)
+     *
+     * @param roomId 방 ID
+     * @param participants 참가자 수 (DUEL/TOURNAMENT용)
+     * @return 모든 참가자가 모든 문제에 답변했으면 true
+     */
     private boolean checkAllQuestionsAnswered(Long roomId, long participants) {
         long totalAnswers = answerRepository.countByRoomId(roomId);
         long questionCount = questionRepository.countByRoomId(roomId);
@@ -1254,39 +1800,39 @@ public class VersusService {
     @Transactional
     public boolean checkAndCompleteMatchIfNeeded(Long roomId) {
         MatchRoom room = findRoomOrThrow(roomId);
-        
+
         if (room.getStatus() != MatchStatus.ONGOING) {
             return false; // 이미 완료되었거나 대기 중
         }
-        
+
         long participants = participantRepository.countByRoomId(roomId);
         boolean matchCompleted = checkAllQuestionsAnswered(roomId, participants);
-        
+
         if (matchCompleted) {
-            log.info("봇 플레이 완료 후 매치 완료 체크: roomId={}, participants={}, status=DONE으로 변경", 
+            log.info("봇 플레이 완료 후 매치 완료 체크: roomId={}, participants={}, status=DONE으로 변경",
                     roomId, participants);
-            
+
             // 스코어보드 계산
             VersusDtos.ScoreBoardResp scoreboard = computeScoreboard(room);
-            
+
             // 매치 완료 처리
             room.setStatus(MatchStatus.DONE);
             roomRepository.save(room);
-            
+
             // MATCH_FINISHED 이벤트 기록
             String winner = scoreboard.items().isEmpty() ? null : scoreboard.items().get(0).userId();
             recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
                     "mode", room.getMode().name(),
                     "winner", winner != null ? winner : "N/A"
             ));
-            
+
             // progress-service에 결과 통지 및 보상 지급
             notifyProgressService(room, scoreboard);
-            
+
             log.info("매치 완료 처리 완료: roomId={}, status=DONE", roomId);
             return true;
         }
-        
+
         return false;
     }
 
@@ -1321,7 +1867,11 @@ public class VersusService {
         switch (room.getMode()) {
             case DUEL -> validateDuelQuestions(room, questions);
             case TOURNAMENT -> validateTournamentQuestions(room, questions);
-            case GOLDENBELL -> validateGoldenbellQuestions(questions);
+            case GOLDENBELL -> {
+                validateGoldenbellQuestions(questions);
+                // GOLDENBELL 모드에서는 룰 기반 검증도 수행
+                validateGoldenbellQuestionsWithRule(room.getId(), questions);
+            }
         }
     }
 
@@ -1331,7 +1881,7 @@ public class VersusService {
         }
         Map<String, Object> scope = readScope(room.getScopeJson());
         boolean practical = isPracticalExam(scope);
-        
+
         if (practical) {
             // 실기 모드: SHORT 10개 고정 (LONG 제거)
             long shortCount = questions.stream()
@@ -1340,7 +1890,7 @@ public class VersusService {
             long longCount = questions.stream()
                     .filter(q -> Objects.equals(q.getTimeLimitSec(), DUEL_PRACTICAL_LONG_LIMIT_SEC))
                     .count();
-            
+
             if (shortCount != 10 || longCount != 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "1:1 배틀(실기)은 SHORT 10개(" + DUEL_PRACTICAL_SHORT_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: SHORT " + shortCount + "개, LONG " + longCount + "개)");
@@ -1353,11 +1903,11 @@ public class VersusService {
             long mcqCount = questions.stream()
                     .filter(q -> Objects.equals(q.getTimeLimitSec(), DUEL_WRITTEN_MCQ_LIMIT_SEC))
                     .count();
-            
+
             if (oxCount != 2 || mcqCount != 8) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "1:1 배틀(필기)은 OX 2개(" + DUEL_WRITTEN_OX_LIMIT_SEC + "초)와 MCQ 8개(" 
-                        + DUEL_WRITTEN_MCQ_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: OX " + oxCount + "개, MCQ " + mcqCount + "개)");
+                        "1:1 배틀(필기)은 OX 2개(" + DUEL_WRITTEN_OX_LIMIT_SEC + "초)와 MCQ 8개("
+                                + DUEL_WRITTEN_MCQ_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: OX " + oxCount + "개, MCQ " + mcqCount + "개)");
             }
         }
     }
@@ -1373,7 +1923,7 @@ public class VersusService {
 
         for (int round = 1; round <= TOURNAMENT_ROUNDS; round++) {
             List<MatchQuestion> roundQuestions = byRound.getOrDefault(round, List.of());
-            
+
             if (practical && round == 3) {
                 // 실기 모드 라운드 3: SHORT 1개 + LONG 2개 (총 3문제)
                 if (roundQuestions.size() != TOURNAMENT_QUESTIONS_PER_ROUND) {
@@ -1386,11 +1936,11 @@ public class VersusService {
                 long longCount = roundQuestions.stream()
                         .filter(q -> Objects.equals(q.getTimeLimitSec(), DUEL_PRACTICAL_LONG_LIMIT_SEC))
                         .count();
-                
+
                 if (shortCount != 1 || longCount != 2) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "토너먼트 라운드 3(실기)는 SHORT 1개(" + DUEL_PRACTICAL_SHORT_LIMIT_SEC + "초)와 LONG 2개(" 
-                            + DUEL_PRACTICAL_LONG_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: SHORT " + shortCount + "개, LONG " + longCount + "개)");
+                            "토너먼트 라운드 3(실기)는 SHORT 1개(" + DUEL_PRACTICAL_SHORT_LIMIT_SEC + "초)와 LONG 2개("
+                                    + DUEL_PRACTICAL_LONG_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: SHORT " + shortCount + "개, LONG " + longCount + "개)");
                 }
             } else {
                 // 필기 모드 또는 실기 모드 라운드 1, 2: 각 라운드 3문제
@@ -1414,11 +1964,13 @@ public class VersusService {
     }
 
     private void validateGoldenbellQuestions(List<MatchQuestion> questions) {
-        if (questions.size() < GOLDENBELL_REVIVE_CHECK_ROUND + 4) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "골든벨은 최소 8문제가 필요합니다.");
+        // 골든벨은 4라운드 구조 (총 7문제: OX 2 + MCQ 2 + MCQ 1 + MCQ 2)
+        // 또는 실기 모드의 경우 SHORT 7문제
+        if (questions.size() < 7) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "골든벨은 최소 7문제가 필요합니다.");
         }
-        // 시간 제한 검증은 validateGoldenbellQuestionsWithRule에서 round_flow_json과 비교하여 수행
-        // 여기서는 문제 수만 확인
+        // 시간 제한 및 라운드별 구성 검증은 validateGoldenbellQuestionsWithRule에서 round_flow_json과 비교하여 수행
+        // 여기서는 최소 문제 수만 확인
     }
 
     /**
@@ -1601,7 +2153,7 @@ public class VersusService {
     @Transactional
     private boolean retryTournamentRound(MatchRoom room, int roundNo) {
         Long roomId = room.getId();
-        
+
         try {
             // 1. 해당 라운드의 모든 문제 삭제
             List<MatchQuestion> roundQuestions = questionRepository.findByRoomIdAndRoundNo(roomId, roundNo);
@@ -1609,30 +2161,30 @@ public class VersusService {
                 log.warn("토너먼트 재경기: 라운드 {}에 문제가 없음. roomId={}", roundNo, roomId);
                 return false;
             }
-            
+
             List<Long> questionIds = roundQuestions.stream()
                     .map(MatchQuestion::getQuestionId)
                     .toList();
-            
+
             questionRepository.deleteAll(roundQuestions);
             log.info("토너먼트 라운드 {} 문제 삭제: roomId={}, questionIds={}", roundNo, roomId, questionIds);
-            
+
             // 2. 해당 라운드의 모든 답안 삭제
             List<MatchAnswer> roundAnswers = answerRepository.findByRoomIdAndRoundNo(roomId, roundNo);
             if (!roundAnswers.isEmpty()) {
                 answerRepository.deleteAll(roundAnswers);
                 log.info("토너먼트 라운드 {} 답안 삭제: roomId={}, count={}", roundNo, roomId, roundAnswers.size());
             }
-            
+
             // 3. scopeJson에서 examMode, topicId 추출
             Map<String, Object> scope = readScope(room.getScopeJson());
             String examMode = (String) scope.getOrDefault("examMode", "WRITTEN");
             Long topicId = scope.get("topicId") != null ? Long.valueOf(scope.get("topicId").toString()) : null;
             boolean isPractical = "PRACTICAL".equalsIgnoreCase(examMode);
-            
+
             // 4. 라운드별 문제 타입 결정 및 새 문제 생성
             List<StudyServiceClient.QuestionDto> newQuestions;
-            
+
             if (roundNo == 1) {
                 // 1라운드: 필기면 OX 3문제, 실기면 SHORT 3문제
                 String questionType = isPractical ? "SHORT" : "OX";
@@ -1679,7 +2231,7 @@ public class VersusService {
                     );
                     List<StudyServiceClient.QuestionDto> shortQuestions = studyServiceClient.generateVersusQuestions(requestShort);
                     List<StudyServiceClient.QuestionDto> longQuestions = studyServiceClient.generateVersusQuestions(requestLong);
-                    
+
                     newQuestions = new ArrayList<>();
                     newQuestions.addAll(shortQuestions);
                     newQuestions.addAll(longQuestions);
@@ -1699,13 +2251,13 @@ public class VersusService {
                 log.error("토너먼트 재경기: 지원하지 않는 라운드 번호. roomId={}, roundNo={}", roomId, roundNo);
                 return false;
             }
-            
+
             if (newQuestions.size() < TOURNAMENT_QUESTIONS_PER_ROUND) {
-                log.error("토너먼트 재경기: 문제 수 부족. roomId={}, roundNo={}, requested={}, actual={}", 
+                log.error("토너먼트 재경기: 문제 수 부족. roomId={}, roundNo={}, requested={}, actual={}",
                         roomId, roundNo, TOURNAMENT_QUESTIONS_PER_ROUND, newQuestions.size());
                 return false;
             }
-            
+
             // 5. 새 문제 등록 (같은 라운드 번호, order 1, 2, 3)
             int orderNo = 1;
             for (StudyServiceClient.QuestionDto q : newQuestions.subList(0, TOURNAMENT_QUESTIONS_PER_ROUND)) {
@@ -1720,9 +2272,9 @@ public class VersusService {
                         .build();
                 questionRepository.save(newQuestion);
             }
-            
+
             log.info("토너먼트 라운드 {} 재경기 완료: roomId={}, 새 문제 수={}", roundNo, roomId, TOURNAMENT_QUESTIONS_PER_ROUND);
-            
+
             // 6. 첫 번째 문제 시작 이벤트 기록
             Optional<MatchQuestion> firstQuestion = questionRepository.findByRoomIdAndRoundNo(roomId, roundNo).stream()
                     .min(Comparator.comparing(MatchQuestion::getOrderNo));
@@ -1737,9 +2289,9 @@ public class VersusService {
                         "retry", true
                 ));
             }
-            
+
             return true;
-            
+
         } catch (Exception e) {
             log.error("토너먼트 라운드 재경기 중 오류 발생: roomId={}, roundNo={}", roomId, roundNo, e);
             return false;
@@ -1760,21 +2312,21 @@ public class VersusService {
         int orderNo = question.getOrderNo();
         MatchPhase phase = question.getPhase();
         Long invalidQuestionId = question.getQuestionId();
-        
+
         try {
             // 1. 현재 문제 무효 처리 (삭제)
             questionRepository.delete(question);
-            log.info("골든벨 문제 무효 처리: roomId={}, questionId={}, round={}, order={}", 
+            log.info("골든벨 문제 무효 처리: roomId={}, questionId={}, round={}, order={}",
                     roomId, invalidQuestionId, roundNo, orderNo);
-            
+
             // 2. 해당 문제의 모든 답안 삭제
             List<MatchAnswer> answersToDelete = answerRepository.findByRoomIdAndQuestionId(roomId, invalidQuestionId);
             if (!answersToDelete.isEmpty()) {
                 answerRepository.deleteAll(answersToDelete);
-                log.info("골든벨 무효 문제의 답안 삭제: roomId={}, questionId={}, count={}", 
+                log.info("골든벨 무효 문제의 답안 삭제: roomId={}, questionId={}, count={}",
                         roomId, invalidQuestionId, answersToDelete.size());
             }
-            
+
             // 3. 모든 참가자의 GoldenbellState를 alive=true로 롤백
             List<GoldenbellState> allStates = goldenbellStateRepository.findByRoomId(roomId);
             List<GoldenbellState> statesToRevive = allStates.stream()
@@ -1784,26 +2336,26 @@ public class VersusService {
                         // 부활 플래그는 유지 (이미 부활한 사람은 그대로)
                     })
                     .toList();
-            
+
             if (!statesToRevive.isEmpty()) {
                 goldenbellStateRepository.saveAll(statesToRevive);
                 log.info("골든벨 전원 부활: roomId={}, count={}", roomId, statesToRevive.size());
             }
-            
+
             // 4. 같은 round/order/phase에서 새로운 문제 재출제
-            // 문제 타입 결정 (phase, round, order에 따라)
-            String questionType = determineQuestionTypeForRound(roundNo, phase, orderNo);
-            if (questionType == null) {
-                log.error("골든벨 문제 타입 결정 실패: roomId={}, round={}, phase={}, order={}", roomId, roundNo, phase, orderNo);
-                return false;
-            }
-            
             // scopeJson에서 문제 생성 정보 가져오기
             Map<String, Object> scope = readScope(room.getScopeJson());
-            String examMode = determineExamModeForQuestionType(questionType);
+            String examMode = (String) scope.getOrDefault("examMode", "WRITTEN");
+
+            // 문제 타입 결정 (examMode, phase, round, order에 따라)
+            String questionType = determineQuestionTypeForRound(examMode, roundNo, phase, orderNo);
+            if (questionType == null) {
+                log.error("골든벨 문제 타입 결정 실패: roomId={}, examMode={}, round={}, phase={}, order={}", roomId, examMode, roundNo, phase, orderNo);
+                return false;
+            }
             String difficulty = (String) scope.getOrDefault("difficulty", "NORMAL");
             Long topicId = scope.get("topicId") != null ? Long.valueOf(scope.get("topicId").toString()) : null;
-            
+
             // 새로운 문제 요청
             StudyServiceClient.VersusQuestionRequest request = new StudyServiceClient.VersusQuestionRequest(
                     examMode,
@@ -1813,15 +2365,15 @@ public class VersusService {
                     1, // 1개만 필요
                     List.of(new StudyServiceClient.QuestionTypeSpec(questionType, 1))
             );
-            
+
             List<StudyServiceClient.QuestionDto> newQuestions = studyServiceClient.generateVersusQuestions(request);
             if (newQuestions.isEmpty()) {
                 log.error("골든벨 문제 재출제 실패: 새로운 문제를 가져올 수 없음. roomId={}, type={}", roomId, questionType);
                 return false;
             }
-            
+
             StudyServiceClient.QuestionDto newQuestion = newQuestions.get(0);
-            
+
             // 새로운 문제 등록
             MatchQuestion retryQuestion = MatchQuestion.builder()
                     .roomId(roomId)
@@ -1832,10 +2384,10 @@ public class VersusService {
                     .timeLimitSec(question.getTimeLimitSec()) // 기존 시간 제한 유지
                     .build();
             questionRepository.save(retryQuestion);
-            
-            log.info("골든벨 문제 재출제 완료: roomId={}, oldQuestionId={}, newQuestionId={}, round={}, order={}, phase={}", 
+
+            log.info("골든벨 문제 재출제 완료: roomId={}, oldQuestionId={}, newQuestionId={}, round={}, order={}, phase={}",
                     roomId, invalidQuestionId, newQuestion.id(), roundNo, orderNo, phase);
-            
+
             // 이벤트 기록
             recordEvent(roomId, "QUESTION_RETRY_ON_FULL_ELIMINATION", Map.of(
                     "mode", "GOLDENBELL",
@@ -1846,25 +2398,42 @@ public class VersusService {
                     "phase", phase.name(),
                     "reason", "ALL_PLAYERS_ELIMINATED"
             ));
-            
+
             return true;
-            
+
         } catch (Exception e) {
             log.error("골든벨 문제 재출제 중 오류 발생: roomId={}, questionId={}", roomId, invalidQuestionId, e);
             return false;
         }
     }
-    
+
     /**
      * 라운드, 페이즈, order에 따라 문제 타입 결정
+     *
+     * 골든벨 구성 (4라운드):
+     *   필기 모드:
+     *     라운드 1: OX 2문제
+     *     라운드 2: MCQ 2문제
+     *     라운드 3: MCQ 1문제 (REVIVAL)
+     *     라운드 4: MCQ 2문제 (FINAL)
+     *   실기 모드:
+     *     라운드 1: SHORT 2문제
+     *     라운드 2: SHORT 2문제
+     *     라운드 3: SHORT 1문제 (REVIVAL)
+     *     라운드 4: SHORT 2문제 (FINAL)
      */
-    private String determineQuestionTypeForRound(int roundNo, MatchPhase phase, int orderNo) {
-        // 골든벨 구성: 라운드 1(OX 2), 라운드 2(MCQ 2), 라운드 3(MCQ 1 REVIVAL), 라운드 4(SHORT 1 + LONG 1 FINAL)
+    private String determineQuestionTypeForRound(String examMode, int roundNo, MatchPhase phase, int orderNo) {
+        // 실기 모드: 모든 라운드에서 SHORT만 사용
+        if ("PRACTICAL".equals(examMode)) {
+            return "SHORT";
+        }
+
+        // 필기 모드
         if (phase == MatchPhase.REVIVAL) {
             return "MCQ"; // 라운드 3 부활전
         } else if (phase == MatchPhase.FINAL) {
-            // 라운드 4 FINAL: order 1은 SHORT, order 2는 LONG
-            return orderNo == 1 ? "SHORT" : "LONG";
+            // 필기 모드 라운드 4 FINAL: MCQ만 사용 (SHORT/LONG은 실기 전용)
+            return "MCQ";
         } else {
             // MAIN 페이즈
             if (roundNo == 1) {
@@ -1875,7 +2444,7 @@ public class VersusService {
         }
         return null;
     }
-    
+
     /**
      * 문제 타입에 따라 examMode 결정
      */
@@ -1922,17 +2491,29 @@ public class VersusService {
         return new VersusDtos.TimelineEvent(event.getEventType(), event.getCreatedAt(), payload);
     }
 
+    /**
+     * 골든벨 기본 룰 (4라운드 구조)
+     * 필기 골든벨:
+     *   라운드 1: OX 2문제 (8초)
+     *   라운드 2: MCQ 2문제 (12초)
+     *   라운드 3: MCQ 1문제 (REVIVAL, 15초)
+     *   라운드 4: MCQ 2문제 (FINAL, 12초)
+     * 실기 골든벨:
+     *   라운드 1: SHORT 2문제 (25초)
+     *   라운드 2: SHORT 2문제 (25초)
+     *   라운드 3: SHORT 1문제 (REVIVAL, 25초)
+     *   라운드 4: SHORT 2문제 (FINAL, 25초)
+     *
+     * 참고: 실제 문제 생성은 examMode에 따라 동적으로 이루어지며,
+     * 이 룰은 필기 모드 기준입니다.
+     */
     private String defaultGoldenbellRule() {
         return """
                 [
-                  {"round":1,"type":"OX","limitSec":10,"phase":"MAIN"},
-                  {"round":2,"type":"OX","limitSec":10,"phase":"MAIN"},
-                  {"round":3,"type":"MCQ","limitSec":10,"phase":"MAIN"},
-                  {"round":4,"type":"MCQ","limitSec":10,"phase":"MAIN"},
-                  {"round":5,"type":"SHORT","limitSec":30,"phase":"MAIN"},
-                  {"round":6,"type":"LONG","limitSec":30,"phase":"MAIN"},
-                  {"round":7,"type":"SHORT","limitSec":30,"phase":"FINAL"},
-                  {"round":8,"type":"LONG","limitSec":30,"phase":"FINAL"}
+                  {"round":1,"type":"OX","count":2,"limitSec":8,"phase":"MAIN"},
+                  {"round":2,"type":"MCQ","count":2,"limitSec":12,"phase":"MAIN"},
+                  {"round":3,"type":"MCQ","count":1,"limitSec":15,"phase":"REVIVAL"},
+                  {"round":4,"type":"MCQ","count":2,"limitSec":12,"phase":"FINAL"}
                 ]
                 """;
     }
@@ -2063,14 +2644,14 @@ public class VersusService {
 
         try {
             log.debug("generateQuestionsFromScope 시작: roomId={}, scopeJson={}", room.getId(), scopeJson);
-            
+
             Map<String, Object> scope = readScope(scopeJson);
             String examMode = (String) scope.getOrDefault("examMode", "WRITTEN");
             String difficulty = (String) scope.getOrDefault("difficulty", "NORMAL");
             String topicScope = (String) scope.getOrDefault("topicScope", "ALL");
             Long topicId = scope.get("topicId") != null ? Long.valueOf(scope.get("topicId").toString()) : null;
 
-            log.info("Parsed scope: roomId={}, examMode={}, difficulty={}, topicScope={}, topicId={}", 
+            log.info("Parsed scope: roomId={}, examMode={}, difficulty={}, topicScope={}, topicId={}",
                     room.getId(), examMode, difficulty, topicScope, topicId);
 
             // topicScope가 "CATEGORY"인 경우 "SPECIFIC"로 변환 (둘 다 특정 topicId에서 문제를 가져옴)
@@ -2081,10 +2662,10 @@ public class VersusService {
 
             List<StudyServiceClient.QuestionDto> questions;
             // topicScope가 "ALL"이 아니고 topicId가 있으면 "SPECIFIC"로 설정
-            String finalTopicScope = (topicId != null && !"ALL".equalsIgnoreCase(topicScope)) 
-                    ? "SPECIFIC" 
+            String finalTopicScope = (topicId != null && !"ALL".equalsIgnoreCase(topicScope))
+                    ? "SPECIFIC"
                     : (topicId != null ? "SPECIFIC" : "ALL");
-            
+
             if (room.getMode() == MatchMode.TOURNAMENT) {
                 // 토너먼트는 라운드별로 다른 난이도/타입 요청 필요
                 questions = generateTournamentQuestions(examMode, topicId);
@@ -2095,7 +2676,7 @@ public class VersusService {
                 // 모드별 문제 구성 결정
                 List<StudyServiceClient.QuestionTypeSpec> questionTypes = determineQuestionTypes(room.getMode(), examMode);
                 int totalCount = getTotalQuestionCount(room.getMode());
-                
+
                 StudyServiceClient.VersusQuestionRequest request = new StudyServiceClient.VersusQuestionRequest(
                         examMode,
                         finalTopicScope,
@@ -2109,14 +2690,14 @@ public class VersusService {
                         totalCount, room.getId(), room.getMode(), examMode, finalTopicScope, topicId, difficulty);
 
                 try {
-                    log.info("study-service 호출 시도: roomId={}, request={}", room.getId(), 
+                    log.info("study-service 호출 시도: roomId={}, request={}", room.getId(),
                             String.format("examMode=%s, topicScope=%s, topicId=%s, difficulty=%s, count=%d, questionTypes=%s",
-                                    request.examMode(), request.topicScope(), request.topicId(), request.difficulty(), 
+                                    request.examMode(), request.topicScope(), request.topicId(), request.difficulty(),
                                     request.count(), request.questionTypes()));
                     questions = studyServiceClient.generateVersusQuestions(request);
                     log.info("study-service 호출 성공: roomId={}, questionsCount={}", room.getId(), questions.size());
                 } catch (Exception e) {
-                    log.error("study-service 호출 실패: roomId={}, examMode={}, topicScope={}, topicId={}, difficulty={}, count={}, questionTypes={}, error={}, class={}", 
+                    log.error("study-service 호출 실패: roomId={}, examMode={}, topicScope={}, topicId={}, difficulty={}, count={}, questionTypes={}, error={}, class={}",
                             room.getId(), examMode, finalTopicScope, topicId, difficulty, request.count(), request.questionTypes(),
                             e.getMessage(), e.getClass().getName(), e);
                     throw e;
@@ -2125,7 +2706,7 @@ public class VersusService {
 
             if (questions.isEmpty()) {
                 monitoringConfig.recordTimer(timer, "generateQuestionsFromScope", "status", "not_found");
-                log.error("study-service에서 문제를 찾을 수 없음: roomId={}, examMode={}, topicScope={}, topicId={}, difficulty={}", 
+                log.error("study-service에서 문제를 찾을 수 없음: roomId={}, examMode={}, topicScope={}, topicId={}, difficulty={}",
                         room.getId(), examMode, finalTopicScope, topicId, difficulty);
                 throw new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -2137,18 +2718,18 @@ public class VersusService {
             String questionTypes = questions.stream()
                     .map(q -> q.type())
                     .collect(java.util.stream.Collectors.joining(", "));
-            log.info("Generated {} questions from study-service for room {}: types={}", 
+            log.info("Generated {} questions from study-service for room {}: types={}",
                     questions.size(), room.getId(), questionTypes);
 
             // MatchQuestion 형태로 변환
             List<VersusDtos.QuestionInfo> result = convertToQuestionInfos(questions, room.getMode());
-            
+
             // 골든벨의 경우 문제 수 확인 및 경고
             if (room.getMode() == MatchMode.GOLDENBELL && result.size() < 7) {
-                log.warn("골든벨 문제 수 부족: roomId={}, 요구={}, 실제={}, study-service에서 받은 문제={}", 
+                log.warn("골든벨 문제 수 부족: roomId={}, 요구={}, 실제={}, study-service에서 받은 문제={}",
                         room.getId(), 7, result.size(), questions.size());
             }
-            
+
             return result;
         } catch (ResponseStatusException e) {
             monitoringConfig.recordTimer(timer, "generateQuestionsFromScope", "status", "error");
@@ -2198,7 +2779,7 @@ public class VersusService {
             case DUEL -> DUEL_TOTAL_QUESTIONS;
             case TOURNAMENT -> TOURNAMENT_ROUNDS * TOURNAMENT_QUESTIONS_PER_ROUND;
             case GOLDENBELL -> 7; // 필기: OX2 + MCQ5(라운드2에2개+부활전1개+FINAL2개) = 7문제
-                                  // 실기: SHORT7(라운드1에2개+라운드2에2개+부활전1개+FINAL2개) = 7문제
+            // 실기: SHORT7(라운드1에2개+라운드2에2개+부활전1개+FINAL2개) = 7문제
         };
     }
 
@@ -2210,7 +2791,7 @@ public class VersusService {
         if (mode == MatchMode.GOLDENBELL) {
             return convertToQuestionInfosForGoldenbell(questions);
         }
-        
+
         List<VersusDtos.QuestionInfo> result = new ArrayList<>();
         int roundNo = 1;
         int orderNo = 1;
@@ -2257,25 +2838,33 @@ public class VersusService {
     }
 
     /**
-     * 골든벨 모드 전용: 라운드별 문제 타입 구성
-     * - 라운드 1: OX 2문제 (order 1, 2)
-     * - 라운드 2: MCQ 2문제 (order 1, 2)
-     * - 라운드 3: MCQ 1문제 (REVIVAL) - 패자부활전
-     * - 라운드 4: SHORT 1문제 + LONG 1문제 (FINAL, order 1, 2)
+     * 골든벨 모드 전용: 라운드별 문제 타입 구성 (4라운드)
+     *
+     * 필기 모드:
+     *   라운드 1: OX 2문제 (order 1, 2) - 8초
+     *   라운드 2: MCQ 2문제 (order 1, 2) - 12초
+     *   라운드 3: MCQ 1문제 (REVIVAL) - 패자부활전 - 15초
+     *   라운드 4: MCQ 2문제 (FINAL, order 1, 2) - 12초
+     *
+     * 실기 모드:
+     *   라운드 1: SHORT 2문제 (order 1, 2) - 25초
+     *   라운드 2: SHORT 2문제 (order 1, 2) - 25초
+     *   라운드 3: SHORT 1문제 (REVIVAL) - 패자부활전 - 25초
+     *   라운드 4: SHORT 2문제 (FINAL, order 1, 2) - 25초
      */
     private List<VersusDtos.QuestionInfo> convertToQuestionInfosForGoldenbell(
             List<StudyServiceClient.QuestionDto> questions) {
         List<VersusDtos.QuestionInfo> result = new ArrayList<>();
-        
+
         // 문제를 타입별로 분류
         List<StudyServiceClient.QuestionDto> oxQuestions = new ArrayList<>();
         List<StudyServiceClient.QuestionDto> mcqQuestions = new ArrayList<>();
         List<StudyServiceClient.QuestionDto> shortQuestions = new ArrayList<>();
-        
+
         // examMode 확인 (첫 번째 문제의 mode 사용)
         String examMode = questions.isEmpty() ? "WRITTEN" : questions.get(0).mode();
         boolean isPractical = "PRACTICAL".equals(examMode);
-        
+
         for (StudyServiceClient.QuestionDto q : questions) {
             switch (q.type()) {
                 case "OX" -> oxQuestions.add(q);
@@ -2284,7 +2873,7 @@ public class VersusService {
                 // LONG은 실기 골든벨에서 사용 안 함
             }
         }
-        
+
         if (isPractical) {
             // 실기 골든벨: SHORT만 사용
             // 라운드 1: SHORT 2문제 (order 1, 2) - 25초
@@ -2304,7 +2893,7 @@ public class VersusService {
                         25
                 ));
             }
-            
+
             // 라운드 2: SHORT 2문제 (order 1, 2, 난이도 ↑) - 25초
             if (shortQuestions.size() >= 4) {
                 result.add(new VersusDtos.QuestionInfo(
@@ -2322,7 +2911,7 @@ public class VersusService {
                         25
                 ));
             }
-            
+
             // 라운드 3: SHORT 1문제 (REVIVAL) - 패자부활전 - 25초
             if (shortQuestions.size() >= 5) {
                 result.add(new VersusDtos.QuestionInfo(
@@ -2333,10 +2922,10 @@ public class VersusService {
                         25
                 ));
             } else {
-                log.warn("골든벨 실기 라운드 3(부활전) SHORT 문제가 없습니다. SHORT 문제 수={}", 
+                log.warn("골든벨 실기 라운드 3(부활전) SHORT 문제가 없습니다. SHORT 문제 수={}",
                         shortQuestions.size());
             }
-            
+
             // 라운드 4: SHORT 2문제 (FINAL, order 1, 2, 난이도 ↑) - 25초
             if (shortQuestions.size() >= 7) {
                 result.add(new VersusDtos.QuestionInfo(
@@ -2354,10 +2943,10 @@ public class VersusService {
                         25
                 ));
             } else {
-                log.warn("골든벨 실기 라운드 4(FINAL) SHORT 문제가 부족합니다. SHORT 문제 수={}", 
+                log.warn("골든벨 실기 라운드 4(FINAL) SHORT 문제가 부족합니다. SHORT 문제 수={}",
                         shortQuestions.size());
             }
-            
+
             log.info("골든벨 실기 문제 변환 완료: SHORT={}, 결과={}문제",
                     shortQuestions.size(), result.size());
         } else {
@@ -2379,7 +2968,7 @@ public class VersusService {
                         8
                 ));
             }
-            
+
             // 라운드 2: MCQ 2문제 (order 1, 2) - 12초
             if (mcqQuestions.size() >= 2) {
                 result.add(new VersusDtos.QuestionInfo(
@@ -2397,7 +2986,7 @@ public class VersusService {
                         12
                 ));
             }
-            
+
             // 라운드 3: MCQ 1문제 (REVIVAL) - 패자부활전 - 15초
             if (mcqQuestions.size() >= 3) {
                 result.add(new VersusDtos.QuestionInfo(
@@ -2408,10 +2997,10 @@ public class VersusService {
                         15
                 ));
             } else {
-                log.warn("골든벨 필기 라운드 3(부활전) MCQ 문제가 없습니다. MCQ 문제 수={}", 
+                log.warn("골든벨 필기 라운드 3(부활전) MCQ 문제가 없습니다. MCQ 문제 수={}",
                         mcqQuestions.size());
             }
-            
+
             // 라운드 4: MCQ 2문제 (HARD, FINAL, order 1, 2) - 12초
             if (mcqQuestions.size() >= 5) {
                 result.add(new VersusDtos.QuestionInfo(
@@ -2429,14 +3018,14 @@ public class VersusService {
                         12
                 ));
             } else {
-                log.warn("골든벨 필기 라운드 4(FINAL) MCQ 문제가 부족합니다. MCQ 문제 수={}", 
+                log.warn("골든벨 필기 라운드 4(FINAL) MCQ 문제가 부족합니다. MCQ 문제 수={}",
                         mcqQuestions.size());
             }
-            
+
             log.info("골든벨 필기 문제 변환 완료: OX={}, MCQ={}, 결과={}문제",
                     oxQuestions.size(), mcqQuestions.size(), result.size());
         }
-        
+
         return result;
     }
 
@@ -2454,20 +3043,20 @@ public class VersusService {
     private List<VersusDtos.QuestionInfo> convertToQuestionInfosForTournament(
             List<StudyServiceClient.QuestionDto> questions) {
         List<VersusDtos.QuestionInfo> result = new ArrayList<>();
-        
+
         if (questions.isEmpty()) {
             return result;
         }
-        
+
         // 첫 번째 문제의 examMode로 필기/실기 판단
         String examMode = questions.get(0).mode();
         boolean isPractical = "PRACTICAL".equalsIgnoreCase(examMode);
-        
+
         if (isPractical) {
             // 실기 모드
             List<StudyServiceClient.QuestionDto> shortQuestions = new ArrayList<>();
             List<StudyServiceClient.QuestionDto> longQuestions = new ArrayList<>();
-            
+
             for (StudyServiceClient.QuestionDto q : questions) {
                 if ("SHORT".equals(q.type())) {
                     shortQuestions.add(q);
@@ -2475,7 +3064,7 @@ public class VersusService {
                     longQuestions.add(q);
                 }
             }
-            
+
             // 1R: SHORT 3문제
             int roundNo = 1;
             int orderNo = 1;
@@ -2490,7 +3079,7 @@ public class VersusService {
                         timeLimit
                 ));
             }
-            
+
             // 2R: SHORT 3문제
             roundNo = 2;
             orderNo = 1;
@@ -2505,7 +3094,7 @@ public class VersusService {
                         timeLimit
                 ));
             }
-            
+
             // 3R: SHORT 1문제 + LONG 2문제
             roundNo = 3;
             orderNo = 1;
@@ -2538,7 +3127,7 @@ public class VersusService {
             List<StudyServiceClient.QuestionDto> oxQuestions = new ArrayList<>();
             List<StudyServiceClient.QuestionDto> mcqNormalQuestions = new ArrayList<>();
             List<StudyServiceClient.QuestionDto> mcqHardQuestions = new ArrayList<>();
-            
+
             for (StudyServiceClient.QuestionDto q : questions) {
                 if ("OX".equals(q.type())) {
                     oxQuestions.add(q);
@@ -2551,7 +3140,7 @@ public class VersusService {
                     }
                 }
             }
-            
+
             // 1R: OX 3문제
             int roundNo = 1;
             int orderNo = 1;
@@ -2566,7 +3155,7 @@ public class VersusService {
                         timeLimit
                 ));
             }
-            
+
             // 2R: MCQ 3문제 (NORMAL)
             roundNo = 2;
             orderNo = 1;
@@ -2581,7 +3170,7 @@ public class VersusService {
                         timeLimit
                 ));
             }
-            
+
             // 3R: MCQ 3문제 (HARD) - HARD가 부족하면 NORMAL로 보충
             roundNo = 3;
             orderNo = 1;
@@ -2598,7 +3187,7 @@ public class VersusService {
                 ));
                 hardCount++;
             }
-            
+
             // HARD가 부족하면 NORMAL로 보충
             int normalIndex = 3; // 이미 2R에서 3개 사용
             while (hardCount < 3 && normalIndex < mcqNormalQuestions.size()) {
@@ -2614,19 +3203,29 @@ public class VersusService {
                 hardCount++;
             }
         }
-        
+
         return result;
     }
 
     /**
-     * 골든벨 모드 전용: WRITTEN과 PRACTICAL에서 문제 가져오기
-     * - WRITTEN: OX 2문제, MCQ 3문제 (라운드 2에 2개 + 라운드 3 부활전에 1개)
-     * - PRACTICAL: SHORT 1문제, LONG 1문제 (라운드 4 FINAL용)
+     * 골든벨 모드 전용: WRITTEN과 PRACTICAL에서 문제 가져오기 (4라운드 구조)
+     *
+     * 필기 모드 (WRITTEN):
+     *   라운드 1: OX 2문제
+     *   라운드 2: MCQ 2문제
+     *   라운드 3: MCQ 1문제 (REVIVAL)
+     *   라운드 4: MCQ 2문제 (FINAL, HARD 난이도 시도 후 NORMAL 폴백)
+     *
+     * 실기 모드 (PRACTICAL):
+     *   라운드 1: SHORT 2문제
+     *   라운드 2: SHORT 2문제
+     *   라운드 3: SHORT 1문제 (REVIVAL)
+     *   라운드 4: SHORT 2문제 (FINAL)
      */
     private List<StudyServiceClient.QuestionDto> generateGoldenbellQuestions(
             String examMode, Long topicId, String difficulty) {
         List<StudyServiceClient.QuestionDto> allQuestions = new ArrayList<>();
-        
+
         if ("PRACTICAL".equals(examMode)) {
             // 실기 골든벨: SHORT만 사용 (7문제)
             // 라운드 1: SHORT 2개
@@ -2645,12 +3244,12 @@ public class VersusService {
                                 new StudyServiceClient.QuestionTypeSpec("SHORT", 7)
                         )
                 );
-                
+
                 log.info("골든벨 실기 문제 요청: SHORT 7개 (NORMAL)");
                 List<StudyServiceClient.QuestionDto> practicalQuestions = studyServiceClient.generateVersusQuestions(practicalRequest);
                 allQuestions.addAll(practicalQuestions);
                 log.info("골든벨 실기 문제 수신: {}개", practicalQuestions.size());
-                
+
             } catch (FeignException.NotFound | FeignException.BadRequest e) {
                 log.warn("골든벨 실기 문제 요청 실패 (NORMAL): {}", e.getMessage());
             } catch (Exception e) {
@@ -2676,12 +3275,12 @@ public class VersusService {
                                 new StudyServiceClient.QuestionTypeSpec("MCQ", 2)
                         )
                 );
-                
+
                 log.info("골든벨 필기 문제 요청 (1차): OX 2, MCQ 2 (NORMAL)");
                 List<StudyServiceClient.QuestionDto> writtenQuestions1 = studyServiceClient.generateVersusQuestions(writtenRequest1);
                 allQuestions.addAll(writtenQuestions1);
                 log.info("골든벨 필기 문제 수신 (1차): {}개", writtenQuestions1.size());
-                
+
                 // REVIVAL용 MCQ 1개 (NORMAL)
                 StudyServiceClient.VersusQuestionRequest writtenRequest2 = new StudyServiceClient.VersusQuestionRequest(
                         "WRITTEN",
@@ -2693,12 +3292,12 @@ public class VersusService {
                                 new StudyServiceClient.QuestionTypeSpec("MCQ", 1)
                         )
                 );
-                
+
                 log.info("골든벨 필기 문제 요청 (2차): MCQ 1 (REVIVAL, NORMAL)");
                 List<StudyServiceClient.QuestionDto> writtenQuestions2 = studyServiceClient.generateVersusQuestions(writtenRequest2);
                 allQuestions.addAll(writtenQuestions2);
                 log.info("골든벨 필기 문제 수신 (2차): {}개", writtenQuestions2.size());
-                
+
                 // FINAL용 MCQ 2개 (HARD) - 실패 시 NORMAL로 폴백
                 try {
                     StudyServiceClient.VersusQuestionRequest writtenRequest3 = new StudyServiceClient.VersusQuestionRequest(
@@ -2711,7 +3310,7 @@ public class VersusService {
                                     new StudyServiceClient.QuestionTypeSpec("MCQ", 2)
                             )
                     );
-                    
+
                     log.info("골든벨 필기 문제 요청 (3차): MCQ 2 (FINAL, HARD)");
                     List<StudyServiceClient.QuestionDto> writtenQuestions3 = studyServiceClient.generateVersusQuestions(writtenRequest3);
                     allQuestions.addAll(writtenQuestions3);
@@ -2732,21 +3331,21 @@ public class VersusService {
                     allQuestions.addAll(writtenQuestions3Fallback);
                     log.info("골든벨 필기 문제 수신 (3차 폴백): {}개", writtenQuestions3Fallback.size());
                 }
-                
+
             } catch (FeignException.NotFound | FeignException.BadRequest e) {
                 log.warn("골든벨 필기 문제 요청 실패: {}", e.getMessage());
             } catch (Exception e) {
                 log.error("골든벨 필기 문제 요청 중 오류: {}", e.getMessage(), e);
             }
         }
-        
+
         if (allQuestions.isEmpty()) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     String.format("No questions available for Golden Bell (%s mode). Please check if questions exist.", examMode)
             );
         }
-        
+
         log.info("골든벨 전체 문제 수집 완료: mode={}, 총 {}개", examMode, allQuestions.size());
         return allQuestions;
     }
@@ -2771,7 +3370,7 @@ public class VersusService {
     private List<StudyServiceClient.QuestionDto> generateTournamentQuestions(String examMode, Long topicId) {
         List<StudyServiceClient.QuestionDto> allQuestions = new ArrayList<>();
         boolean isPractical = "PRACTICAL".equalsIgnoreCase(examMode);
-        
+
         if (isPractical) {
             // 실기 모드
             // 1R: SHORT 3문제 (NORMAL)
@@ -2785,7 +3384,7 @@ public class VersusService {
             );
             List<StudyServiceClient.QuestionDto> round1Questions = studyServiceClient.generateVersusQuestions(request1R);
             allQuestions.addAll(round1Questions);
-            
+
             // 2R: SHORT 3문제 (NORMAL)
             StudyServiceClient.VersusQuestionRequest request2R = new StudyServiceClient.VersusQuestionRequest(
                     examMode,
@@ -2797,7 +3396,7 @@ public class VersusService {
             );
             List<StudyServiceClient.QuestionDto> round2Questions = studyServiceClient.generateVersusQuestions(request2R);
             allQuestions.addAll(round2Questions);
-            
+
             // 3R: SHORT 1문제 + LONG 2문제 (NORMAL)
             StudyServiceClient.VersusQuestionRequest request3RShort = new StudyServiceClient.VersusQuestionRequest(
                     examMode,
@@ -2809,7 +3408,7 @@ public class VersusService {
             );
             List<StudyServiceClient.QuestionDto> round3ShortQuestions = studyServiceClient.generateVersusQuestions(request3RShort);
             allQuestions.addAll(round3ShortQuestions);
-            
+
             StudyServiceClient.VersusQuestionRequest request3RLong = new StudyServiceClient.VersusQuestionRequest(
                     examMode,
                     topicId != null ? "SPECIFIC" : "ALL",
@@ -2823,49 +3422,19 @@ public class VersusService {
         } else {
             // 필기 모드
             // 1R: OX 3문제 (NORMAL)
-        StudyServiceClient.VersusQuestionRequest request1R = new StudyServiceClient.VersusQuestionRequest(
-                examMode,
-                topicId != null ? "SPECIFIC" : "ALL",
-                topicId,
-                "NORMAL",
-                3,
-                List.of(new StudyServiceClient.QuestionTypeSpec("OX", 3))
-        );
-        List<StudyServiceClient.QuestionDto> round1Questions = studyServiceClient.generateVersusQuestions(request1R);
-        allQuestions.addAll(round1Questions);
-        
-        // 2R: MCQ 3문제 (NORMAL)
-        StudyServiceClient.VersusQuestionRequest request2R = new StudyServiceClient.VersusQuestionRequest(
-                examMode,
-                topicId != null ? "SPECIFIC" : "ALL",
-                topicId,
-                "NORMAL",
-                3,
-                List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
-        );
-        List<StudyServiceClient.QuestionDto> round2Questions = studyServiceClient.generateVersusQuestions(request2R);
-        allQuestions.addAll(round2Questions);
-        
-        // 3R: MCQ 3문제 (HARD) - 실패 시 NORMAL로 폴백
-        List<StudyServiceClient.QuestionDto> round3Questions = new ArrayList<>();
-        try {
-            StudyServiceClient.VersusQuestionRequest request3R = new StudyServiceClient.VersusQuestionRequest(
+            StudyServiceClient.VersusQuestionRequest request1R = new StudyServiceClient.VersusQuestionRequest(
                     examMode,
                     topicId != null ? "SPECIFIC" : "ALL",
                     topicId,
-                    "HARD",
+                    "NORMAL",
                     3,
-                    List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
+                    List.of(new StudyServiceClient.QuestionTypeSpec("OX", 3))
             );
-            round3Questions = studyServiceClient.generateVersusQuestions(request3R);
-            if (round3Questions.isEmpty()) {
-                log.warn("HARD 난이도 문제가 없어서 NORMAL로 폴백합니다.");
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No HARD questions available");
-            }
-        } catch (FeignException.NotFound e) {
-            // 404 에러: HARD 문제가 없음
-            log.warn("HARD 난이도 문제 요청 실패 (404), NORMAL로 폴백합니다: {}", e.getMessage());
-            StudyServiceClient.VersusQuestionRequest request3RFallback = new StudyServiceClient.VersusQuestionRequest(
+            List<StudyServiceClient.QuestionDto> round1Questions = studyServiceClient.generateVersusQuestions(request1R);
+            allQuestions.addAll(round1Questions);
+
+            // 2R: MCQ 3문제 (NORMAL)
+            StudyServiceClient.VersusQuestionRequest request2R = new StudyServiceClient.VersusQuestionRequest(
                     examMode,
                     topicId != null ? "SPECIFIC" : "ALL",
                     topicId,
@@ -2873,22 +3442,28 @@ public class VersusService {
                     3,
                     List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
             );
-            round3Questions = studyServiceClient.generateVersusQuestions(request3RFallback);
-        } catch (FeignException.BadRequest e) {
-            // 400 에러: 잘못된 요청
-            log.warn("HARD 난이도 문제 요청 실패 (400), NORMAL로 폴백합니다: {}", e.getMessage());
-            StudyServiceClient.VersusQuestionRequest request3RFallback = new StudyServiceClient.VersusQuestionRequest(
-                    examMode,
-                    topicId != null ? "SPECIFIC" : "ALL",
-                    topicId,
-                    "NORMAL",
-                    3,
-                    List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
-            );
-            round3Questions = studyServiceClient.generateVersusQuestions(request3RFallback);
-        } catch (ResponseStatusException e) {
-            if (e.getStatusCode() == HttpStatus.NOT_FOUND || e.getStatusCode() == HttpStatus.BAD_REQUEST) {
-                log.warn("HARD 난이도 문제 요청 실패 ({}), NORMAL로 폴백합니다: {}", e.getStatusCode(), e.getMessage());
+            List<StudyServiceClient.QuestionDto> round2Questions = studyServiceClient.generateVersusQuestions(request2R);
+            allQuestions.addAll(round2Questions);
+
+            // 3R: MCQ 3문제 (HARD) - 실패 시 NORMAL로 폴백
+            List<StudyServiceClient.QuestionDto> round3Questions = new ArrayList<>();
+            try {
+                StudyServiceClient.VersusQuestionRequest request3R = new StudyServiceClient.VersusQuestionRequest(
+                        examMode,
+                        topicId != null ? "SPECIFIC" : "ALL",
+                        topicId,
+                        "HARD",
+                        3,
+                        List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
+                );
+                round3Questions = studyServiceClient.generateVersusQuestions(request3R);
+                if (round3Questions.isEmpty()) {
+                    log.warn("HARD 난이도 문제가 없어서 NORMAL로 폴백합니다.");
+                    throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No HARD questions available");
+                }
+            } catch (FeignException.NotFound e) {
+                // 404 에러: HARD 문제가 없음
+                log.warn("HARD 난이도 문제 요청 실패 (404), NORMAL로 폴백합니다: {}", e.getMessage());
                 StudyServiceClient.VersusQuestionRequest request3RFallback = new StudyServiceClient.VersusQuestionRequest(
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
@@ -2898,14 +3473,9 @@ public class VersusService {
                         List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
                 );
                 round3Questions = studyServiceClient.generateVersusQuestions(request3RFallback);
-            } else {
-                throw e; // 다른 에러는 그대로 전파
-            }
-        } catch (FeignException e) {
-            // 기타 Feign 에러 (500 등)는 그대로 전파하지 않고 NORMAL로 폴백 시도
-            int status = e.status();
-            if (status == 404 || status == 400) {
-                log.warn("HARD 난이도 문제 요청 실패 ({}), NORMAL로 폴백합니다: {}", status, e.getMessage());
+            } catch (FeignException.BadRequest e) {
+                // 400 에러: 잘못된 요청
+                log.warn("HARD 난이도 문제 요청 실패 (400), NORMAL로 폴백합니다: {}", e.getMessage());
                 StudyServiceClient.VersusQuestionRequest request3RFallback = new StudyServiceClient.VersusQuestionRequest(
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
@@ -2915,20 +3485,49 @@ public class VersusService {
                         List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
                 );
                 round3Questions = studyServiceClient.generateVersusQuestions(request3RFallback);
-            } else {
-                throw e; // 다른 에러는 그대로 전파
+            } catch (ResponseStatusException e) {
+                if (e.getStatusCode() == HttpStatus.NOT_FOUND || e.getStatusCode() == HttpStatus.BAD_REQUEST) {
+                    log.warn("HARD 난이도 문제 요청 실패 ({}), NORMAL로 폴백합니다: {}", e.getStatusCode(), e.getMessage());
+                    StudyServiceClient.VersusQuestionRequest request3RFallback = new StudyServiceClient.VersusQuestionRequest(
+                            examMode,
+                            topicId != null ? "SPECIFIC" : "ALL",
+                            topicId,
+                            "NORMAL",
+                            3,
+                            List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
+                    );
+                    round3Questions = studyServiceClient.generateVersusQuestions(request3RFallback);
+                } else {
+                    throw e; // 다른 에러는 그대로 전파
+                }
+            } catch (FeignException e) {
+                // 기타 Feign 에러 (500 등)는 그대로 전파하지 않고 NORMAL로 폴백 시도
+                int status = e.status();
+                if (status == 404 || status == 400) {
+                    log.warn("HARD 난이도 문제 요청 실패 ({}), NORMAL로 폴백합니다: {}", status, e.getMessage());
+                    StudyServiceClient.VersusQuestionRequest request3RFallback = new StudyServiceClient.VersusQuestionRequest(
+                            examMode,
+                            topicId != null ? "SPECIFIC" : "ALL",
+                            topicId,
+                            "NORMAL",
+                            3,
+                            List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
+                    );
+                    round3Questions = studyServiceClient.generateVersusQuestions(request3RFallback);
+                } else {
+                    throw e; // 다른 에러는 그대로 전파
+                }
             }
+            allQuestions.addAll(round3Questions);
         }
-        allQuestions.addAll(round3Questions);
-        }
-        
+
         if (allQuestions.isEmpty()) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     String.format("No questions available for Tournament (%s mode). Please check if questions exist.", examMode)
             );
         }
-        
+
         log.info("토너먼트 전체 문제 수집 완료: mode={}, 총 {}개", examMode, allQuestions.size());
         return allQuestions;
     }
@@ -2996,7 +3595,7 @@ public class VersusService {
         return switch (mode) {
             case DUEL -> DUEL_TOTAL_QUESTIONS;
             case TOURNAMENT -> TOURNAMENT_QUESTIONS_PER_ROUND;
-            case GOLDENBELL -> 1; // 골든벨은 문제당 1라운드
+            case GOLDENBELL -> 1; // 골든벨은 별도의 골든벨 전용 로직을 사용하므로 이 값은 의미 없음 (하위 호환성 유지)
         };
     }
 
@@ -3008,7 +3607,7 @@ public class VersusService {
         try {
             // 사용자 답안이 없으면 클라이언트 값 사용 (하위 호환성)
             if (req.userAnswer() == null || req.userAnswer().isBlank()) {
-                log.warn("User answer not provided for question {}, using client-provided correct value: {}", 
+                log.warn("User answer not provided for question {}, using client-provided correct value: {}",
                         questionId, req.correct());
                 monitoringConfig.recordTimer(timer, "validateAnswerOnServer", "status", "fallback_no_answer");
                 return req.correct();
@@ -3020,16 +3619,16 @@ public class VersusService {
                     null  // answerType은 자동 판단
             );
 
-            log.debug("Calling study-service validateAnswer: questionId={}, userAnswer={}", 
+            log.debug("Calling study-service validateAnswer: questionId={}, userAnswer={}",
                     questionId, req.userAnswer());
-            
+
             StudyServiceClient.AnswerValidationResult result = studyServiceClient.validateAnswer(
                     questionId, userAnswerDto);
 
             monitoringConfig.recordTimer(timer, "validateAnswerOnServer", "status", "success");
             log.info("Answer validation SUCCESS for question {}: userAnswer=[{}], clientCorrect={}, serverCorrect={}, correctAnswer=[{}]",
                     questionId, req.userAnswer(), req.correct(), result.correct(), result.correctAnswer());
-            
+
             // 클라이언트와 서버 결과가 다른 경우 경고
             if (req.correct() != result.correct()) {
                 log.warn("Answer validation mismatch for question {}: clientCorrect={}, serverCorrect={}, userAnswer=[{}], correctAnswer=[{}]",
@@ -3040,7 +3639,7 @@ public class VersusService {
         } catch (Exception e) {
             monitoringConfig.recordTimer(timer, "validateAnswerOnServer", "status", "failure");
             monitoringConfig.recordFeignFailure("study-service", "validateAnswer", e);
-            log.error("Failed to validate answer for question {}: userAnswer=[{}], clientCorrect={}, error={}", 
+            log.error("Failed to validate answer for question {}: userAnswer=[{}], clientCorrect={}, error={}",
                     questionId, req.userAnswer(), req.correct(), e.getMessage(), e);
             // 검증 실패 시 클라이언트 값 사용 (fallback)
             log.warn("Using fallback: client-provided correct value={} for question {}", req.correct(), questionId);
@@ -3108,7 +3707,7 @@ public class VersusService {
             // 가장 최근 QUESTION_STARTED 이벤트 찾기
             List<MatchEvent> startEvents = eventRepository.findByRoomIdAndEventTypeContaining(
                     roomId, "QUESTION_STARTED");
-            
+
             // createdAt 기준으로 최신순 정렬
             Optional<MatchEvent> latestEvent = startEvents.stream()
                     .max(Comparator.comparing(MatchEvent::getCreatedAt));
@@ -3119,39 +3718,45 @@ public class VersusService {
                     if (event.getPayloadJson() == null) {
                         return null;
                     }
-                    
+
                     Map<String, Object> payload = objectMapper.readValue(
                             event.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
-                    
+
                     Object questionIdObj = payload.get("questionId");
                     if (questionIdObj == null) {
                         return null;
                     }
-                    
+
                     Long questionId = Long.valueOf(questionIdObj.toString());
-                    Integer roundNo = payload.get("roundNo") != null 
-                            ? Integer.valueOf(payload.get("roundNo").toString()) 
+                    Integer roundNo = payload.get("roundNo") != null
+                            ? Integer.valueOf(payload.get("roundNo").toString())
                             : null;
-                    String phaseStr = payload.get("phase") != null 
-                            ? payload.get("phase").toString() 
+                    String phaseStr = payload.get("phase") != null
+                            ? payload.get("phase").toString()
                             : null;
-                    MatchPhase phase = phaseStr != null 
-                            ? MatchPhase.valueOf(phaseStr) 
+                    MatchPhase phase = phaseStr != null
+                            ? MatchPhase.valueOf(phaseStr)
                             : null;
-                    
+
                     // startedAt 시간 가져오기
                     String startedAtStr = (String) payload.get("startedAt");
-                    Instant startTime = startedAtStr != null 
-                            ? Instant.parse(startedAtStr) 
+                    Instant startTime = startedAtStr != null
+                            ? Instant.parse(startedAtStr)
                             : event.getCreatedAt();
-                    
+
+                    // startedAt 시간이 아직 지나지 않았으면 null 반환 (아직 시작되지 않은 문제)
+                    Instant now = Instant.now();
+                    if (now.isBefore(startTime)) {
+                        return null;
+                    }
+
                     // MatchQuestion에서 orderNo와 timeLimitSec 가져오기
                     Optional<MatchQuestion> matchQuestion = questionRepository.findByRoomIdAndQuestionId(roomId, questionId);
                     if (matchQuestion.isPresent()) {
                         MatchQuestion q = matchQuestion.get();
                         // 종료 시간 계산: 시작 시간 + 시간 제한
                         Instant endTime = startTime.plusSeconds(q.getTimeLimitSec());
-                        
+
                         return new VersusDtos.CurrentQuestionInfo(
                                 questionId,
                                 roundNo != null ? roundNo : q.getRoundNo(),
@@ -3182,7 +3787,80 @@ public class VersusService {
         } catch (Exception e) {
             log.debug("Failed to get current question info: {}", e.getMessage());
         }
-        
+
+        return null;
+    }
+
+    /**
+     * 현재 쉬는 시간 정보 조회
+     * INTERMISSION_STARTED 이벤트에서 정보를 가져옵니다.
+     */
+    private VersusDtos.IntermissionInfo getCurrentIntermissionInfo(Long roomId) {
+        try {
+            // 가장 최근 INTERMISSION_STARTED 이벤트 찾기
+            List<MatchEvent> intermissionEvents = eventRepository.findByRoomIdAndEventTypeContaining(
+                    roomId, "INTERMISSION_STARTED");
+
+            Optional<MatchEvent> latestIntermission = intermissionEvents.stream()
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+
+            if (latestIntermission.isPresent()) {
+                try {
+                    MatchEvent event = latestIntermission.get();
+                    if (event.getPayloadJson() == null) {
+                        return null;
+                    }
+
+                    Map<String, Object> payload = objectMapper.readValue(
+                            event.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+
+                    // questionStartAt이 아직 지나지 않았는지 확인
+                    String questionStartAtStr = (String) payload.get("questionStartAt");
+                    if (questionStartAtStr != null) {
+                        Instant questionStartAt = Instant.parse(questionStartAtStr);
+                        Instant now = Instant.now();
+
+                        // 쉬는 시간이 아직 진행 중인지 확인
+                        if (now.isBefore(questionStartAt)) {
+                            Long nextQuestionId = payload.get("nextQuestionId") != null
+                                    ? Long.valueOf(payload.get("nextQuestionId").toString())
+                                    : null;
+                            Integer nextRoundNo = payload.get("nextRoundNo") != null
+                                    ? Integer.valueOf(payload.get("nextRoundNo").toString())
+                                    : null;
+                            String nextPhaseStr = payload.get("nextPhase") != null
+                                    ? payload.get("nextPhase").toString()
+                                    : null;
+                            MatchPhase nextPhase = nextPhaseStr != null
+                                    ? MatchPhase.valueOf(nextPhaseStr)
+                                    : null;
+                            Integer durationSec = payload.get("durationSec") != null
+                                    ? Integer.valueOf(payload.get("durationSec").toString())
+                                    : QUESTION_INTERMISSION_SEC;
+                            String startedAtStr = (String) payload.get("startedAt");
+                            Instant startedAt = startedAtStr != null
+                                    ? Instant.parse(startedAtStr)
+                                    : event.getCreatedAt();
+
+                            return new VersusDtos.IntermissionInfo(
+                                    nextQuestionId,
+                                    nextRoundNo,
+                                    nextPhase,
+                                    durationSec,
+                                    startedAt,
+                                    questionStartAt
+                            );
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("Failed to parse intermission info: {}", e.getMessage());
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to get intermission info: {}", e.getMessage());
+        }
+
         return null;
     }
 
@@ -3226,7 +3904,7 @@ public class VersusService {
                         Instant startTime = Instant.parse(startedAtStr);
                         // answerSubmitTime을 사용하여 정확한 시간 계산
                         long serverTimeMs = Duration.between(startTime, answerSubmitTime).toMillis();
-                        
+
                         // 비정상적으로 짧은 시간(100ms 미만)이면 클라이언트 시간 사용
                         // 단, 클라이언트 시간도 비정상적이면 최소값 적용
                         if (serverTimeMs < 100 && clientTimeMs != null && clientTimeMs >= 100) {
@@ -3234,7 +3912,7 @@ public class VersusService {
                                     roomId, questionId, userId, serverTimeMs, clientTimeMs);
                             return clientTimeMs;
                         }
-                        
+
                         return (int) Math.max(0, serverTimeMs);
                     }
                 } catch (Exception e) {
@@ -3245,22 +3923,22 @@ public class VersusService {
             // 문제 시작 이벤트가 없으면 문제 시간 제한을 사용 (타임아웃 처리)
             // 클라이언트 시간이 제공되지 않았거나 비정상적으로 짧으면 문제 시간 제한 사용
             MatchQuestion question = questionRepository.findByRoomIdAndQuestionId(roomId, questionId).orElse(null);
-            int limitMs = question != null && question.getTimeLimitSec() != null 
-                    ? question.getTimeLimitSec() * 1000 
+            int limitMs = question != null && question.getTimeLimitSec() != null
+                    ? question.getTimeLimitSec() * 1000
                     : GOLDENBELL_TIME_LIMIT_SEC * 1000;
-            
+
             if (clientTimeMs == null) {
                 log.warn("문제 시작 이벤트와 클라이언트 시간 모두 없음: roomId={}, questionId={}, userId={}, 시간 제한 사용: {}ms",
                         roomId, questionId, userId, limitMs);
                 return limitMs; // 타임아웃 처리
             }
-            
+
             if (clientTimeMs < 100) {
                 log.warn("클라이언트 시간이 비정상적으로 짧음: roomId={}, questionId={}, userId={}, clientTime={}ms, 시간 제한 사용: {}ms",
                         roomId, questionId, userId, clientTimeMs, limitMs);
                 return limitMs; // 타임아웃 처리
             }
-            
+
             return clientTimeMs;
         } catch (Exception e) {
             log.debug("Failed to calculate server time: {}", e.getMessage());
@@ -3281,7 +3959,7 @@ public class VersusService {
         try {
             // ExamMode 추출
             String examMode = extractExamMode(room);
-            
+
             // 각 참가자의 개별 답안 정보 수집
             List<ProgressServiceClient.ParticipantResult> participants = scoreboard.items().stream()
                     .map(item -> {
@@ -3319,7 +3997,7 @@ public class VersusService {
             progressServiceClient.recordVersusResult(request);
             monitoringConfig.recordTimer(timer, "notifyProgressService", "status", "success");
             log.info("Successfully notified progress-service for room {} completion", room.getId());
-            
+
             // 각 참가자별로 ProgressActivity 생성 (비동기)
             createProgressActivitiesForParticipants(room, scoreboard, examMode);
         } catch (Exception e) {
@@ -3330,7 +4008,7 @@ public class VersusService {
             // 비동기 재시도 큐에 추가
             try {
                 String examMode = extractExamMode(room);
-                
+
                 List<ProgressServiceClient.ParticipantResult> participants = scoreboard.items().stream()
                         .map(item -> {
                             List<ProgressServiceClient.AnswerDetail> answers = collectParticipantAnswers(
@@ -3379,7 +4057,7 @@ public class VersusService {
         }
         return 0;
     }
-    
+
     /**
      * 방의 scopeJson에서 examMode 추출
      */
@@ -3395,7 +4073,7 @@ public class VersusService {
         }
         return null;
     }
-    
+
     /**
      * 참가자의 개별 답안 정보 수집
      */
@@ -3459,6 +4137,35 @@ public class VersusService {
     ) {
     }
 
+    /**
+     * 스킨 ID 결정 (봇인 경우 userId 기반 고정 스킨 ID 1~17)
+     */
+    private Long determineSkinId(String userId, AccountServiceClient.ProfileSummary profile) {
+        boolean isBot = userId.startsWith("BOT_");
+
+        if (profile != null && profile.skinId() != null) {
+            return profile.skinId();
+        }
+
+        // 프로필이 없거나 skinId가 null인 경우
+        if (isBot) {
+            // 봇인 경우 userId 기반 고정 스킨 ID (1~17)
+            return getFixedSkinIdForBot(userId);
+        }
+
+        // 일반 사용자인 경우 기본값 1
+        return 1L;
+    }
+
+    /**
+     * 봇의 userId를 기반으로 고정된 스킨 ID를 반환 (1~17)
+     */
+    private Long getFixedSkinIdForBot(String userId) {
+        int hash = userId.hashCode();
+        // 음수 방지 및 1~17 범위로 매핑
+        return (long) (Math.abs(hash) % 17 + 1);
+    }
+
     private static class FinalRoundScore {
         int correct;
         int total;
@@ -3471,7 +4178,7 @@ public class VersusService {
      */
     @org.springframework.scheduling.annotation.Async
     private void createProgressActivitiesForParticipants(
-            MatchRoom room, 
+            MatchRoom room,
             VersusDtos.ScoreBoardResp scoreboard,
             String examMode) {
         try {
@@ -3479,54 +4186,54 @@ public class VersusService {
             Long topicId = scope.get("topicId") != null ? Long.valueOf(scope.get("topicId").toString()) : null;
             String difficulty = (String) scope.getOrDefault("difficulty", "NORMAL");
             String topicScope = (String) scope.getOrDefault("topicScope", "ALL");
-            
+
             // BattleType 결정
             String battleType = determineBattleType(room.getMode(), topicScope);
-            
+
             // topicName은 나중에 cert-service에서 가져올 수 있음 (현재는 null)
             String topicName = null;
-            
+
             // 매치 시작/종료 시간
             java.time.LocalDateTime startedAt = room.getCreatedAt() != null
                     ? room.getCreatedAt().atZone(java.time.ZoneId.of("Asia/Seoul")).toLocalDateTime()
                     : java.time.LocalDateTime.now();
             java.time.LocalDateTime finishedAt = java.time.LocalDateTime.now();
-            
+
             // 각 참가자별로 Activity 생성
             for (VersusDtos.ScoreBoardItem item : scoreboard.items()) {
                 try {
                     double accuracyPct = item.totalCount() > 0
                             ? (double) item.correctCount() / item.totalCount() * 100.0
                             : 0.0;
-                    
-                    ProgressActivityClient.ProgressActivityCreateReq req = 
+
+                    ProgressActivityClient.ProgressActivityCreateReq req =
                             new ProgressActivityClient.ProgressActivityCreateReq(
-                            item.userId(),
-                            "BATTLE",
-                            null, // mainType
-                            null, // assistType
-                            battleType,
-                            examMode != null ? examMode : "WRITTEN",
-                            topicId,
-                            topicName,
-                            null, // weaknessTagName
-                            "ALL".equals(topicScope) ? difficulty : null,
-                            item.totalCount(),
-                            item.correctCount(),
-                            accuracyPct,
-                            item.rank(),
-                            null, // xpGained (기존 보상 지급 로직과 연동 필요)
-                            "versus",
-                            room.getId(),
-                            startedAt,
-                            finishedAt
-                    );
-                    
+                                    item.userId(),
+                                    "BATTLE",
+                                    null, // mainType
+                                    null, // assistType
+                                    battleType,
+                                    examMode != null ? examMode : "WRITTEN",
+                                    topicId,
+                                    topicName,
+                                    null, // weaknessTagName
+                                    "ALL".equals(topicScope) ? difficulty : null,
+                                    item.totalCount(),
+                                    item.correctCount(),
+                                    accuracyPct,
+                                    item.rank(),
+                                    null, // xpGained (기존 보상 지급 로직과 연동 필요)
+                                    "versus",
+                                    room.getId(),
+                                    startedAt,
+                                    finishedAt
+                            );
+
                     progressActivityClient.createActivity(req);
-                    log.debug("ProgressActivity created for participant: roomId={}, userId={}, rank={}", 
+                    log.debug("ProgressActivity created for participant: roomId={}, userId={}, rank={}",
                             room.getId(), item.userId(), item.rank());
                 } catch (Exception e) {
-                    log.error("Failed to create ProgressActivity for participant: roomId={}, userId={}", 
+                    log.error("Failed to create ProgressActivity for participant: roomId={}, userId={}",
                             room.getId(), item.userId(), e);
                     // 개별 실패해도 다른 참가자 처리는 계속 진행
                 }
@@ -3535,7 +4242,7 @@ public class VersusService {
             log.error("Failed to create ProgressActivities for room: roomId={}", room.getId(), e);
         }
     }
-    
+
     /**
      * MatchMode와 topicScope를 기반으로 BattleType 결정
      */

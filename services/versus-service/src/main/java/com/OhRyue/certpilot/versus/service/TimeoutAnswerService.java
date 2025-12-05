@@ -77,6 +77,17 @@ public class TimeoutAnswerService {
             return; // 현재 진행 중인 문제가 없음
         }
 
+        // 문제 시작 시점 및 종료 시간 확인 (QUESTION_STARTED 이벤트)
+        QuestionTimeInfo timeInfo = getQuestionTimeInfo(room.getId(), currentQuestion.getQuestionId());
+        if (timeInfo == null || timeInfo.endTime == null) {
+            return; // 문제 시작 이벤트가 없거나 종료 시간을 계산할 수 없음
+        }
+
+        // 시간 제한이 지나지 않았으면 처리하지 않음
+        if (now.isBefore(timeInfo.endTime)) {
+            return;
+        }
+
         // 모든 참가자 목록
         Set<String> allParticipants = participantRepository.findByRoomId(room.getId())
             .stream()
@@ -96,25 +107,27 @@ public class TimeoutAnswerService {
             .filter(userId -> !answeredUsers.contains(userId))
             .collect(Collectors.toSet());
 
-        if (unansweredUsers.isEmpty()) {
-            return; // 모든 사용자가 답안 제출
-        }
-
-        // 문제 시작 시점 및 종료 시간 확인 (QUESTION_STARTED 이벤트)
-        QuestionTimeInfo timeInfo = getQuestionTimeInfo(room.getId(), currentQuestion.getQuestionId());
-        if (timeInfo == null || timeInfo.endTime == null) {
-            return; // 문제 시작 이벤트가 없거나 종료 시간을 계산할 수 없음
-        }
-
-        // endTime이 지났는지 확인
-        if (now.isAfter(timeInfo.endTime) || now.equals(timeInfo.endTime)) {
-            // 시간 초과: 자동 오답 처리
+        // 시간 초과: 미제출 사용자에게 자동 오답 처리
+        if (!unansweredUsers.isEmpty()) {
             log.info("Processing timeout answers for room {}, question {} (orderNo: {}): {} users, endTime: {}, now: {}", 
                 room.getId(), currentQuestion.getQuestionId(), currentQuestion.getOrderNo(), 
                 unansweredUsers.size(), timeInfo.endTime, now);
             
             for (String userId : unansweredUsers) {
                 processTimeoutAnswer(room, currentQuestion, userId, currentQuestion.getTimeLimitSec());
+            }
+        } else {
+            // 모든 사용자가 답안 제출했지만 시간 제한이 지났으므로 다음 문제로 진행
+            log.info("Time limit expired for room {}, question {} (orderNo: {}): all users answered, endTime: {}, now: {}. Proceeding to next question.", 
+                room.getId(), currentQuestion.getQuestionId(), currentQuestion.getOrderNo(), 
+                timeInfo.endTime, now);
+            
+            // 매치 진행 상태 확인 및 다음 문제로 진행
+            try {
+                VersusDtos.ScoreBoardResp scoreboard = versusService.computeScoreboard(room);
+                versusService.handleModeAfterAnswer(room, currentQuestion, scoreboard);
+            } catch (Exception e) {
+                log.error("Failed to process match progress after time limit expired: {}", e.getMessage(), e);
             }
         }
     }

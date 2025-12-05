@@ -91,7 +91,9 @@ public class VersusDtos {
       MatchMode mode,
       MatchStatus status,
       int participantCount,
-      Instant createdAt
+      Instant createdAt,
+      @Schema(description = "예약 시작 시간 (GOLDENBELL 모드용, ISO 8601 형식). 예약이 없으면 null", example = "2024-12-25T14:00:00Z")
+      Instant scheduledAt
   ) {}
 
   public record QuestionInfo(
@@ -104,6 +106,10 @@ public class VersusDtos {
 
   public record ParticipantSummary(
       String userId,
+      @Schema(description = "사용자 닉네임", example = "플레이어123")
+      String nickname,
+      @Schema(description = "사용자 스킨 ID", example = "1")
+      Long skinId,
       Integer finalScore,
       Integer rank,
       boolean alive,
@@ -122,6 +128,10 @@ public class VersusDtos {
 
   public record ScoreBoardItem(
       String userId,
+      @Schema(description = "사용자 닉네임", example = "플레이어123")
+      String nickname,
+      @Schema(description = "사용자 스킨 ID", example = "1")
+      Long skinId,
       int correctCount,
       int totalCount,
       int score,
@@ -146,12 +156,29 @@ public class VersusDtos {
       Instant endTime
   ) {}
 
+  public record IntermissionInfo(
+      @Schema(description = "다음 문제 ID", example = "205")
+      Long nextQuestionId,
+      @Schema(description = "다음 라운드 번호", example = "4")
+      Integer nextRoundNo,
+      @Schema(description = "다음 페이즈 (MAIN, FINAL, REVIVAL)", example = "FINAL")
+      MatchPhase nextPhase,
+      @Schema(description = "쉬는 시간 (초)", example = "5")
+      Integer durationSec,
+      @Schema(description = "쉬는 시간 시작 시간 (ISO 8601 형식)", example = "2025-12-04T10:26:03.837006519Z")
+      Instant startedAt,
+      @Schema(description = "다음 문제 시작 시간 (ISO 8601 형식)", example = "2025-12-04T10:26:08.837006519Z")
+      Instant questionStartAt
+  ) {}
+
   public record ScoreBoardResp(
       Long roomId,
       MatchStatus status,
       List<ScoreBoardItem> items,
       @Schema(description = "현재 진행 중인 문제 정보. 문제가 진행 중이 아니면 null")
-      CurrentQuestionInfo currentQuestion
+      CurrentQuestionInfo currentQuestion,
+      @Schema(description = "쉬는 시간 정보. 쉬는 시간 중일 때만 null이 아님")
+      IntermissionInfo intermission
   ) {}
 
   public record TimelineEvent(
@@ -178,6 +205,10 @@ public class VersusDtos {
    */
   public record AnswerInfo(
       String userId,
+      @Schema(description = "사용자 닉네임", example = "플레이어123")
+      String nickname,
+      @Schema(description = "사용자 스킨 ID", example = "1")
+      Long skinId,
       String userAnswer,
       boolean correct,
       Integer timeMs,
