@@ -21,6 +21,7 @@ import com.OhRyue.certpilot.progress.feign.dto.ProfileSummaryResponse;
 import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
 import com.OhRyue.certpilot.progress.repository.UserPointWalletRepository;
 import com.OhRyue.certpilot.progress.repository.UserXpWalletRepository;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +54,12 @@ public class HomeDashboardService {
     try {
       // JWT 기반 Feign Interceptor가 Authorization 헤더를 자동으로 붙인다고 가정
       AccountMeResponse me = accountClient.me();
+      
+      // 온보딩 미완료 체크
+      if (me != null && me.onboarding() != null && !me.onboarding().completed()) {
+        throw new com.OhRyue.certpilot.progress.exception.OnboardingRequiredException();
+      }
+      
       AccountMeResponse.Profile profile = me != null ? me.profile() : null;
       UserXpWallet wallet = xpService.getWallet(userId);
       UserStreak streak = streakService.get(userId);
@@ -84,6 +91,9 @@ public class HomeDashboardService {
       }
 
       return new HomeOverview(userCard, goal);
+    } catch (com.OhRyue.certpilot.progress.exception.OnboardingRequiredException e) {
+      // 온보딩 미완료 예외는 그대로 전파
+      throw e;
     } catch (Exception e) {
       // Feign 호출 실패 시 기본값 반환
       UserXpWallet wallet = xpService.getWallet(userId);
@@ -103,11 +113,20 @@ public class HomeDashboardService {
   public HomeProgressCard progressCard(String userId) {
     try {
       AccountMeResponse me = accountClient.me();
+      
+      // 온보딩 미완료 체크
+      if (me != null && me.onboarding() != null && !me.onboarding().completed()) {
+        throw new com.OhRyue.certpilot.progress.exception.OnboardingRequiredException();
+      }
+      
       if (me == null || me.goal() == null || me.goal().certId() == null) {
         return new HomeProgressCard(0, 0, 0, 0.0, null);
       }
       // StudyReportClient 쪽은 JWT 기반으로 현재 사용자 기준 집계한다고 가정
       return studyReportClient.progressCard(me.goal().certId());
+    } catch (com.OhRyue.certpilot.progress.exception.OnboardingRequiredException e) {
+      // 온보딩 미완료 예외는 그대로 전파
+      throw e;
     } catch (Exception e) {
       // Feign 호출 실패 시 기본값 반환
       return new HomeProgressCard(0, 0, 0, 0.0, null);
@@ -116,6 +135,12 @@ public class HomeDashboardService {
 
   public HomeRanking ranking(String userId) {
     try {
+      // 온보딩 미완료 체크
+      AccountMeResponse me = accountClient.me();
+      if (me != null && me.onboarding() != null && !me.onboarding().completed()) {
+        throw new com.OhRyue.certpilot.progress.exception.OnboardingRequiredException();
+      }
+      
       List<UserRankScore> top = rankService.topN(5);
       List<String> userIds = top.stream()
           .map(UserRankScore::getUserId)
@@ -181,6 +206,9 @@ public class HomeDashboardService {
       }
 
       return new HomeRanking(rankingItems, meItem, Instant.now().toString());
+    } catch (com.OhRyue.certpilot.progress.exception.OnboardingRequiredException e) {
+      // 온보딩 미완료 예외는 그대로 전파
+      throw e;
     } catch (Exception e) {
       // 전체 실패 시 빈 랭킹 반환
       return new HomeRanking(List.of(), null, Instant.now().toString());
@@ -188,6 +216,19 @@ public class HomeDashboardService {
   }
 
   public HomeQuickStats quickStats(String userId) {
+    // 온보딩 미완료 체크
+    try {
+      AccountMeResponse me = accountClient.me();
+      if (me != null && me.onboarding() != null && !me.onboarding().completed()) {
+        throw new com.OhRyue.certpilot.progress.exception.OnboardingRequiredException();
+      }
+    } catch (com.OhRyue.certpilot.progress.exception.OnboardingRequiredException e) {
+      // 온보딩 미완료 예외는 그대로 전파
+      throw e;
+    } catch (Exception e) {
+      // Feign 호출 실패 시 온보딩 체크는 건너뛰고 계속 진행
+    }
+    
     LocalDate today = LocalDate.now(KST);
     LocalDate yesterday = today.minusDays(1);
 

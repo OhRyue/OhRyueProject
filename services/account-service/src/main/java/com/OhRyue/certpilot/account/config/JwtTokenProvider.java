@@ -169,6 +169,23 @@ public class JwtTokenProvider {
         }
     }
 
+    // 토큰 만료 여부 확인 (예외 없이)
+    public boolean isTokenExpired(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            return false;
+        }
+        try {
+            Claims claims = parseClaims(token);
+            Date exp = claims.getExpiration();
+            return exp != null && exp.before(new Date());
+        } catch (ExpiredJwtException e) {
+            return true;
+        } catch (Exception e) {
+            // 다른 예외는 만료가 아닌 것으로 간주
+            return false;
+        }
+    }
+
     // 토큰 유효성 검사
     public boolean validateToken(String token) {
         if (token == null || token.trim().isEmpty()) {

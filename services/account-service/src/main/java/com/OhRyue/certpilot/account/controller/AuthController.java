@@ -353,6 +353,11 @@ public class AuthController {
         .orElse(null);
     OnboardingStatusResponse onboarding = onboardingService.getStatus(userId);
 
+    // 온보딩 미완료 체크
+    if (!onboarding.isCompleted()) {
+      throw new com.OhRyue.certpilot.account.exception.OnboardingRequiredException();
+    }
+
     MeResponse body = MeResponse.builder()
         .account(AccountSummary.builder()
             .userId(account.getId())

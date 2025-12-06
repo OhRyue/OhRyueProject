@@ -100,10 +100,20 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
   /**
    * 401 응답 전송 유틸
    * - CORS 헤더는 spring.cloud.gateway.globalcors 에서만 처리합니다.
+   * - JWT 토큰 만료 시 RFC 6750 준수하여 WWW-Authenticate 헤더 포함
    */
   private Mono<Void> unauthorized(ServerWebExchange exchange, String msg) {
     ServerHttpResponse response = exchange.getResponse();
     response.setStatusCode(HttpStatus.UNAUTHORIZED);
+    
+    // JWT 토큰 만료인 경우 RFC 6750 준수하여 WWW-Authenticate 헤더 추가
+    if (msg != null && (msg.contains("expired") || msg.contains("Token expired"))) {
+      String errorDescription = "Jwt expired";
+      response.getHeaders().add(HttpHeaders.WWW_AUTHENTICATE, 
+          String.format("Bearer error=\"invalid_token\", error_description=\"%s\", error_uri=\"https://tools.ietf.org/html/rfc6750#section-3.1\"", 
+              errorDescription));
+    }
+    
     response.getHeaders().add("X-Auth-Error", msg);
     return response.setComplete();
   }

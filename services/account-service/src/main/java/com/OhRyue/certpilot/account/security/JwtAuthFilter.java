@@ -59,6 +59,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
+        // 토큰 만료 여부 먼저 확인
+        if (jwtTokenProvider.isTokenExpired(token)) {
+            log.warn("⏰ [account-service] JWT 토큰 만료 - path: {}", requestPath);
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setHeader("WWW-Authenticate", 
+                "Bearer error=\"invalid_token\", error_description=\"Jwt expired\", error_uri=\"https://tools.ietf.org/html/rfc6750#section-3.1\"");
+            return;
+        }
+
         if (jwtTokenProvider.validateToken(token)) {
             try {
                 String userId = jwtTokenProvider.getUsernameFromToken(token);

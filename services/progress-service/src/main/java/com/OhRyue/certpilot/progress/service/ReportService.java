@@ -30,11 +30,25 @@ public class ReportService {
   private final StudyReportClient studyReportClient;
   private final StreakService streakService;
   private final BattleRecordRepository battleRecordRepository;
+  private final com.OhRyue.certpilot.progress.feign.AccountClient accountClient;
 
   /**
    * 필기/실기 합산 리포트 개요
    */
   public Overview overview(String userId) {
+    // 온보딩 미완료 체크
+    try {
+      com.OhRyue.certpilot.progress.feign.dto.AccountMeResponse me = accountClient.me();
+      if (me != null && me.onboarding() != null && !me.onboarding().completed()) {
+        throw new com.OhRyue.certpilot.progress.exception.OnboardingRequiredException();
+      }
+    } catch (com.OhRyue.certpilot.progress.exception.OnboardingRequiredException e) {
+      // 온보딩 미완료 예외는 그대로 전파
+      throw e;
+    } catch (Exception e) {
+      // Feign 호출 실패 시 온보딩 체크는 건너뛰고 계속 진행
+    }
+    
     List<ReportDaily> daily = dailyRepository.findByUserId(userId);
     if (daily.isEmpty()) {
       int streak = streakService.get(userId).getCurrentDays();

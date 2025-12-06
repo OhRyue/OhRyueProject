@@ -38,6 +38,16 @@ public class GlobalExceptionHandler {
     ));
   }
 
+  // 온보딩 미완료 사용자
+  @ExceptionHandler(OnboardingRequiredException.class)
+  public ResponseEntity<?> handleOnboardingRequired(OnboardingRequiredException e) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+        "errorCode", "ONBOARDING_REQUIRED",
+        "error", "onboarding_required",
+        "message", e.getMessage() != null ? e.getMessage() : "온보딩이 필요한 사용자입니다."
+    ));
+  }
+
   // 이메일 인증 안 된 사용자
   @ExceptionHandler(IllegalStateException.class)
   public ResponseEntity<?> handleIllegalState(IllegalStateException e) {
