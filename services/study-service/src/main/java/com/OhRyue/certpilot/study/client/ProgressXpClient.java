@@ -4,6 +4,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @FeignClient(
     name = "progress-xp-client",
@@ -13,6 +14,11 @@ public interface ProgressXpClient {
 
     @PostMapping("/earn")
     XpEarnResponse earnXp(@RequestBody XpEarnRequest req);
+
+    @PostMapping("/gain")
+    void gainXp(@RequestParam("delta") int delta,
+                @RequestParam(value = "reason", defaultValue = "ASSIST") String reason,
+                @RequestParam(value = "refId", required = false) String refId);
 
     @GetMapping("/wallet")
     XpWalletResponse getWallet();

@@ -2,6 +2,7 @@ package com.OhRyue.certpilot.study.service;
 
 import com.OhRyue.common.auth.AuthUserUtil;
 import com.OhRyue.certpilot.study.client.ProgressQueryClient;
+import com.OhRyue.certpilot.study.client.ProgressXpClient;
 import com.OhRyue.certpilot.study.domain.LearningSession;
 import com.OhRyue.certpilot.study.domain.LearningStep;
 import com.OhRyue.certpilot.study.domain.Question;
@@ -1287,7 +1288,7 @@ public class AssistPracticalService {
         mistakes
     );
 
-    // 7. XP 정보 조회
+    // 7. XP 정보 조회 및 지급
     Integer earnedXp = null;
     Long totalXp = null;
     Integer level = null;
@@ -1295,19 +1296,90 @@ public class AssistPracticalService {
     Boolean leveledUp = false;
     Integer levelUpRewardPoints = 0;
 
-    try {
-      // 보조학습은 grade-one에서 정답당 5 XP를 지급했으므로, earnedXp는 정답 수 × 5
-      earnedXp = correct * 5;
-
-      // 현재 XP 지갑 정보 조회
-      com.OhRyue.certpilot.study.client.ProgressXpClient.XpWalletResponse walletResp = 
-          progressXpClient.getWallet();
-      totalXp = walletResp.xpTotal();
-      level = walletResp.level();
-      xpToNextLevel = walletResp.xpToNextLevel();
-    } catch (Exception e) {
-      // XP 조회 실패는 학습 흐름을 막지 않음
-      log.warn("Failed to retrieve XP information in assist summary: {}", e.getMessage());
+    // XP 지급 (completed=true이고 xp_granted=false일 때만 지급)
+    // 보조학습은 study-service에서 직접 계산한 XP를 progress-service에 직접 지급
+    if (completed && studySession != null && !Boolean.TRUE.equals(studySession.getXpGranted())) {
+      try {
+        // 1. 보조학습 XP 정책으로 계산
+        int plannedXp = calculateAssistPracticalXp(correct, total);
+        
+        log.info("[AssistPracticalService.summary] XP 지급 요청: sessionId={}, mode={}, total={}, correct={}, plannedXp={}, xpGranted={}",
+            studySession.getId(), mode, total, correct, plannedXp, studySession.getXpGranted());
+        
+        if (plannedXp > 0) {
+          // 2. 지급 전 지갑 정보 조회 (레벨업 여부 확인용)
+          ProgressXpClient.XpWalletResponse walletBefore = progressXpClient.getWallet();
+          int levelBefore = walletBefore.level();
+          
+          // 3. refId 생성 (세션 단위 idempotent)
+          String refId = String.format("ASSIST_PRACTICAL:%s:%d", userId, learningSessionId);
+          
+          // 4. XpReason은 ASSIST로 고정
+          String xpReason = "ASSIST";
+          
+          log.info("[AssistPracticalService.summary] XP 직접 지급: delta={}, reason={}, refId={}",
+              plannedXp, xpReason, refId);
+          
+          // 5. 직접 XP 지급 (progress-service의 /gain API 사용)
+          progressXpClient.gainXp(plannedXp, xpReason, refId);
+          
+          // 6. 지급 후 지갑 정보 조회
+          ProgressXpClient.XpWalletResponse walletAfter = progressXpClient.getWallet();
+          
+          // 7. XP 정보를 응답에 포함
+          earnedXp = plannedXp;
+          totalXp = walletAfter.xpTotal();
+          level = walletAfter.level();
+          xpToNextLevel = walletAfter.xpToNextLevel();
+          
+          // 8. 레벨업 여부 확인
+          leveledUp = walletAfter.level() > levelBefore;
+          levelUpRewardPoints = 0;
+          
+          // 9. xp_granted 플래그 업데이트
+          sessionManager.markXpGranted(studySession);
+          
+          log.info("[AssistPracticalService.summary] XP 지급 완료: earnedXp={}, totalXp={}, level={}, leveledUp={}",
+              earnedXp, totalXp, level, leveledUp);
+        } else {
+          // plannedXp가 0이면 지급하지 않음
+          log.info("[AssistPracticalService.summary] XP 지급 생략: plannedXp=0 (correct={}, total={})", correct, total);
+          ProgressXpClient.XpWalletResponse walletResp = progressXpClient.getWallet();
+          totalXp = walletResp.xpTotal();
+          level = walletResp.level();
+          xpToNextLevel = walletResp.xpToNextLevel();
+          earnedXp = 0;
+        }
+      } catch (Exception e) {
+        // XP 지급 실패 시 현재 지갑 정보만 조회
+        log.error("Failed to grant XP in assist summary: {}", e.getMessage(), e);
+        try {
+          ProgressXpClient.XpWalletResponse walletResp = progressXpClient.getWallet();
+          totalXp = walletResp.xpTotal();
+          level = walletResp.level();
+          xpToNextLevel = walletResp.xpToNextLevel();
+          // earnedXp는 보조학습 XP 정책으로 계산
+          earnedXp = calculateAssistPracticalXp(correct, total);
+        } catch (Exception ex) {
+          log.warn("Failed to retrieve XP wallet information: {}", ex.getMessage());
+        }
+      }
+    } else {
+      // XP 지급 조건 미충족 시 현재 지갑 정보만 조회
+      log.warn("[AssistPracticalService.summary] XP 지급 조건 미충족: completed={}, studySession={}, xpGranted={}",
+          completed, studySession != null, studySession != null ? studySession.getXpGranted() : null);
+      try {
+        ProgressXpClient.XpWalletResponse walletResp = progressXpClient.getWallet();
+        totalXp = walletResp.xpTotal();
+        level = walletResp.level();
+        xpToNextLevel = walletResp.xpToNextLevel();
+        // earnedXp는 보조학습 XP 정책으로 계산
+        if (completed) {
+          earnedXp = calculateAssistPracticalXp(correct, total);
+        }
+      } catch (Exception e) {
+        log.warn("Failed to retrieve XP information in assist summary: {}", e.getMessage());
+      }
     }
 
     // 8. 응답 생성
@@ -1687,5 +1759,15 @@ public class AssistPracticalService {
     }
 
     return meta;
+  }
+
+  /**
+   * 보조학습 PRACTICAL XP 정책 계산
+   * - 정답 1개당 5 XP (단순 계산, 보너스/상한 없음)
+   */
+  private int calculateAssistPracticalXp(int correct, int total) {
+    if (total <= 0) return 0;
+    // 정답 개수 × 5 XP
+    return correct * 5;
   }
 }

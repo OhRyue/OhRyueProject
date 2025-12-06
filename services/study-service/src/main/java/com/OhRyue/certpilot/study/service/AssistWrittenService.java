@@ -48,6 +48,15 @@ public class AssistWrittenService {
   private static final List<Integer> ALLOWED_COUNTS = List.of(5, 10, 20);
   private static final Long ASSIST_TOPIC_ID = 0L; // 보조학습은 topicId가 없으므로 0 사용
 
+  // 약점 모드 상수
+  private static final int MAX_WEAK_TAGS = 5; // 최대 사용 약점 태그 개수
+  private static final int MIN_TAGS_IN_SET = 3; // 한 세트에 최소로 섞이고 싶은 태그 개수
+  private static final double MAX_SHARE_PER_TAG = 0.5; // 한 태그가 전체 세트에서 차지하는 최대 비율 (50%)
+  private static final int MIN_TOTAL_TRIES = 3; // 태그 능력지수 신뢰를 위한 최소 풀이 수
+
+  // 약점 태그 정보를 담는 내부 DTO
+  private record TagAbility(String tag, double accuracy, int total) {}
+
   private final QuestionRepository questionRepository;
   private final QuestionChoiceRepository choiceRepository;
   private final UserProgressRepository progressRepository;
@@ -688,62 +697,15 @@ public class AssistWrittenService {
     String userId = AuthUserUtil.getCurrentUserId();
     int want = sanitizeCount(count);
 
-    // 1. 약점 태그 추출 (report_tag_skill 테이블 기반)
-    List<String> weaknessTags = new ArrayList<>();
-    try {
-      ProgressQueryClient.TagAbilityResp tagAbilityResp = 
-          progressQueryClient.abilityByTag("WRITTEN", 20);
-      if (tagAbilityResp != null && tagAbilityResp.weaknessTags() != null) {
-        weaknessTags = tagAbilityResp.weaknessTags();
-      }
-      log.debug("[assist/written/weakness] userId={}, weaknessTags={} (from report_tag_skill)", 
-          userId, weaknessTags);
-    } catch (Exception e) {
-      log.warn("[assist/written/weakness] Failed to fetch weakness tags from progress-service: {}", 
-          e.getMessage(), e);
-      // Fallback: UserAnswer 기반으로 약점 태그 추출
-      List<com.OhRyue.certpilot.study.domain.UserAnswer> writtenAnswers = 
-          userAnswerRepository.findByUserId(userId).stream()
-              .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
-              .toList();
-      
-      Map<Long, List<String>> tagsByQuestion = new HashMap<>();
-      writtenAnswers.stream()
-          .map(com.OhRyue.certpilot.study.domain.UserAnswer::getQuestionId)
-          .distinct()
-          .forEach(qid -> tagsByQuestion.put(qid, questionTagRepository.findTagsByQuestionId(qid)));
-      
-      Map<String, int[]> tagStats = new HashMap<>();
-      for (com.OhRyue.certpilot.study.domain.UserAnswer answer : writtenAnswers) {
-        List<String> tags = tagsByQuestion.getOrDefault(answer.getQuestionId(), List.of());
-        for (String tag : tags) {
-          int[] stat = tagStats.computeIfAbsent(tag, k -> new int[2]);
-          if (Boolean.TRUE.equals(answer.getCorrect())) stat[0] += 1;
-          stat[1] += 1;
-        }
-      }
-      
-      weaknessTags = tagStats.entrySet().stream()
-          .map(entry -> {
-            String tag = entry.getKey();
-            int correct = entry.getValue()[0];
-            int total = entry.getValue()[1];
-            double accuracy = total > 0 ? (correct * 100.0 / total) : 0.0;
-            return Map.entry(tag, Map.entry(accuracy, total));
-          })
-          .filter(entry -> entry.getValue().getKey() < 70.0 && entry.getValue().getValue() >= 3)
-          .sorted(Comparator.comparingDouble(entry -> entry.getValue().getKey()))
-          .limit(5)
-          .map(Map.Entry::getKey)
-          .toList();
-      
-      log.debug("[assist/written/weakness] userId={}, weaknessTags={} (fallback from UserAnswer)", 
-          userId, weaknessTags);
-    }
+    // 1. 약점 태그 후보 선택 (ability-by-tag 기반)
+    List<TagAbility> weakTagCandidates = pickWeakTags(userId);
+    
+    log.debug("[assist/written/weakness] userId={}, weakTagCandidates={}", 
+        userId, weakTagCandidates.stream().map(TagAbility::tag).toList());
 
     // 2. 문제 풀 생성
     List<Question> selectedQuestions;
-    if (weaknessTags.isEmpty()) {
+    if (weakTagCandidates.isEmpty()) {
       // 약점 태그가 없을 때는 NORMAL 난이도 문제를 찾음
       List<Question> pool = questionRepository
           .findByModeAndTypeAndDifficulty(ExamMode.WRITTEN, QuestionType.MCQ, Difficulty.NORMAL);
@@ -752,103 +714,34 @@ public class AssistWrittenService {
       int lim = Math.min(copy.size(), Math.max(1, want));
       selectedQuestions = copy.subList(0, lim);
     } else {
-      // 약점 태그별로 문제를 그룹화 (카테고리 모드처럼 균등 분배)
+      // 2-1. 태그별 문제 풀 준비
       Map<String, List<Question>> questionsByTag = new HashMap<>();
-      
-      for (String tag : weaknessTags) {
+      for (TagAbility tagAbility : weakTagCandidates) {
+        String tag = tagAbility.tag();
         List<Long> questionIds = questionTagRepository.findQuestionIdsByTag(tag);
         List<Question> tagQuestions = questionRepository.findByIdIn(questionIds).stream()
             .filter(q -> q.getMode() == ExamMode.WRITTEN)
             .filter(q -> q.getType() == QuestionType.MCQ)
             .distinct()
             .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        Collections.shuffle(tagQuestions);
         questionsByTag.put(tag, tagQuestions);
       }
       
-      log.debug("[assist/written/weakness] weaknessTags={}, questionsByTag sizes={}", 
-          weaknessTags, questionsByTag.entrySet().stream()
+      log.debug("[assist/written/weakness] questionsByTag sizes={}", 
+          questionsByTag.entrySet().stream()
               .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
       
-      // 각 태그의 문제를 섞기
-      questionsByTag.values().forEach(Collections::shuffle);
+      // 2-2. 약점도 기반 태그별 문제 개수 배분
+      Map<String, Integer> tagAllocation = allocateCountPerTag(weakTagCandidates, want);
       
-      // 태그별 할당량 계산 (균등 분배)
-      int tagCount = weaknessTags.size();
-      int basePerTag = want / tagCount;
-      int remainder = want % tagCount;
+      log.debug("[assist/written/weakness] tagAllocation={}, want={}", tagAllocation, want);
       
-      Map<String, Integer> tagQuotas = new HashMap<>();
-      for (int i = 0; i < weaknessTags.size(); i++) {
-        String tag = weaknessTags.get(i);
-        int quota = basePerTag + (i < remainder ? 1 : 0);
-        tagQuotas.put(tag, quota);
-      }
+      // 2-3. 태그별로 실제 문제 선택
+      selectedQuestions = pickQuestionsByTagAllocation(weakTagCandidates, tagAllocation, questionsByTag, want);
       
-      log.debug("[assist/written/weakness] tagQuotas={}, want={}", tagQuotas, want);
-      
-      // 각 태그에서 할당량만큼 선택
-      selectedQuestions = new ArrayList<>();
-      for (String tag : weaknessTags) {
-        List<Question> tagQuestions = questionsByTag.getOrDefault(tag, List.of());
-        int quota = tagQuotas.getOrDefault(tag, 0);
-        int toSelect = Math.min(quota, tagQuestions.size());
-        
-        for (int i = 0; i < toSelect && selectedQuestions.size() < want; i++) {
-          Question q = tagQuestions.get(i);
-          if (!selectedQuestions.contains(q)) {
-            selectedQuestions.add(q);
-          }
-        }
-      }
-      
-      // 할당량으로 부족한 경우, 문제가 많은 태그에서 추가 선택
-      if (selectedQuestions.size() < want) {
-        int remaining = want - selectedQuestions.size();
-        
-        // 태그별 선택된 문제 수 계산
-        Map<String, Integer> selectedCount = new HashMap<>();
-        for (Question q : selectedQuestions) {
-          List<String> qTags = questionTagRepository.findTagsByQuestionId(q.getId());
-          for (String tag : qTags) {
-            if (weaknessTags.contains(tag)) {
-              selectedCount.put(tag, selectedCount.getOrDefault(tag, 0) + 1);
-              break; // 첫 번째 약점 태그만 카운트
-            }
-          }
-        }
-        
-        // 문제가 많은 태그부터 추가 선택
-        List<Map.Entry<String, List<Question>>> sortedTags = questionsByTag.entrySet().stream()
-            .sorted((e1, e2) -> {
-              int size1 = e1.getValue().size();
-              int size2 = e2.getValue().size();
-              int selected1 = selectedCount.getOrDefault(e1.getKey(), 0);
-              int selected2 = selectedCount.getOrDefault(e2.getKey(), 0);
-              // 남은 문제 수가 많고, 선택 비율이 낮은 태그 우선
-              int ratio1 = size1 > 0 ? (selected1 * 100) / size1 : 0;
-              int ratio2 = size2 > 0 ? (selected2 * 100) / size2 : 0;
-              if (ratio1 != ratio2) {
-                return Integer.compare(ratio1, ratio2); // 낮은 비율 우선
-              }
-              return Integer.compare(size2 - selected2, size1 - selected1); // 남은 문제가 많은 순
-            })
-            .toList();
-        
-        for (Map.Entry<String, List<Question>> entry : sortedTags) {
-          if (remaining <= 0) break;
-          
-          String tag = entry.getKey();
-          List<Question> tagQuestions = entry.getValue();
-          
-          for (Question q : tagQuestions) {
-            if (remaining <= 0) break;
-            if (!selectedQuestions.contains(q)) {
-              selectedQuestions.add(q);
-              remaining--;
-            }
-          }
-        }
-      }
+      // 2-4. 태그 다양성 보정
+      selectedQuestions = ensureTagDiversity(selectedQuestions, weakTagCandidates, want);
     }
 
     // 최종 검증: WRITTEN 모드 문제만 포함되도록 필터링
@@ -858,8 +751,8 @@ public class AssistWrittenService {
         .distinct()
         .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
 
-    log.debug("[assist/written/weakness] userId={}, weaknessTags={}, selectedQuestions.size()={}, count={}",
-        userId, weaknessTags, selectedQuestions.size(), want);
+    log.debug("[assist/written/weakness] userId={}, selectedQuestions.size()={}, count={}",
+        userId, selectedQuestions.size(), want);
 
     if (selectedQuestions.isEmpty()) {
       throw new IllegalStateException("약점 보완 문제가 없습니다.");
@@ -912,7 +805,10 @@ public class AssistWrittenService {
 
     // 6. StudySession 생성 (topicScopeJson에 weaknessTags 저장)
     Map<String, Object> scopeMap = new HashMap<>();
-    scopeMap.put("weaknessTags", weaknessTags);
+    List<String> weaknessTagNames = weakTagCandidates.stream()
+        .map(TagAbility::tag)
+        .toList();
+    scopeMap.put("weaknessTags", weaknessTagNames);
     String scopeJson;
     try {
       scopeJson = objectMapper.writeValueAsString(scopeMap);
@@ -1357,7 +1253,7 @@ public class AssistWrittenService {
         weakTags
     );
 
-    // 7. XP 정보 조회
+    // 7. XP 정보 조회 및 지급
     Integer earnedXp = null;
     Long totalXp = null;
     Integer level = null;
@@ -1365,18 +1261,90 @@ public class AssistWrittenService {
     Boolean leveledUp = false;
     Integer levelUpRewardPoints = 0;
 
-    try {
-      // 보조학습은 grade-one에서 정답당 5 XP를 지급했으므로, earnedXp는 정답 수 × 5
-      earnedXp = correct * 5;
-
-      // 현재 XP 지갑 정보 조회
-      com.OhRyue.certpilot.study.client.ProgressXpClient.XpWalletResponse walletResp = progressXpClient.getWallet();
-      totalXp = walletResp.xpTotal();
-      level = walletResp.level();
-      xpToNextLevel = walletResp.xpToNextLevel();
-    } catch (Exception e) {
-      // XP 조회 실패는 학습 흐름을 막지 않음
-      log.warn("Failed to retrieve XP information in assist summary: {}", e.getMessage());
+    // XP 지급 (completed=true이고 xp_granted=false일 때만 지급)
+    // 보조학습은 study-service에서 직접 계산한 XP를 progress-service에 직접 지급
+    if (completed && studySession != null && !Boolean.TRUE.equals(studySession.getXpGranted())) {
+      try {
+        // 1. 보조학습 XP 정책으로 계산
+        int plannedXp = calculateAssistWrittenXp(correct, total);
+        
+        log.info("[AssistWrittenService.summary] XP 지급 요청: sessionId={}, mode={}, total={}, correct={}, plannedXp={}, xpGranted={}",
+            studySession.getId(), mode, total, correct, plannedXp, studySession.getXpGranted());
+        
+        if (plannedXp > 0) {
+          // 2. 지급 전 지갑 정보 조회 (레벨업 여부 확인용)
+          ProgressXpClient.XpWalletResponse walletBefore = progressXpClient.getWallet();
+          int levelBefore = walletBefore.level();
+          
+          // 3. refId 생성 (세션 단위 idempotent)
+          String refId = String.format("ASSIST_WRITTEN:%s:%d", userId, learningSessionId);
+          
+          // 4. XpReason은 ASSIST로 고정 (progress-service의 XpReason enum에 ASSIST만 있음)
+          String xpReason = "ASSIST";
+          
+          log.info("[AssistWrittenService.summary] XP 직접 지급: delta={}, reason={}, refId={}",
+              plannedXp, xpReason, refId);
+          
+          // 5. 직접 XP 지급 (progress-service의 /gain API 사용)
+          progressXpClient.gainXp(plannedXp, xpReason, refId);
+          
+          // 6. 지급 후 지갑 정보 조회 (xpToNextLevel 계산을 위해)
+          ProgressXpClient.XpWalletResponse walletAfter = progressXpClient.getWallet();
+          
+          // 7. XP 정보를 응답에 포함
+          earnedXp = plannedXp; // 실제 지급된 XP (중복 호출 시 progress-service에서 0 처리)
+          totalXp = walletAfter.xpTotal();
+          level = walletAfter.level();
+          xpToNextLevel = walletAfter.xpToNextLevel();
+          
+          // 8. 레벨업 여부 확인
+          leveledUp = walletAfter.level() > levelBefore;
+          levelUpRewardPoints = 0; // 레벨업 보상 포인트는 별도 계산 필요 (현재는 0)
+          
+          // 7. xp_granted 플래그 업데이트
+          sessionManager.markXpGranted(studySession);
+          
+          log.info("[AssistWrittenService.summary] XP 지급 완료: earnedXp={}, totalXp={}, level={}, leveledUp={}",
+              earnedXp, totalXp, level, leveledUp);
+        } else {
+          // plannedXp가 0이면 지급하지 않음
+          log.info("[AssistWrittenService.summary] XP 지급 생략: plannedXp=0 (correct={}, total={})", correct, total);
+          ProgressXpClient.XpWalletResponse walletResp = progressXpClient.getWallet();
+          totalXp = walletResp.xpTotal();
+          level = walletResp.level();
+          xpToNextLevel = walletResp.xpToNextLevel();
+          earnedXp = 0;
+        }
+      } catch (Exception e) {
+        // XP 지급 실패 시 현재 지갑 정보만 조회
+        log.error("Failed to grant XP in assist summary: {}", e.getMessage(), e);
+        try {
+          ProgressXpClient.XpWalletResponse walletResp = progressXpClient.getWallet();
+          totalXp = walletResp.xpTotal();
+          level = walletResp.level();
+          xpToNextLevel = walletResp.xpToNextLevel();
+          // earnedXp는 보조학습 XP 정책으로 계산
+          earnedXp = calculateAssistWrittenXp(correct, total);
+        } catch (Exception ex) {
+          log.warn("Failed to retrieve XP wallet information: {}", ex.getMessage());
+        }
+      }
+    } else {
+      // XP 지급 조건 미충족 시 현재 지갑 정보만 조회
+      log.warn("[AssistWrittenService.summary] XP 지급 조건 미충족: completed={}, studySession={}, xpGranted={}",
+          completed, studySession != null, studySession != null ? studySession.getXpGranted() : null);
+      try {
+        ProgressXpClient.XpWalletResponse walletResp = progressXpClient.getWallet();
+        totalXp = walletResp.xpTotal();
+        level = walletResp.level();
+        xpToNextLevel = walletResp.xpToNextLevel();
+        // earnedXp는 보조학습 XP 정책으로 계산
+        if (completed) {
+          earnedXp = calculateAssistWrittenXp(correct, total);
+        }
+      } catch (Exception e) {
+        log.warn("Failed to retrieve XP information in assist summary: {}", e.getMessage());
+      }
     }
 
     // 8. 응답 생성
@@ -1819,5 +1787,293 @@ public class AssistWrittenService {
     } catch (JsonProcessingException e) {
       return "{}";
     }
+  }
+
+  /**
+   * 보조학습 WRITTEN XP 정책 계산
+   * - 정답 1개당 5 XP (단순 계산, 보너스/상한 없음)
+   */
+  private int calculateAssistWrittenXp(int correct, int total) {
+    if (total <= 0) return 0;
+    // 정답 개수 × 5 XP
+    return correct * 5;
+  }
+
+  /* ================= 약점 모드 헬퍼 메서드 ================= */
+
+  /**
+   * 약점 태그 후보 선택 (최대 5개, 최소 풀이 수 3회 이상)
+   */
+  private List<TagAbility> pickWeakTags(String userId) {
+    // abilityByTag API의 TagAbility가 중첩 record라 접근 제한이 있으므로
+    // UserAnswer 기반으로 약점 태그를 추출 (accuracy와 total 정보를 직접 계산)
+    List<com.OhRyue.certpilot.study.domain.UserAnswer> writtenAnswers = 
+        userAnswerRepository.findByUserId(userId).stream()
+            .filter(ans -> ans.getExamMode() == ExamMode.WRITTEN)
+            .toList();
+    
+    Map<Long, List<String>> tagsByQuestion = new HashMap<>();
+    writtenAnswers.stream()
+        .map(com.OhRyue.certpilot.study.domain.UserAnswer::getQuestionId)
+        .distinct()
+        .forEach(qid -> tagsByQuestion.put(qid, questionTagRepository.findTagsByQuestionId(qid)));
+    
+    Map<String, int[]> tagStats = new HashMap<>();
+    for (com.OhRyue.certpilot.study.domain.UserAnswer answer : writtenAnswers) {
+      List<String> tags = tagsByQuestion.getOrDefault(answer.getQuestionId(), List.of());
+      for (String tag : tags) {
+        int[] stat = tagStats.computeIfAbsent(tag, k -> new int[2]);
+        if (Boolean.TRUE.equals(answer.getCorrect())) stat[0] += 1;
+        stat[1] += 1;
+      }
+    }
+    
+    return tagStats.entrySet().stream()
+        .map(entry -> {
+          String tag = entry.getKey();
+          int correct = entry.getValue()[0];
+          int total = entry.getValue()[1];
+          double accuracy = total > 0 ? (correct * 100.0 / total) : 0.0;
+          return new TagAbility(tag, accuracy, total);
+        })
+        .filter(ta -> ta.total() >= MIN_TOTAL_TRIES)
+        .sorted(Comparator.comparingDouble(TagAbility::accuracy))
+        .limit(MAX_WEAK_TAGS)
+        .toList();
+  }
+
+  /**
+   * 약점도 기반 태그별 문제 개수 배분
+   */
+  private Map<String, Integer> allocateCountPerTag(List<TagAbility> tags, int totalCount) {
+    Map<String, Integer> alloc = new LinkedHashMap<>();
+    if (tags.isEmpty() || totalCount <= 0) {
+      return alloc;
+    }
+
+    // 1) 약점 점수 계산: weaknessScore = 100 - accuracy
+    Map<String, Double> scoreMap = new LinkedHashMap<>();
+    double sumScore = 0.0;
+    for (TagAbility t : tags) {
+      double score = 100.0 - t.accuracy(); // accuracy 낮을수록 score 큼
+      if (score < 0) score = 0; // 방어 코드
+      scoreMap.put(t.tag(), score);
+      sumScore += score;
+    }
+
+    // score 합이 0인 경우(모두 100점인 극단 상황) → 균등 분배
+    if (sumScore <= 0.0) {
+      int base = totalCount / tags.size();
+      int remain = totalCount % tags.size();
+      for (int i = 0; i < tags.size(); i++) {
+        TagAbility t = tags.get(i);
+        int c = base + (i < remain ? 1 : 0);
+        alloc.put(t.tag(), c);
+      }
+      return alloc;
+    }
+
+    // 2) 1차 배분: weight * totalCount
+    int assigned = 0;
+    for (TagAbility t : tags) {
+      double weight = scoreMap.get(t.tag()) / sumScore;
+      int c = (int) Math.floor(weight * totalCount); // 우선 내림
+      alloc.put(t.tag(), c);
+      assigned += c;
+    }
+
+    // 3) 최소 태그 다양성 보장 (상위 MIN_TAGS_IN_SET개 태그는 최소 1개)
+    int tagCount = tags.size();
+    int minTags = Math.min(MIN_TAGS_IN_SET, tagCount);
+    for (int i = 0; i < minTags; i++) {
+      TagAbility t = tags.get(i);
+      String tag = t.tag();
+      int current = alloc.getOrDefault(tag, 0);
+      if (current == 0 && assigned < totalCount) {
+        alloc.put(tag, 1);
+        assigned += 1;
+      }
+    }
+
+    // 4) 태그 쏠림 제한 (한 태그가 너무 많이 가져가지 않게)
+    int maxPerTag = (int) Math.ceil(totalCount * MAX_SHARE_PER_TAG);
+    for (TagAbility t : tags) {
+      String tag = t.tag();
+      int current = alloc.getOrDefault(tag, 0);
+      if (current > maxPerTag) {
+        int diff = current - maxPerTag;
+        alloc.put(tag, maxPerTag);
+        assigned -= diff;
+      }
+    }
+
+    // 5) 합이 totalCount보다 작으면, 약점도가 높은 태그부터 1개씩 추가
+    while (assigned < totalCount) {
+      boolean changed = false;
+      for (TagAbility t : tags) {
+        String tag = t.tag();
+        int current = alloc.getOrDefault(tag, 0);
+        if (current < maxPerTag) {
+          alloc.put(tag, current + 1);
+          assigned += 1;
+          changed = true;
+          if (assigned >= totalCount) break;
+        }
+      }
+      if (!changed) break; // 더 이상 늘릴 수 없으면 종료
+    }
+
+    // 6) 합이 totalCount보다 크면, 약점도가 낮은 태그부터 줄이기
+    while (assigned > totalCount) {
+      boolean changed = false;
+      // 뒤에서부터(정답률 높은 태그부터) 줄여나감
+      for (int i = tags.size() - 1; i >= 0; i--) {
+        TagAbility t = tags.get(i);
+        String tag = t.tag();
+        int current = alloc.getOrDefault(tag, 0);
+        if (current > 0) {
+          alloc.put(tag, current - 1);
+          assigned -= 1;
+          changed = true;
+          if (assigned <= totalCount) break;
+        }
+      }
+      if (!changed) break;
+    }
+
+    return alloc;
+  }
+
+  /**
+   * 태그별로 실제 문제 선택
+   */
+  private List<Question> pickQuestionsByTagAllocation(
+      List<TagAbility> tags,
+      Map<String, Integer> alloc,
+      Map<String, List<Question>> questionsByTag,
+      int totalCount
+  ) {
+    List<Question> selected = new ArrayList<>();
+    Set<Long> selectedQuestionIds = new HashSet<>();
+    int remaining = totalCount;
+
+    // 1차 루프: 태그별 목표 개수만큼 WRITTEN+MCQ에서 뽑기
+    for (TagAbility t : tags) {
+      String tag = t.tag();
+      int need = Math.min(alloc.getOrDefault(tag, 0), remaining);
+      if (need <= 0) continue;
+
+      List<Question> tagQuestions = questionsByTag.getOrDefault(tag, List.of());
+      int toSelect = Math.min(need, tagQuestions.size());
+      
+      for (int i = 0; i < toSelect && selected.size() < totalCount; i++) {
+        Question q = tagQuestions.get(i);
+        if (!selectedQuestionIds.contains(q.getId())) {
+          selected.add(q);
+          selectedQuestionIds.add(q.getId());
+          remaining--;
+        }
+      }
+    }
+
+    // 2) 여전히 remaining > 0이면, 다른 약점 태그에서 더 뽑기
+    if (remaining > 0) {
+      for (TagAbility t : tags) {
+        if (remaining <= 0) break;
+        String tag = t.tag();
+        List<Question> tagQuestions = questionsByTag.getOrDefault(tag, List.of());
+        
+        for (Question q : tagQuestions) {
+          if (remaining <= 0) break;
+          if (!selectedQuestionIds.contains(q.getId())) {
+            selected.add(q);
+            selectedQuestionIds.add(q.getId());
+            remaining--;
+          }
+        }
+      }
+    }
+
+    return selected;
+  }
+
+  /**
+   * 태그 다양성 보정 (한 태그만 도배되는 것 방지)
+   */
+  private List<Question> ensureTagDiversity(
+      List<Question> selected,
+      List<TagAbility> weakTags,
+      int totalCount
+  ) {
+    if (selected.isEmpty()) return selected;
+    if (weakTags.size() < 2) return selected; // 태그 자체가 1개면 어쩔 수 없음
+    if (totalCount < 3) return selected; // 세트가 너무 작으면 강제 섞기 비효율
+
+    // 1) 현재 세트의 태그 분포 확인
+    Map<String, Long> tagCounts = new HashMap<>();
+    for (Question q : selected) {
+      List<String> tags = questionTagRepository.findTagsByQuestionId(q.getId());
+      for (String tag : tags) {
+        if (weakTags.stream().anyMatch(ta -> ta.tag().equals(tag))) {
+          tagCounts.merge(tag, 1L, Long::sum);
+          break; // 첫 번째 약점 태그만 카운트
+        }
+      }
+    }
+
+    long distinctCount = tagCounts.keySet().size();
+    if (distinctCount >= 2) {
+      // 이미 최소 2개 이상 태그가 섞여 있으면 OK
+      return selected;
+    }
+
+    // 여기까지 왔다는 건: dominantTag 1개만 나온 상황
+    // → 두 번째 약한 태그에서 강제로 문제를 섞어 넣는 시도
+
+    // 두 번째 약한 태그 찾기
+    if (weakTags.size() < 2) return selected;
+    TagAbility secondWeak = weakTags.get(1);
+    String secondTag = secondWeak.tag();
+
+    // dominantTag 문제들 중 일부를 빼고, secondTag 문제로 교체 시도
+    String dominantTag = tagCounts.entrySet().stream()
+        .max(Map.Entry.comparingByValue())
+        .map(Map.Entry::getKey)
+        .orElse(null);
+    
+    if (dominantTag == null) return selected;
+
+    int replaceCount = Math.min(2, selected.size() / 2); // 최대 2개 정도 교체
+    List<Question> toRemove = selected.stream()
+        .filter(q -> {
+          List<String> qTags = questionTagRepository.findTagsByQuestionId(q.getId());
+          return qTags.contains(dominantTag);
+        })
+        .limit(replaceCount)
+        .toList();
+
+    if (toRemove.isEmpty()) return selected;
+
+    // secondTag에서 신규 문제 뽑기 (이미 뽑힌 questionId는 제외)
+    List<Long> alreadyIds = selected.stream()
+        .map(Question::getId)
+        .toList();
+
+    List<Long> secondTagQuestionIds = questionTagRepository.findQuestionIdsByTag(secondTag);
+    List<Question> newQs = questionRepository.findByIdIn(secondTagQuestionIds).stream()
+        .filter(q -> q.getMode() == ExamMode.WRITTEN)
+        .filter(q -> q.getType() == QuestionType.MCQ)
+        .filter(q -> !alreadyIds.contains(q.getId()))
+        .limit(toRemove.size())
+        .toList();
+
+    if (newQs.isEmpty()) return selected; // 교체 실패 시 그대로 반환
+
+    // 실제 교체 수행
+    List<Question> result = new ArrayList<>(selected);
+    result.removeAll(toRemove);
+    result.addAll(newQs);
+
+    return result;
   }
 }
