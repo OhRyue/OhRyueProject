@@ -82,6 +82,31 @@ public class VersusController {
   }
 
   @Operation(
+      summary = "대기 중인 대전 방 목록 조회",
+      description = "WAIT 상태인 대전 방 목록을 조회합니다. 예약 시간과 무관하게 모든 WAIT 상태 방을 조회합니다.\n\n" +
+          "**용도:**\n" +
+          "- 토너먼트 등 예약 시간이 없는 방 조회에 적합\n" +
+          "- 예약 시간이 설정되지 않은 방도 포함\n\n" +
+          "**필터링:**\n" +
+          "- mode: DUEL(1:1), TOURNAMENT(토너먼트), GOLDENBELL(골든벨)\n" +
+          "- mode를 지정하지 않으면 모든 모드의 WAIT 상태 방 조회\n" +
+          "- 생성 시간 역순으로 정렬 (최신 방부터)\n\n" +
+          "**응답:**\n" +
+          "- scheduledAt: 예약 시작 시간 (예약이 없으면 null)"
+  )
+  @ApiResponses(value = {
+      @ApiResponse(responseCode = "200", description = "조회 성공")
+  })
+  @GetMapping("/rooms/waiting")
+  public List<VersusDtos.RoomSummary> waitingRooms(
+      @Parameter(description = "대전 모드 (DUEL, TOURNAMENT, GOLDENBELL). 기본값: TOURNAMENT", example = "TOURNAMENT")
+      @RequestParam(required = false) MatchMode mode) {
+    // mode가 지정되지 않으면 기본값으로 TOURNAMENT 사용
+    MatchMode targetMode = mode != null ? mode : MatchMode.TOURNAMENT;
+    return versusService.listWaitingRooms(targetMode);
+  }
+
+  @Operation(
       summary = "대전 방 생성",
       description = "새로운 대전 방을 생성합니다.\n\n" +
           "**방 생성 방법 2가지:**\n" +
@@ -112,7 +137,7 @@ public class VersusController {
           content = @Content(
               examples = {
                   @ExampleObject(
-                      name = "DUEL 모드 (scopeJson 사용)",
+                      name = "DUEL 모드 (scopeJson 사용 - 권장)",
                       value = """
                           {
                             "mode": "DUEL",
@@ -122,7 +147,27 @@ public class VersusController {
                           """
                   ),
                   @ExampleObject(
-                      name = "TOURNAMENT 모드 (questions 직접 제공)",
+                      name = "TOURNAMENT 모드 (scopeJson 사용 - 권장)",
+                      value = """
+                          {
+                            "mode": "TOURNAMENT",
+                            "scopeJson": "{\\"examMode\\":\\"WRITTEN\\",\\"difficulty\\":\\"NORMAL\\",\\"topicScope\\":\\"ALL\\"}",
+                            "participants": ["user2", "user3", "user4", "user5", "user6", "user7", "user8"]
+                          }
+                          """
+                  ),
+                  @ExampleObject(
+                      name = "TOURNAMENT 모드 (특정 카테고리, scopeJson 사용)",
+                      value = """
+                          {
+                            "mode": "TOURNAMENT",
+                            "scopeJson": "{\\"examMode\\":\\"WRITTEN\\",\\"difficulty\\":\\"NORMAL\\",\\"topicScope\\":\\"CATEGORY\\",\\"topicId\\":101}",
+                            "participants": ["user2", "user3", "user4", "user5", "user6", "user7", "user8"]
+                          }
+                          """
+                  ),
+                  @ExampleObject(
+                      name = "TOURNAMENT 모드 (questions 직접 제공 - 선택사항)",
                       value = """
                           {
                             "mode": "TOURNAMENT",

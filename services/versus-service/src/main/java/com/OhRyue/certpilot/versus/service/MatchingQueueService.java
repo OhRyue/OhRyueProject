@@ -55,8 +55,8 @@ public class MatchingQueueService {
      * 매칭 요청
      */
     public MatchingDtos.MatchStatusResp requestMatch(String userId, MatchingDtos.MatchRequest request) {
-        // 동일 모드의 활성 방이 이미 있는지 확인
-        List<Long> existingRoomIds = participantRepository.findActiveRoomIdsByUserIdAndMode(
+        // 동일 모드의 활성 방이 이미 있는지 확인 (봇전 제외)
+        List<Long> existingRoomIds = participantRepository.findActiveNonBotRoomIdsByUserIdAndMode(
             userId, MatchStatus.ONGOING, request.mode()
         );
         if (!existingRoomIds.isEmpty()) {
@@ -211,8 +211,8 @@ public class MatchingQueueService {
         // 1. 매칭 대기 중인지 먼저 확인
         MatchingInfo info = userMatchingInfo.get(userId);
         if (info != null) {
-            // 매칭 중인 모드의 활성 방만 확인
-            List<Long> activeRoomIds = participantRepository.findActiveRoomIdsByUserIdAndMode(
+            // 매칭 중인 모드의 활성 방만 확인 (봇전 제외)
+            List<Long> activeRoomIds = participantRepository.findActiveNonBotRoomIdsByUserIdAndMode(
                 userId, MatchStatus.ONGOING, info.mode()
             );
             if (!activeRoomIds.isEmpty()) {
@@ -249,8 +249,8 @@ public class MatchingQueueService {
             }
         }
         
-        // 2. 매칭 정보가 없으면 기존 로직: 모든 모드의 활성 방 확인
-        List<Long> activeRoomIds = participantRepository.findActiveRoomIdsByUserId(userId, MatchStatus.ONGOING);
+        // 2. 매칭 정보가 없으면 기존 로직: 모든 모드의 활성 방 확인 (봇전 제외)
+        List<Long> activeRoomIds = participantRepository.findActiveNonBotRoomIdsByUserId(userId, MatchStatus.ONGOING);
         if (!activeRoomIds.isEmpty()) {
             Long roomId = activeRoomIds.get(0); // 가장 최근 방
             return new MatchingDtos.MatchStatusResp(

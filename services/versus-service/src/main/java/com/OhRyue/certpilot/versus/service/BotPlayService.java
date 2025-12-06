@@ -153,6 +153,21 @@ public class BotPlayService {
             Map<Integer, List<MatchQuestion>> questionsByRound = allQuestions.stream()
                     .collect(Collectors.groupingBy(MatchQuestion::getRoundNo));
             
+            // 첫 번째 문제 시작 이벤트 기록 (토너먼트 봇전의 경우 자동으로 시작되므로)
+            if (!allQuestions.isEmpty()) {
+                MatchQuestion firstQuestion = allQuestions.get(0);
+                // 첫 번째 문제의 시작 시점을 기록 (모든 참가자 공통)
+                saveEvent(roomId, "QUESTION_STARTED", Map.of(
+                        "questionId", firstQuestion.getQuestionId(),
+                        "roundNo", firstQuestion.getRoundNo(),
+                        "phase", firstQuestion.getPhase().name(),
+                        "startedAt", Instant.now().toString(),
+                        "allParticipants", true // 모든 참가자 공통 시작
+                ));
+                log.info("토너먼트 봇전 첫 번째 문제 시작 이벤트 기록: roomId={}, questionId={}, roundNo={}",
+                        roomId, firstQuestion.getQuestionId(), firstQuestion.getRoundNo());
+            }
+            
             for (Map.Entry<Integer, List<MatchQuestion>> entry : questionsByRound.entrySet()) {
                 int roundNo = entry.getKey();
                 List<MatchQuestion> roundQuestions = entry.getValue();
@@ -404,6 +419,17 @@ public class BotPlayService {
             // 점수 계산
             int scoreDelta = calculateScore(question, correct, (int) actualTimeMs);
             
+            // 토너먼트 모드: 답안 제출 직전에 탈락 상태 확인 (딜레이 대기 중 탈락했을 수 있음)
+            if (mode == MatchMode.TOURNAMENT) {
+                MatchParticipant participant = participantRepository.findByRoomIdAndUserId(roomId, botUserId)
+                        .orElse(null);
+                if (participant != null && participant.isEliminated()) {
+                    log.info("탈락한 봇은 답안 제출 불가 (답안 저장 직전 확인): roomId={}, questionId={}, botUserId={}", 
+                            roomId, question.getQuestionId(), botUserId);
+                    return false; // 답안 제출하지 않고 종료
+                }
+            }
+            
             log.info("봇 답안 제출: roomId={}, botUserId={}, questionId={}, correct={}, timeMs={}, scoreDelta={}, difficulty={}", 
                     roomId, botUserId, question.getQuestionId(), correct, actualTimeMs, scoreDelta, difficulty.getCode());
             
@@ -475,6 +501,17 @@ public class BotPlayService {
         
         for (MatchQuestion question : questions) {
             try {
+                // 토너먼트 모드: 탈락한 봇은 답안 제출 불가
+                if (mode == MatchMode.TOURNAMENT) {
+                    MatchParticipant participant = participantRepository.findByRoomIdAndUserId(roomId, botUserId)
+                            .orElse(null);
+                    if (participant != null && participant.isEliminated()) {
+                        log.debug("탈락한 봇은 답안 제출 불가: roomId={}, questionId={}, botUserId={}", 
+                                roomId, question.getQuestionId(), botUserId);
+                        continue;
+                    }
+                }
+                
                 // 이미 답안을 제출했는지 확인
                 boolean alreadyAnswered = answerRepository
                         .findByRoomIdAndQuestionIdAndUserId(roomId, question.getQuestionId(), botUserId)
@@ -493,6 +530,17 @@ public class BotPlayService {
                     log.warn("문제 시작 이벤트를 기다리는 중 중단: roomId={}, questionId={}", 
                             roomId, question.getQuestionId());
                     continue;
+                }
+                
+                // 문제 시작 후 다시 한 번 탈락 상태 확인 (문제 시작 전에 탈락했을 수 있음)
+                if (mode == MatchMode.TOURNAMENT) {
+                    MatchParticipant participant = participantRepository.findByRoomIdAndUserId(roomId, botUserId)
+                            .orElse(null);
+                    if (participant != null && participant.isEliminated()) {
+                        log.debug("문제 시작 후 탈락 확인: 봇은 답안 제출 불가, roomId={}, questionId={}, botUserId={}", 
+                                roomId, question.getQuestionId(), botUserId);
+                        continue;
+                    }
                 }
                 
                 log.info("문제 {} 봇 플레이 시작: roomId={}, botUserId={}", 

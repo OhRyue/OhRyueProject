@@ -34,6 +34,18 @@ public interface MatchParticipantRepository extends JpaRepository<MatchParticipa
          "ORDER BY r.createdAt DESC")
   List<Long> findActiveRoomIdsByUserIdAndMode(@Param("userId") String userId, @Param("status") MatchStatus status, @Param("mode") com.OhRyue.certpilot.versus.domain.MatchMode mode);
 
+  @Query("SELECT p.roomId FROM MatchParticipant p " +
+         "JOIN MatchRoom r ON p.roomId = r.id " +
+         "WHERE p.userId = :userId AND r.status = :status AND r.mode = :mode AND r.isBotMatch = false " +
+         "ORDER BY r.createdAt DESC")
+  List<Long> findActiveNonBotRoomIdsByUserIdAndMode(@Param("userId") String userId, @Param("status") MatchStatus status, @Param("mode") com.OhRyue.certpilot.versus.domain.MatchMode mode);
+
+  @Query("SELECT p.roomId FROM MatchParticipant p " +
+         "JOIN MatchRoom r ON p.roomId = r.id " +
+         "WHERE p.userId = :userId AND r.status = :status AND r.isBotMatch = false " +
+         "ORDER BY r.createdAt DESC")
+  List<Long> findActiveNonBotRoomIdsByUserId(@Param("userId") String userId, @Param("status") MatchStatus status);
+
   /**
    * 하트비트 타임아웃된 참가자 조회
    * - WAIT 상태의 모든 방

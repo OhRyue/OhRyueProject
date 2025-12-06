@@ -266,6 +266,37 @@ public class VersusService {
                 .toList();
     }
 
+    /**
+     * WAIT 상태인 방 목록 조회 (예약 시간과 무관하게)
+     * 토너먼트 등 예약 시간이 없는 방을 조회할 때 사용
+     */
+    @Transactional(readOnly = true)
+    public List<VersusDtos.RoomSummary> listWaitingRooms(MatchMode mode) {
+        List<MatchRoom> rooms;
+        
+        if (mode != null) {
+            rooms = roomRepository.findByModeAndStatus(mode, MatchStatus.WAIT);
+        } else {
+            // mode가 지정되지 않으면 모든 WAIT 상태 방 조회
+            rooms = roomRepository.findByStatus(MatchStatus.WAIT);
+        }
+
+        Set<Long> roomIds = rooms.stream().map(MatchRoom::getId).collect(Collectors.toSet());
+        Map<Long, Long> participantCount = participantRepository.findByRoomIdIn(roomIds).stream()
+                .collect(Collectors.groupingBy(MatchParticipant::getRoomId, Collectors.counting()));
+
+        return rooms.stream()
+                .sorted(Comparator.comparing(MatchRoom::getCreatedAt).reversed())
+                .map(room -> new VersusDtos.RoomSummary(
+                        room.getId(),
+                        room.getMode(),
+                        room.getStatus(),
+                        participantCount.getOrDefault(room.getId(), 0L).intValue(),
+                        room.getCreatedAt(),
+                        room.getScheduledAt()))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public VersusDtos.RoomDetailResp getRoom(Long roomId) {
         return buildRoomDetail(roomId);
@@ -555,6 +586,77 @@ public class VersusService {
 
                 // 상태 변경 후 스코어보드 재계산
                 resp = computeScoreboard(room);
+            }
+        }
+
+        // 토너먼트 모드에서 게임 종료 체크
+        if (room.getMode() == MatchMode.TOURNAMENT && room.getStatus() == MatchStatus.ONGOING) {
+            List<MatchParticipant> activeParticipants = participantRepository.findByRoomIdAndEliminatedFalse(roomId);
+            
+            // 활성 참가자가 1명 이하이면 즉시 게임 종료
+            if (activeParticipants.size() <= 1) {
+                log.info("토너먼트 scoreboard API 호출 시 게임 종료 감지 (활성 참가자 1명 이하): roomId={}, activeParticipants={}",
+                        roomId, activeParticipants.size());
+                
+                String winner = activeParticipants.isEmpty() ? null : activeParticipants.get(0).getUserId();
+                if (winner == null && !resp.items().isEmpty()) {
+                    // 활성 참가자가 없으면 스코어보드 1위를 우승자로
+                    winner = resp.items().get(0).userId();
+                }
+                
+                recordEvent(roomId, "MATCH_FINISHED", Map.of(
+                        "mode", "TOURNAMENT",
+                        "winner", winner != null ? winner : "NONE",
+                        "activeParticipants", activeParticipants.size(),
+                        "reason", "ONLY_ONE_SURVIVOR"
+                ));
+                room.setStatus(MatchStatus.DONE);
+                roomRepository.save(room);
+
+                // progress-service에 결과 통지 및 보상 지급
+                notifyProgressService(room, resp);
+
+                // 상태 변경 후 스코어보드 재계산
+                resp = computeScoreboard(room);
+            } else if (resp.currentQuestion() == null && resp.intermission() == null) {
+                // currentQuestion이 null이고 intermission도 null일 때만 마지막 문제 완료 확인
+                List<MatchQuestion> allQuestions = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId);
+                if (!allQuestions.isEmpty()) {
+                    MatchQuestion lastQuestion = allQuestions.get(allQuestions.size() - 1);
+                    
+                    // 마지막 문제에 대한 답안 제출 완료 확인
+                    long answersForLastQuestion = answerRepository.countByRoomIdAndQuestionId(roomId, lastQuestion.getQuestionId());
+                    boolean lastQuestionCompleted = answersForLastQuestion >= activeParticipants.size();
+                    
+                    // 게임 종료 조건: 다음 라운드 없음
+                    boolean matchCompleted = !hasNextRound(roomId, lastQuestion.getRoundNo());
+                    
+                    if (lastQuestionCompleted && matchCompleted) {
+                        log.info("토너먼트 scoreboard API 호출 시 게임 종료 감지 (마지막 문제 완료): roomId={}, activeParticipants={}, lastQuestionId={}, lastRound={}",
+                                roomId, activeParticipants.size(), lastQuestion.getQuestionId(), lastQuestion.getRoundNo());
+                        
+                        String winner = activeParticipants.isEmpty() ? null : activeParticipants.get(0).getUserId();
+                        if (winner == null && !resp.items().isEmpty()) {
+                            // 활성 참가자가 없으면 스코어보드 1위를 우승자로
+                            winner = resp.items().get(0).userId();
+                        }
+                        
+                        recordEvent(roomId, "MATCH_FINISHED", Map.of(
+                                "mode", "TOURNAMENT",
+                                "winner", winner != null ? winner : "NONE",
+                                "activeParticipants", activeParticipants.size(),
+                                "reason", "LAST_QUESTION_COMPLETED_ON_SCOREBOARD_CHECK"
+                        ));
+                        room.setStatus(MatchStatus.DONE);
+                        roomRepository.save(room);
+
+                        // progress-service에 결과 통지 및 보상 지급
+                        notifyProgressService(room, resp);
+
+                        // 상태 변경 후 스코어보드 재계산
+                        resp = computeScoreboard(room);
+                    }
+                }
             }
         }
 
@@ -853,6 +955,52 @@ public class VersusService {
             return ModeResolution.none();
         }
 
+        // 현재 문제에 대한 답안 제출 완료 확인
+        long answersForQuestion = answerRepository.countByRoomIdAndQuestionId(roomId, question.getQuestionId());
+        boolean questionCompleted = answersForQuestion >= activeParticipants.size();
+
+        if (!questionCompleted) {
+            return ModeResolution.none();
+        }
+
+        // 현재 문제 완료 - 같은 라운드의 다음 문제가 있는지 확인
+        Optional<MatchQuestion> nextQuestion = findNextQuestion(roomId, question);
+        boolean isLastQuestionInRound = nextQuestion.isEmpty() || 
+                !nextQuestion.get().getRoundNo().equals(question.getRoundNo());
+
+        // 같은 라운드의 다음 문제가 있으면 바로 시작
+        if (!isLastQuestionInRound && nextQuestion.isPresent()) {
+            MatchQuestion next = nextQuestion.get();
+            
+            // 쉬는 시간 시작 이벤트 기록
+            Instant intermissionStart = Instant.now();
+            recordEvent(roomId, "INTERMISSION_STARTED", Map.of(
+                    "nextQuestionId", next.getQuestionId(),
+                    "nextRoundNo", next.getRoundNo(),
+                    "nextPhase", next.getPhase().name(),
+                    "durationSec", QUESTION_INTERMISSION_SEC,
+                    "startedAt", intermissionStart.toString(),
+                    "questionStartAt", intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC).toString()
+            ));
+
+            // 5초 후 문제 시작 시간 계산
+            Instant questionStartTime = intermissionStart.plusSeconds(QUESTION_INTERMISSION_SEC);
+
+            // 다음 문제 시작 이벤트 기록
+            recordEvent(roomId, "QUESTION_STARTED", Map.of(
+                    "questionId", next.getQuestionId(),
+                    "roundNo", next.getRoundNo(),
+                    "phase", next.getPhase().name(),
+                    "startedAt", questionStartTime.toString(),
+                    "allParticipants", true
+            ));
+            log.info("토너먼트 같은 라운드 다음 문제 시작: roomId={}, questionId={}, roundNo={}, orderNo={}",
+                    roomId, next.getQuestionId(), next.getRoundNo(), next.getOrderNo());
+            
+            return new ModeResolution(false, false, true); // 문제 완료, 매치 미완료, 상태 변경됨
+        }
+
+        // 라운드의 마지막 문제 완료 - 탈락 처리
         int questionsInRound = questionRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo()).size();
         long answersInRound = answerRepository.countByRoomIdAndRoundNo(roomId, question.getRoundNo());
         long expectedAnswers = (long) activeParticipants.size() * questionsInRound;
@@ -862,13 +1010,20 @@ public class VersusService {
             return ModeResolution.none();
         }
 
-        Set<String> activeIds = activeParticipants.stream()
-                .map(MatchParticipant::getUserId)
-                .collect(Collectors.toSet());
+        // 탈락 처리를 위해 활성 참가자 기준으로 스코어보드 재계산
+        // currentQuestion을 전달하면 활성 참가자만 포함하여 계산
+        VersusDtos.ScoreBoardResp fullScoreboard = computeScoreboard(room, question, null);
+        
+        // fullScoreboard는 이미 활성 참가자만 포함하고 점수순으로 정렬됨
+        List<VersusDtos.ScoreBoardItem> ordered = fullScoreboard.items();
 
-        List<VersusDtos.ScoreBoardItem> ordered = scoreboard.items().stream()
-                .filter(item -> activeIds.contains(item.userId()))
-                .toList();
+        // 디버깅: 스코어보드 순위 확인
+        log.info("토너먼트 라운드 {} 스코어보드: {}", question.getRoundNo(), 
+                ordered.stream()
+                        .map(item -> String.format("%s(score=%d, correct=%d, time=%d)", 
+                                item.userId(), item.score(), item.correctCount(), 
+                                item.totalTimeMs() != null ? item.totalTimeMs() : 0))
+                        .collect(Collectors.joining(", ")));
 
         // 동점 처리 규칙: 모두 0점인지 체크
         boolean allZeroScore = ordered.stream().allMatch(item -> item.score() == 0);
@@ -912,6 +1067,10 @@ public class VersusService {
                 .filter(id -> !survivors.contains(id))
                 .toList();
 
+        // 디버깅: 생존자와 탈락자 확인
+        log.info("토너먼트 라운드 {} 완료: roomId={}, activeParticipants={}, survivorCount={}, survivors={}, eliminated={}", 
+                currentRound, roomId, activeParticipants.size(), survivorCount, survivors, eliminatedIds);
+
         if (!eliminatedIds.isEmpty()) {
             List<MatchParticipant> toUpdate = activeParticipants.stream()
                     .filter(p -> eliminatedIds.contains(p.getUserId()))
@@ -934,10 +1093,10 @@ public class VersusService {
 
         persistBracket(roomId, question.getRoundNo(), survivors, eliminatedIds);
 
-        // 다음 문제가 있으면 시작 이벤트 기록 (모든 참가자 공통)
-        Optional<MatchQuestion> nextQuestion = findNextQuestion(roomId, question);
-        if (nextQuestion.isPresent()) {
-            MatchQuestion next = nextQuestion.get();
+        // 다음 라운드의 첫 문제가 있으면 시작 이벤트 기록
+        Optional<MatchQuestion> nextRoundQuestion = findNextQuestion(roomId, question);
+        if (nextRoundQuestion.isPresent()) {
+            MatchQuestion next = nextRoundQuestion.get();
 
             // 쉬는 시간 시작 이벤트 기록
             Instant intermissionStart = Instant.now();
@@ -961,7 +1120,7 @@ public class VersusService {
                     "startedAt", questionStartTime.toString(),
                     "allParticipants", true // 모든 참가자 공통 시작
             ));
-            log.info("토너먼트 쉬는 시간 시작: roomId={}, duration={}초, 다음 문제 시작 시간={}, questionId={}, roundNo={}",
+            log.info("토너먼트 라운드 완료 후 다음 라운드 시작: roomId={}, duration={}초, 다음 문제 시작 시간={}, questionId={}, roundNo={}",
                     roomId, QUESTION_INTERMISSION_SEC, questionStartTime, next.getQuestionId(), next.getRoundNo());
         }
 
@@ -1336,6 +1495,13 @@ public class VersusService {
                     log.info("Removed timeout participant from WAIT room: roomId={}, userId={}, lastHeartbeatAt={}",
                             participant.getRoomId(), participant.getUserId(), participant.getLastHeartbeatAt());
 
+                    // 참가자가 0명이 되면 빈 방 삭제
+                    long remainingCount = participantRepository.countByRoomId(room.getId());
+                    if (remainingCount == 0) {
+                        deleteEmptyRoom(room);
+                        log.info("Deleted empty WAIT room: roomId={}, mode={}", room.getId(), room.getMode());
+                    }
+
                 } else if (room.getStatus() == MatchStatus.ONGOING && room.getMode() == MatchMode.DUEL) {
                     // DUEL 모드 진행 중: 참가자 제거 후 게임 종료
                     participantRepository.delete(participant);
@@ -1388,6 +1554,113 @@ public class VersusService {
         }
 
         return removedCount;
+    }
+
+    /**
+     * 빈 방 삭제 (참가자 0명인 WAIT 상태 방)
+     * 관련 데이터를 모두 삭제한 후 방을 삭제
+     */
+    @Transactional
+    public void deleteEmptyRoom(MatchRoom room) {
+        Long roomId = room.getId();
+        
+        try {
+            // 1. 답안 삭제
+            List<MatchAnswer> answers = answerRepository.findByRoomId(roomId);
+            if (!answers.isEmpty()) {
+                answerRepository.deleteAll(answers);
+                log.debug("Deleted {} answers for room {}", answers.size(), roomId);
+            }
+
+            // 2. 문제 삭제
+            List<MatchQuestion> questions = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId);
+            if (!questions.isEmpty()) {
+                questionRepository.deleteAll(questions);
+                log.debug("Deleted {} questions for room {}", questions.size(), roomId);
+            }
+
+            // 3. 이벤트 삭제
+            List<MatchEvent> events = eventRepository.findByRoomIdOrderByCreatedAtAsc(roomId);
+            if (!events.isEmpty()) {
+                eventRepository.deleteAll(events);
+                log.debug("Deleted {} events for room {}", events.size(), roomId);
+            }
+
+            // 4. 토너먼트 브라켓 삭제 (TOURNAMENT 모드)
+            if (room.getMode() == MatchMode.TOURNAMENT) {
+                List<TournamentBracket> brackets = bracketRepository.findByRoomId(roomId);
+                if (!brackets.isEmpty()) {
+                    bracketRepository.deleteAll(brackets);
+                    log.debug("Deleted {} tournament brackets for room {}", brackets.size(), roomId);
+                }
+            }
+
+            // 5. 골든벨 관련 데이터 삭제 (GOLDENBELL 모드)
+            if (room.getMode() == MatchMode.GOLDENBELL) {
+                // 골든벨 상태 삭제
+                List<GoldenbellState> states = goldenbellStateRepository.findByRoomId(roomId);
+                if (!states.isEmpty()) {
+                    goldenbellStateRepository.deleteAll(states);
+                    log.debug("Deleted {} goldenbell states for room {}", states.size(), roomId);
+                }
+                
+                // 골든벨 규칙 삭제
+                goldenbellRuleRepository.findById(roomId).ifPresent(rule -> {
+                    goldenbellRuleRepository.delete(rule);
+                    log.debug("Deleted goldenbell rule for room {}", roomId);
+                });
+            }
+
+            // 6. 참가자 삭제 (혹시 남아있을 수 있음)
+            List<MatchParticipant> remainingParticipants = participantRepository.findByRoomId(roomId);
+            if (!remainingParticipants.isEmpty()) {
+                participantRepository.deleteAll(remainingParticipants);
+                log.debug("Deleted {} remaining participants for room {}", remainingParticipants.size(), roomId);
+            }
+
+            // 7. 방 삭제
+            roomRepository.delete(room);
+            log.info("Successfully deleted empty room: roomId={}, mode={}", roomId, room.getMode());
+
+        } catch (Exception e) {
+            log.error("Failed to delete empty room: roomId={}, error={}", roomId, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
+                    "Failed to delete empty room: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 빈 방 정리 (스케줄러용)
+     * 참가자가 0명이고 생성된 지 1분 이상 지난 WAIT 상태 방을 삭제
+     * 
+     * @return 삭제된 방 개수
+     */
+    @Transactional
+    public int cleanUpEmptyRooms() {
+        Instant oneMinuteAgo = Instant.now().minus(1, ChronoUnit.MINUTES);
+        
+        // WAIT 상태의 모든 방 조회
+        List<MatchRoom> waitRooms = roomRepository.findByStatus(MatchStatus.WAIT);
+        
+        int deletedCount = 0;
+        for (MatchRoom room : waitRooms) {
+            try {
+                // 참가자 수 확인
+                long participantCount = participantRepository.countByRoomId(room.getId());
+                
+                // 참가자가 0명이고 생성된 지 1분 이상 지난 방
+                if (participantCount == 0 && room.getCreatedAt().isBefore(oneMinuteAgo)) {
+                    deleteEmptyRoom(room);
+                    deletedCount++;
+                    log.info("Cleaned up empty room: roomId={}, mode={}, createdAt={}", 
+                            room.getId(), room.getMode(), room.getCreatedAt());
+                }
+            } catch (Exception e) {
+                log.error("Failed to clean up room: roomId={}, error={}", room.getId(), e.getMessage(), e);
+            }
+        }
+        
+        return deletedCount;
     }
 
     private MatchQuestion resolveQuestion(Long roomId, Long questionId) {
@@ -1645,8 +1918,8 @@ public class VersusService {
                         return new ScoreboardIntermediate(userId, score.correct, score.total, score.score, score.totalTimeMs, alive, revived);
                     })
                     .sorted((a, b) -> {
-                        // GOLDENBELL 모드인 경우 alive 상태 우선
-                        if (isGoldenbell) {
+                        // GOLDENBELL, TOURNAMENT 모드인 경우 alive 상태 우선
+                        if (isGoldenbell || room.getMode() == MatchMode.TOURNAMENT) {
                             int aliveCompare = Boolean.compare(b.alive(), a.alive());
                             if (aliveCompare != 0) return aliveCompare;
                         }
@@ -3574,12 +3847,12 @@ public class VersusService {
                 };
             }
         } else {
-            // TOURNAMENT 모드 시간 제한 (기본값)
+            // TOURNAMENT 모드 시간 제한
             if ("WRITTEN".equals(examMode)) {
                 return switch (questionType) {
-                    case "OX" -> 10;
-                    case "MCQ" -> 10;
-                    default -> 10;
+                    case "OX" -> DUEL_WRITTEN_OX_LIMIT_SEC;      // 5초
+                    case "MCQ" -> DUEL_WRITTEN_MCQ_LIMIT_SEC;    // 10초
+                    default -> DUEL_WRITTEN_MCQ_LIMIT_SEC;
                 };
             } else {
                 return switch (questionType) {
