@@ -52,11 +52,12 @@ public class VersusMatchService {
         // scopeJson 생성
         String scopeJson = buildScopeJson(examMode, scopeType, topicId, difficulty);
         
-        // 1) DUEL 방 생성 (status = ONGOING)
+        // 1) DUEL 방 생성 (status = ONGOING, isBotMatch = true)
         MatchRoom room = MatchRoom.builder()
                 .mode(MatchMode.DUEL)
                 .status(MatchStatus.ONGOING)
                 .scopeJson(scopeJson)
+                .isBotMatch(true)  // 봇전으로 표시
                 .build();
         matchRoomRepository.save(room);
 
@@ -172,6 +173,7 @@ public class VersusMatchService {
                 .mode(MatchMode.TOURNAMENT)
                 .status(MatchStatus.ONGOING)
                 .scopeJson(scopeJson)
+                .isBotMatch(true)  // 봇전으로 표시
                 .build();
         matchRoomRepository.save(room);
 
@@ -261,6 +263,7 @@ public class VersusMatchService {
                 .mode(MatchMode.GOLDENBELL)
                 .status(MatchStatus.ONGOING)
                 .scopeJson(scopeJson)
+                .isBotMatch(true)  // 봇전으로 표시
                 .build();
         matchRoomRepository.save(room);
 

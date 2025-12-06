@@ -32,6 +32,10 @@ public class MatchRoom {
   @Column(name = "scheduled_at")
   private Instant scheduledAt;  // 예약 시작 시간 (GOLDENBELL 모드용)
 
+  @Column(name = "is_bot_match", nullable = false)
+  @Builder.Default
+  private Boolean isBotMatch = false;  // 봇과의 연습 매치 여부
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 

@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Map;
 
 /**
  * GOLDENBELL 예약 시스템 스케줄러
@@ -91,6 +90,23 @@ public class GoldenbellSchedulerService {
             }
         } catch (Exception e) {
             log.error("Failed to remove timeout participants: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 매 1분마다 실행: 참가자가 없는 빈 방 자동 삭제
+     * 참가자가 0명이고 생성된 지 1분 이상 지난 WAIT 상태 방 삭제
+     */
+    @Scheduled(fixedRate = 60000) // 1분마다
+    @Transactional
+    public void cleanUpEmptyRooms() {
+        try {
+            int deletedCount = versusService.cleanUpEmptyRooms();
+            if (deletedCount > 0) {
+                log.info("Deleted {} empty rooms", deletedCount);
+            }
+        } catch (Exception e) {
+            log.error("Failed to clean up empty rooms: {}", e.getMessage(), e);
         }
     }
 }
