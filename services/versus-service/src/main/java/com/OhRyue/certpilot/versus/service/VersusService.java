@@ -1633,6 +1633,7 @@ public class VersusService {
     /**
      * 빈 방 정리 (스케줄러용)
      * 참가자가 0명이고 생성된 지 1분 이상 지난 WAIT 상태 방을 삭제
+     * 토너먼트 모드에만 적용 (골든벨은 예약 시스템으로 인해 0명 상태가 정상)
      * 
      * @return 삭제된 방 개수
      */
@@ -1646,6 +1647,11 @@ public class VersusService {
         int deletedCount = 0;
         for (MatchRoom room : waitRooms) {
             try {
+                // 토너먼트 모드만 체크 (골든벨은 예약 시스템으로 인해 0명 상태가 정상)
+                if (room.getMode() != MatchMode.TOURNAMENT) {
+                    continue;
+                }
+                
                 // 참가자 수 확인
                 long participantCount = participantRepository.countByRoomId(room.getId());
                 

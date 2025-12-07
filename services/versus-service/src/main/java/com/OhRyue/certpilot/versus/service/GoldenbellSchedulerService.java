@@ -95,6 +95,7 @@ public class GoldenbellSchedulerService {
 
     /**
      * 매 1분마다 실행: 참가자가 없는 빈 방 자동 삭제
+     * 토너먼트 모드에만 적용 (골든벨은 예약 시스템으로 인해 0명 상태가 정상)
      * 참가자가 0명이고 생성된 지 1분 이상 지난 WAIT 상태 방 삭제
      */
     @Scheduled(fixedRate = 60000) // 1분마다
