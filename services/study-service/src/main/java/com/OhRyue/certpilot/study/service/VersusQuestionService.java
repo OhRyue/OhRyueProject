@@ -118,8 +118,8 @@ public class VersusQuestionService {
         if (question.getType() == QuestionType.OX || question.getType() == QuestionType.MCQ) {
             // OX, MCQ: label 비교
             isCorrect = correctAnswer.equalsIgnoreCase(userAnswerText);
-            log.debug("Answer validation (OX/MCQ): questionId={}, correctAnswer={}, userAnswer={}, isCorrect={}",
-                    questionId, correctAnswer, userAnswerText, isCorrect);
+            log.info("Answer validation (OX/MCQ): questionId={}, questionType={}, correctAnswer=[{}], userAnswer=[{}], isCorrect={}, answerKey={}",
+                    questionId, question.getType(), correctAnswer, userAnswerText, isCorrect, question.getAnswerKey());
         } else if (question.getType() == QuestionType.SHORT || question.getType() == QuestionType.LONG) {
             // SHORT, LONG: 텍스트 비교 (대소문자 무시, 공백 정규화)
             String normalizedCorrect = normalizeText(correctAnswer);
@@ -176,16 +176,16 @@ public class VersusQuestionService {
             .toList();
     }
 
+    /**
+     * 정답 키 반환
+     * 모든 문제 유형에서 answerKey를 직접 사용합니다.
+     * QuestionChoice의 correct 레이블은 프론트엔드 표시용이며, 정답 판정에는 사용하지 않습니다.
+     */
     private String getCorrectAnswer(Question question) {
-        if (question.getType() == QuestionType.OX || question.getType() == QuestionType.MCQ) {
-            // MCQ/OX: QuestionChoice에서 정답 label 찾기
-            return choiceRepository.findFirstByQuestionIdAndCorrectTrue(question.getId())
-                .map(QuestionChoice::getLabel)
-                .orElse(Optional.ofNullable(question.getAnswerKey()).orElse(""));
-        } else {
-            // SHORT/LONG: answerKey 직접 사용
-            return Optional.ofNullable(question.getAnswerKey()).orElse("");
-        }
+        String answerKey = Optional.ofNullable(question.getAnswerKey()).orElse("");
+        log.debug("Getting correct answer from answerKey: questionId={}, questionType={}, answerKey=[{}]",
+                question.getId(), question.getType(), answerKey);
+        return answerKey;
     }
 
     private VersusDtos.QuestionDto toQuestionDto(Question question) {
@@ -209,9 +209,11 @@ public class VersusQuestionService {
             List<QuestionChoice> choices = choiceRepository.findByQuestionIdOrderByLabelAsc(question.getId());
             List<Map<String, Object>> choicesList;
             
+            // answerKey를 기준으로 정답 판단 (백엔드 정답 판정 기준)
+            String correctAnswer = getCorrectAnswer(question);
+            
             if (choices.isEmpty() && question.getType() == QuestionType.OX) {
                 // OX 문제의 경우 선택지가 없으면 기본 선택지 생성
-                String correctAnswer = getCorrectAnswer(question);
                 choicesList = new ArrayList<>();
                 
                 Map<String, Object> oChoice = new HashMap<>();
@@ -227,12 +229,14 @@ public class VersusQuestionService {
                 choicesList.add(xChoice);
             } else {
                 // MCQ 문제 또는 DB에 선택지가 있는 OX 문제
+                // answerKey를 기준으로 correct 값 계산 (QuestionChoice의 correct 값 무시)
                 choicesList = choices.stream()
                     .map(choice -> {
                         Map<String, Object> choiceMap = new HashMap<>();
                         choiceMap.put("label", choice.getLabel());
                         choiceMap.put("content", choice.getContent());
-                        choiceMap.put("correct", choice.isCorrect());
+                        // answerKey와 label을 비교하여 correct 값 결정
+                        choiceMap.put("correct", correctAnswer.equalsIgnoreCase(choice.getLabel()));
                         return choiceMap;
                     })
                     .collect(Collectors.toList());
