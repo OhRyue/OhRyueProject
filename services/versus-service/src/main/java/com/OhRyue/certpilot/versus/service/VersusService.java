@@ -43,6 +43,7 @@ public class VersusService {
 
     private static final int TOURNAMENT_ROUNDS = 3;
     private static final int TOURNAMENT_QUESTIONS_PER_ROUND = 3;
+    private static final int TOURNAMENT_WRITTEN_OX_LIMIT_SEC = 8; // 토너먼트 필기 OX 시간 제한
     private static final int GOLDENBELL_REVIVE_CHECK_ROUND = 2; // 라운드 2 종료 후 (OX+MCQ 총 4문제) 체크
     private static final int GOLDENBELL_REVIVE_TARGET = 5;
     private static final int GOLDENBELL_TIME_LIMIT_SEC = 10;
@@ -2222,7 +2223,7 @@ public class VersusService {
                             "토너먼트 라운드 " + round + "는 3문제를 가져야 합니다.");
                 }
                 int expectedLimitSec = switch (round) {
-                    case 1 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : DUEL_WRITTEN_OX_LIMIT_SEC;
+                    case 1 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : TOURNAMENT_WRITTEN_OX_LIMIT_SEC;
                     case 2 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : DUEL_WRITTEN_MCQ_LIMIT_SEC;
                     default -> DUEL_WRITTEN_MCQ_LIMIT_SEC;
                 };
@@ -3850,7 +3851,7 @@ public class VersusService {
             // TOURNAMENT 모드 시간 제한
             if ("WRITTEN".equals(examMode)) {
                 return switch (questionType) {
-                    case "OX" -> DUEL_WRITTEN_OX_LIMIT_SEC;      // 5초
+                    case "OX" -> TOURNAMENT_WRITTEN_OX_LIMIT_SEC;      // 8초
                     case "MCQ" -> DUEL_WRITTEN_MCQ_LIMIT_SEC;    // 10초
                     default -> DUEL_WRITTEN_MCQ_LIMIT_SEC;
                 };
