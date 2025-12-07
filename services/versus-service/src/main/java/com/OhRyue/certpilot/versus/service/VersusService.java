@@ -1007,12 +1007,51 @@ public class VersusService {
         }
 
         // 라운드의 마지막 문제 완료 - 탈락 처리
-        int questionsInRound = questionRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo()).size();
-        long answersInRound = answerRepository.countByRoomIdAndRoundNo(roomId, question.getRoundNo());
-        long expectedAnswers = (long) activeParticipants.size() * questionsInRound;
-        boolean roundCompleted = expectedAnswers > 0 && answersInRound >= expectedAnswers;
+        // 활성 참가자가 해당 라운드의 모든 문제에 답안을 제출했는지 확인
+        List<MatchQuestion> questionsInRound = questionRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo());
+        int questionCount = questionsInRound.size();
+        
+        // 활성 참가자 각각이 라운드의 모든 문제에 답안을 제출했는지 확인
+        Set<String> activeUserIds = activeParticipants.stream()
+                .map(MatchParticipant::getUserId)
+                .collect(Collectors.toSet());
+        
+        // 각 활성 참가자가 제출한 답안 수 확인
+        List<MatchAnswer> answersInRound = answerRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo());
+        Map<String, Long> answerCountByUser = answersInRound.stream()
+                .filter(answer -> activeUserIds.contains(answer.getUserId()))
+                .collect(Collectors.groupingBy(MatchAnswer::getUserId, Collectors.counting()));
+        
+        // 모든 활성 참가자가 라운드의 모든 문제에 답안을 제출했는지 확인
+        boolean roundCompleted = activeUserIds.stream()
+                .allMatch(userId -> answerCountByUser.getOrDefault(userId, 0L) >= questionCount);
+
+        log.info("토너먼트 라운드 완료 체크: roomId={}, round={}, questionsInRound={}, activeParticipants={}, answerCountByUser={}, roundCompleted={}",
+                roomId, question.getRoundNo(), questionCount, activeUserIds, answerCountByUser, roundCompleted);
 
         if (!roundCompleted) {
+            return ModeResolution.none();
+        }
+
+        // 중복 탈락 처리 방지: 이미 라운드 완료 이벤트가 기록되었는지 확인
+        List<MatchEvent> roundCompletedEvents = eventRepository.findByRoomIdAndEventType(roomId, "ROUND_COMPLETED");
+        boolean alreadyProcessed = roundCompletedEvents.stream()
+                .anyMatch(event -> {
+                    try {
+                        if (event.getPayloadJson() == null) return false;
+                        Map<String, Object> payload = objectMapper.readValue(
+                                event.getPayloadJson(),
+                                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}
+                        );
+                        Object roundObj = payload.get("round");
+                        return roundObj != null && question.getRoundNo().equals(Integer.valueOf(roundObj.toString()));
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
+
+        if (alreadyProcessed) {
+            log.info("토너먼트 라운드 {} 이미 처리됨 (중복 방지): roomId={}", question.getRoundNo(), roomId);
             return ModeResolution.none();
         }
 

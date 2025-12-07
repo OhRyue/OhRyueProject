@@ -129,30 +129,55 @@ public class TopicProgressService {
         })
         .collect(Collectors.toList());
 
-    long totalCount = microTopics.size();
+    // 3. review 학습 가능한 topic 필터링 (code에 점이 1개인 루트 토픽)
+    List<CertCurriculumClient.TopicResponse> reviewTopics = allTopics.stream()
+        .filter(topic -> {
+          if (topic.code() == null) return false;
+          long dotCount = topic.code().chars().filter(c -> c == '.').count();
+          return dotCount == 1; // "1.1", "P.1" 같은 형태
+        })
+        .collect(Collectors.toList());
+
+    long totalCount = microTopics.size() + reviewTopics.size();
     if (totalCount == 0) {
       return new MicroLearningStatsResp(0L, 0L, 0.0);
     }
 
-    // 3. micro topic들의 ID 추출
+    // 4. micro topic들의 ID 추출
     List<Long> microTopicIds = microTopics.stream()
         .map(CertCurriculumClient.TopicResponse::id)
         .collect(Collectors.toList());
 
-    // 4. 해당 topic들의 LearningSession 조회
-    List<LearningSession> sessions = learningSessionRepository
-        .findByUserIdAndTopicIdInAndMode(userId, microTopicIds, modeStr);
+    // 5. review topic들의 ID 추출
+    List<Long> reviewTopicIds = reviewTopics.stream()
+        .map(CertCurriculumClient.TopicResponse::id)
+        .collect(Collectors.toList());
 
-    // 5. 진정한 완료(trulyCompleted = true)한 토픽 개수 계산
-    // 한 번이라도 완료한 토픽을 카운트 (중복 카운트 방지)
-    java.util.Set<Long> completedTopicIds = sessions.stream()
-        .filter(session -> Boolean.TRUE.equals(session.getTrulyCompleted()))
+    // 6. micro 학습 세션 조회 (mode=WRITTEN 또는 PRACTICAL)
+    List<LearningSession> microSessions = microTopicIds.isEmpty() 
+        ? List.of()
+        : learningSessionRepository.findByUserIdAndTopicIdInAndMode(userId, microTopicIds, modeStr);
+
+    // 7. review 학습 세션 조회 (mode=REVIEW)
+    List<LearningSession> reviewSessions = reviewTopicIds.isEmpty() 
+        ? List.of()
+        : learningSessionRepository.findByUserIdAndTopicIdInAndMode(userId, reviewTopicIds, "REVIEW");
+
+    // 8. 완료(status=DONE)한 micro 토픽 개수 계산
+    java.util.Set<Long> completedMicroTopicIds = microSessions.stream()
+        .filter(session -> "DONE".equals(session.getStatus()))
         .map(LearningSession::getTopicId)
         .collect(Collectors.toSet());
 
-    long completedCount = completedTopicIds.size();
+    // 9. 완료(status=DONE)한 review 토픽 개수 계산
+    java.util.Set<Long> completedReviewTopicIds = reviewSessions.stream()
+        .filter(session -> "DONE".equals(session.getStatus()))
+        .map(LearningSession::getTopicId)
+        .collect(Collectors.toSet());
 
-    // 6. 비율 계산
+    long completedCount = completedMicroTopicIds.size() + completedReviewTopicIds.size();
+
+    // 10. 비율 계산
     double completionRate = totalCount == 0 
         ? 0.0 
         : Math.round(((double) completedCount / totalCount) * 10000.0) / 100.0; // 소수점 2자리

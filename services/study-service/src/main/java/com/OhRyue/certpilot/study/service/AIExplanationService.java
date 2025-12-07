@@ -124,6 +124,34 @@ public class AIExplanationService {
     return new PracticalResult(correct, FALLBACK_GRADE_MSG, "", "", List.of(), true);
   }
 
+  /* ===================== 실기: 채점만 (배틀용 - 해설 제외) ===================== */
+  @Retry(name = CB, fallbackMethod = "fallbackScorePracticalOnly")
+  @CircuitBreaker(name = CB, fallbackMethod = "fallbackScorePracticalOnly")
+  public boolean scorePracticalOnly(Question question, String userAnswerText) {
+    AiClient.GradeRequest request = new AiClient.GradeRequest(
+        question.getStem(),
+        question.getSolutionText(),
+        userAnswerText,
+        Map.of(
+            "questionId", question.getId(),
+            "topicId", question.getTopicId(),
+            "skipExplanation", true  // 해설 생략 플래그
+        )
+    );
+
+    AiClient.GradeResponse response = aiClient.grade(request);
+    if (response == null) {
+      return heuristicGrade(question, userAnswerText);
+    }
+
+    // correct 값만 반환 (해설은 무시)
+    return Optional.ofNullable(response.correct()).orElse(heuristicGrade(question, userAnswerText));
+  }
+
+  private boolean fallbackScorePracticalOnly(Question question, String userAnswerText, Throwable throwable) {
+    return heuristicGrade(question, userAnswerText);
+  }
+
   /* ===================== 필기 요약 ===================== */
   @Retry(name = CB, fallbackMethod = "fallbackWrittenSummary")
   @CircuitBreaker(name = CB, fallbackMethod = "fallbackWrittenSummary")

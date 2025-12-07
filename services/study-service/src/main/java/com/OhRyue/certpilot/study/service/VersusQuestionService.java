@@ -34,6 +34,7 @@ public class VersusQuestionService {
     private final QuestionChoiceRepository choiceRepository;
     private final TopicTreeService topicTreeService;
     private final ObjectMapper objectMapper;
+    private final AIExplanationService aiExplanationService;
 
     /**
      * Versus 모드용 문제 세트 생성
@@ -121,20 +122,25 @@ public class VersusQuestionService {
             log.info("Answer validation (OX/MCQ): questionId={}, questionType={}, correctAnswer=[{}], userAnswer=[{}], isCorrect={}, answerKey={}",
                     questionId, question.getType(), correctAnswer, userAnswerText, isCorrect, question.getAnswerKey());
         } else if (question.getType() == QuestionType.SHORT || question.getType() == QuestionType.LONG) {
-            // SHORT, LONG: 텍스트 비교 (대소문자 무시, 공백 정규화)
-            String normalizedCorrect = normalizeText(correctAnswer);
-            String normalizedUser = normalizeText(userAnswerText);
-            isCorrect = normalizedCorrect.equals(normalizedUser);
-            
-            log.info("Answer validation (SHORT/LONG): questionId={}, questionType={}, " +
-                    "correctAnswer=[{}], userAnswer=[{}], " +
-                    "normalizedCorrect=[{}], normalizedUser=[{}], isCorrect={}",
-                    questionId, question.getType(),
-                    correctAnswer, userAnswerText,
-                    normalizedCorrect, normalizedUser, isCorrect);
-            
-            // 실기는 AI 채점이 필요할 수 있지만, 일단 간단한 텍스트 비교
-            // 향후 AIExplanationService 활용 가능
+            // SHORT, LONG: AI 채점 사용 (해설 제외, 채점만)
+            try {
+                isCorrect = aiExplanationService.scorePracticalOnly(question, userAnswerText);
+                log.info("Answer validation (SHORT/LONG with AI): questionId={}, questionType={}, userAnswer=[{}], isCorrect={}",
+                        questionId, question.getType(), userAnswerText, isCorrect);
+            } catch (Exception e) {
+                log.warn("AI 채점 실패, 텍스트 비교로 fallback: questionId={}, error={}", questionId, e.getMessage());
+                // AI 채점 실패 시 텍스트 비교로 fallback
+                String normalizedCorrect = normalizeText(correctAnswer);
+                String normalizedUser = normalizeText(userAnswerText);
+                isCorrect = normalizedCorrect.equals(normalizedUser);
+                
+                log.info("Answer validation (SHORT/LONG with text comparison fallback): questionId={}, questionType={}, " +
+                        "correctAnswer=[{}], userAnswer=[{}], " +
+                        "normalizedCorrect=[{}], normalizedUser=[{}], isCorrect={}",
+                        questionId, question.getType(),
+                        correctAnswer, userAnswerText,
+                        normalizedCorrect, normalizedUser, isCorrect);
+            }
         }
 
         return new VersusDtos.AnswerValidationResult(
