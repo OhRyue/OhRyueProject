@@ -83,7 +83,8 @@ class VersusServiceE2ETest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -104,7 +105,8 @@ class VersusServiceE2ETest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -130,7 +132,8 @@ class VersusServiceE2ETest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -151,7 +154,8 @@ class VersusServiceE2ETest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");

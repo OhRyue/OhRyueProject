@@ -64,7 +64,8 @@ class BusinessRulesTest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -98,7 +99,8 @@ class BusinessRulesTest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -123,7 +125,8 @@ class BusinessRulesTest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -161,7 +164,8 @@ class BusinessRulesTest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -301,7 +305,8 @@ class BusinessRulesTest {
             null,
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");

@@ -48,7 +48,12 @@ public class VersusDtos {
       @Schema(description = "예약 시작 시간 (GOLDENBELL 모드용, ISO 8601 형식)\n" +
           "예: \"2024-12-25T14:00:00Z\"\n" +
           "설정 시 10분 전부터 입장 가능, 시간이 되면 자동 시작")
-      Instant scheduledAt
+      Instant scheduledAt,
+      
+      @Schema(description = "방 생성자 자동 참가 스킵 여부 (기본값: false)\n" +
+          "true로 설정하면 방 생성자가 자동으로 참가하지 않습니다.\n" +
+          "0명인 방을 만들고 싶을 때 사용합니다.", example = "false")
+      Boolean skipCreatorJoin
   ) {}
 
   // JoinRoomReq 는 더 이상 필요 없으므로 제거했습니다.
@@ -93,7 +98,9 @@ public class VersusDtos {
       int participantCount,
       Instant createdAt,
       @Schema(description = "예약 시작 시간 (GOLDENBELL 모드용, ISO 8601 형식). 예약이 없으면 null", example = "2024-12-25T14:00:00Z")
-      Instant scheduledAt
+      Instant scheduledAt,
+      @Schema(description = "시험 모드 (WRITTEN: 필기, PRACTICAL: 실기). scopeJson에서 추출. 없으면 null", example = "WRITTEN")
+      String examMode
   ) {}
 
   public record QuestionInfo(

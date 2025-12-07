@@ -52,6 +52,7 @@ public class VersusService {
     private static final int SPEED_BONUS_MAX = 200;
     private static final int MAX_TIMELINE_FETCH = 200;
     private static final int QUESTION_INTERMISSION_SEC = 5; // 문제 간 쉬는 시간 (초)
+    private static final int HEARTBEAT_TIMEOUT_SECONDS = 30; // 하트비트 타임아웃 시간 (초). 30초 동안 하트비트가 없으면 타임아웃
 
     private final MatchRoomRepository roomRepository;
     private final MatchParticipantRepository participantRepository;
@@ -93,8 +94,9 @@ public class VersusService {
         }
         recordEvent(room.getId(), "ROOM_CREATED", eventPayload);
 
-        // 방 생성자는 자동으로 참가
-        if (creatorUserId != null && !creatorUserId.isBlank()) {
+        // 방 생성자는 자동으로 참가 (skipCreatorJoin이 true가 아닐 때만)
+        boolean skipCreatorJoin = Optional.ofNullable(req.skipCreatorJoin()).orElse(false);
+        if (!skipCreatorJoin && creatorUserId != null && !creatorUserId.isBlank()) {
             try {
                 int currentCount = (int) participantRepository.countByRoomId(room.getId());
                 validateParticipantLimit(room, currentCount);
@@ -231,7 +233,8 @@ public class VersusService {
                         room.getStatus(),
                         participantCount.getOrDefault(room.getId(), 0L).intValue(),
                         room.getCreatedAt(),
-                        room.getScheduledAt()))
+                        room.getScheduledAt(),
+                        extractExamMode(room)))
                 .toList();
     }
 
@@ -263,7 +266,8 @@ public class VersusService {
                         room.getStatus(),
                         participantCount.getOrDefault(room.getId(), 0L).intValue(),
                         room.getCreatedAt(),
-                        room.getScheduledAt()))
+                        room.getScheduledAt(),
+                        extractExamMode(room)))
                 .toList();
     }
 
@@ -294,7 +298,8 @@ public class VersusService {
                         room.getStatus(),
                         participantCount.getOrDefault(room.getId(), 0L).intValue(),
                         room.getCreatedAt(),
-                        room.getScheduledAt()))
+                        room.getScheduledAt(),
+                        extractExamMode(room)))
                 .toList();
     }
 
@@ -1475,7 +1480,7 @@ public class VersusService {
      */
     @Transactional
     public int removeTimeoutParticipants() {
-        Instant thresholdTime = Instant.now().minus(1, ChronoUnit.MINUTES);
+        Instant thresholdTime = Instant.now().minus(HEARTBEAT_TIMEOUT_SECONDS, ChronoUnit.SECONDS);
         List<MatchParticipant> timeoutParticipants = participantRepository.findTimeoutParticipants(thresholdTime);
 
         int removedCount = 0;
@@ -1505,11 +1510,20 @@ public class VersusService {
 
                 } else if (room.getStatus() == MatchStatus.ONGOING && room.getMode() == MatchMode.DUEL) {
                     // DUEL 모드 진행 중: 참가자 제거 후 게임 종료
+                    String disconnectedUserId = participant.getUserId();
                     participantRepository.delete(participant);
                     removedCount++;
 
+                    // 상대방이 나갔음을 명확히 알리는 이벤트 추가
+                    recordEvent(room.getId(), "PLAYER_DISCONNECTED", Map.of(
+                            "userId", disconnectedUserId,
+                            "disconnectedAt", Instant.now().toString(),
+                            "reason", "HEARTBEAT_TIMEOUT",
+                            "mode", "DUEL"
+                    ));
+
                     recordEvent(room.getId(), "PLAYER_TIMEOUT", Map.of(
-                            "userId", participant.getUserId(),
+                            "userId", disconnectedUserId,
                             "timeoutAt", Instant.now().toString(),
                             "reason", "HEARTBEAT_TIMEOUT"
                     ));
@@ -1534,7 +1548,9 @@ public class VersusService {
                         recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
                                 "mode", "DUEL",
                                 "winner", winner != null ? winner : "NONE",
-                                "reason", "OPPONENT_TIMEOUT"
+                                "reason", "OPPONENT_TIMEOUT",
+                                "disconnectedUserId", disconnectedUserId,
+                                "finishedAt", Instant.now().toString()
                         ));
 
                         // 스코어보드 계산하여 보상 지급
@@ -1542,11 +1558,11 @@ public class VersusService {
                         notifyProgressService(room, scoreboard);
 
                         log.info("DUEL game ended due to timeout: roomId={}, timeoutUserId={}, winner={}",
-                                room.getId(), participant.getUserId(), winner);
+                                room.getId(), disconnectedUserId, winner);
                     }
 
                     log.info("Removed timeout participant from ONGOING DUEL: roomId={}, userId={}, remainingParticipants={}",
-                            participant.getRoomId(), participant.getUserId(), remainingParticipants);
+                            participant.getRoomId(), disconnectedUserId, remainingParticipants);
                 }
             } catch (Exception e) {
                 log.error("Failed to remove timeout participant: roomId={}, userId={}",
@@ -1745,7 +1761,8 @@ public class VersusService {
                 room.getStatus(),
                 participantSummaries.size(),
                 room.getCreatedAt(),
-                room.getScheduledAt()
+                room.getScheduledAt(),
+                extractExamMode(room)
         );
 
         return new VersusDtos.RoomDetailResp(

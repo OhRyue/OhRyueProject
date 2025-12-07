@@ -68,7 +68,8 @@ class VersusServiceIntegrationTest {
             null, // questions는 자동 생성
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -128,7 +129,8 @@ class VersusServiceIntegrationTest {
             ),
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -155,7 +157,8 @@ class VersusServiceIntegrationTest {
             ),
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -178,7 +181,8 @@ class VersusServiceIntegrationTest {
             ),
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -205,7 +209,8 @@ class VersusServiceIntegrationTest {
             null, // questions는 제공하지 않음
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         // When: 방 생성
@@ -229,7 +234,8 @@ class VersusServiceIntegrationTest {
             ),
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -267,7 +273,8 @@ class VersusServiceIntegrationTest {
             ),
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
@@ -312,7 +319,8 @@ class VersusServiceIntegrationTest {
             ),
             null,
             null,
-            null
+            null,
+            false  // skipCreatorJoin
         );
 
         VersusDtos.RoomDetailResp room = versusService.createRoom(createReq, "test-user");
