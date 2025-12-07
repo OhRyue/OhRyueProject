@@ -142,14 +142,18 @@ public class LeaderboardService {
     Map<String, UserStreak> streaks = userStreakRepository.findAllById(userIds).stream()
         .collect(Collectors.toMap(UserStreak::getUserId, s -> s));
 
-    // 닉네임 조회
+    // 닉네임 및 skinId 조회
     Map<String, String> nicknameMap = new HashMap<>();
+    Map<String, Long> skinIdMap = new HashMap<>();
     try {
       List<ProfileSummaryResponse> summaries = userIds.isEmpty()
           ? List.of()
           : accountClient.summaries(userIds);
       nicknameMap = summaries.stream()
           .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s.nickname() != null ? s.nickname() : "", (a, b) -> a));
+      skinIdMap = summaries.stream()
+          .filter(s -> s.skinId() != null)
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, ProfileSummaryResponse::skinId, (a, b) -> a));
     } catch (Exception e) {
       log.warn("닉네임 조회 실패: {}", e.getMessage());
     }
@@ -160,9 +164,11 @@ public class LeaderboardService {
       UserXpWallet wallet = wallets.get(score.getUserId());
       UserStreak streak = streaks.get(score.getUserId());
       String nickname = nicknameMap.getOrDefault(score.getUserId(), "");
+      Long skinId = skinIdMap.get(score.getUserId());
       entries.add(new RankDtos.LeaderboardEntry(
           score.getUserId(),
           nickname,
+          skinId,
           score.getScore(),
           rank++,
           wallet == null ? null : wallet.getXpTotal(),
@@ -183,12 +189,15 @@ public class LeaderboardService {
           UserXpWallet wallet = xpWalletRepository.findById(userId).orElse(null);
           UserStreak streak = userStreakRepository.findById(userId).orElse(null);
           
-          // 닉네임 조회
+          // 닉네임 및 skinId 조회
           String nickname = "";
+          Long skinId = null;
           try {
             List<ProfileSummaryResponse> summaries = accountClient.summaries(List.of(userId));
             if (!summaries.isEmpty()) {
-              nickname = summaries.get(0).nickname() != null ? summaries.get(0).nickname() : "";
+              ProfileSummaryResponse summary = summaries.get(0);
+              nickname = summary.nickname() != null ? summary.nickname() : "";
+              skinId = summary.skinId();
             }
           } catch (Exception e) {
             log.warn("닉네임 조회 실패 (userId: {}): {}", userId, e.getMessage());
@@ -197,6 +206,7 @@ public class LeaderboardService {
           return new RankDtos.LeaderboardEntry(
               score.getUserId(),
               nickname,
+              skinId,
               score.getScore(),
               (int) higher + 1,
               wallet == null ? null : wallet.getXpTotal(),
@@ -227,12 +237,15 @@ public class LeaderboardService {
                 .filter(r -> r.getXpGained() > report.getXpGained())
                 .count();
             
-            // 닉네임 조회
+            // 닉네임 및 skinId 조회
             String nickname = "";
+            Long skinId = null;
             try {
               List<ProfileSummaryResponse> summaries = accountClient.summaries(List.of(report.getUserId()));
               if (!summaries.isEmpty()) {
-                nickname = summaries.get(0).nickname() != null ? summaries.get(0).nickname() : "";
+                ProfileSummaryResponse summary = summaries.get(0);
+                nickname = summary.nickname() != null ? summary.nickname() : "";
+                skinId = summary.skinId();
               }
             } catch (Exception e) {
               log.warn("닉네임 조회 실패 (userId: {}): {}", report.getUserId(), e.getMessage());
@@ -241,6 +254,7 @@ public class LeaderboardService {
             return new RankDtos.LeaderboardEntry(
                 report.getUserId(),
                 nickname,
+                skinId,
                 report.getXpGained(),
                 (int) higher + 1,
                 (long) report.getXpGained(),
@@ -276,12 +290,18 @@ public class LeaderboardService {
                 .filter(s -> s.getBestDays() > streak.getBestDays())
                 .count();
             
-            // 닉네임 조회
+            // XP 조회
+            UserXpWallet wallet = xpWalletRepository.findById(userId).orElse(null);
+            
+            // 닉네임 및 skinId 조회
             String nickname = "";
+            Long skinId = null;
             try {
               List<ProfileSummaryResponse> summaries = accountClient.summaries(List.of(streak.getUserId()));
               if (!summaries.isEmpty()) {
-                nickname = summaries.get(0).nickname() != null ? summaries.get(0).nickname() : "";
+                ProfileSummaryResponse summary = summaries.get(0);
+                nickname = summary.nickname() != null ? summary.nickname() : "";
+                skinId = summary.skinId();
               }
             } catch (Exception e) {
               log.warn("닉네임 조회 실패 (userId: {}): {}", streak.getUserId(), e.getMessage());
@@ -290,9 +310,10 @@ public class LeaderboardService {
             return new RankDtos.LeaderboardEntry(
                 streak.getUserId(),
                 nickname,
+                skinId,
                 streak.getBestDays(),
                 (int) higher + 1,
-                null,
+                wallet == null ? null : wallet.getXpTotal(),
                 streak.getBestDays(),
                 Instant.now()
             );
@@ -371,14 +392,18 @@ public class LeaderboardService {
     List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
     List<String> userIds = weekly.stream().map(ReportWeekly::getUserId).toList();
     
-    // 닉네임 조회
+    // 닉네임 및 skinId 조회
     Map<String, String> nicknameMap = new HashMap<>();
+    Map<String, Long> skinIdMap = new HashMap<>();
     try {
       List<ProfileSummaryResponse> summaries = userIds.isEmpty()
           ? List.of()
           : accountClient.summaries(userIds);
       nicknameMap = summaries.stream()
           .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s.nickname() != null ? s.nickname() : "", (a, b) -> a));
+      skinIdMap = summaries.stream()
+          .filter(s -> s.skinId() != null)
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, ProfileSummaryResponse::skinId, (a, b) -> a));
     } catch (Exception e) {
       log.warn("닉네임 조회 실패: {}", e.getMessage());
     }
@@ -387,9 +412,11 @@ public class LeaderboardService {
     int rank = 1;
     for (ReportWeekly report : weekly) {
       String nickname = nicknameMap.getOrDefault(report.getUserId(), "");
+      Long skinId = skinIdMap.get(report.getUserId());
       entries.add(new RankDtos.LeaderboardEntry(
           report.getUserId(),
           nickname,
+          skinId,
           report.getXpGained(),
           rank++,
           (long) report.getXpGained(),
@@ -405,14 +432,18 @@ public class LeaderboardService {
     List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
     List<String> userIds = weekly.stream().map(ReportWeekly::getUserId).toList();
     
-    // 닉네임 조회
+    // 닉네임 및 skinId 조회
     Map<String, String> nicknameMap = new HashMap<>();
+    Map<String, Long> skinIdMap = new HashMap<>();
     try {
       List<ProfileSummaryResponse> summaries = userIds.isEmpty()
           ? List.of()
           : accountClient.summaries(userIds);
       nicknameMap = summaries.stream()
           .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s.nickname() != null ? s.nickname() : "", (a, b) -> a));
+      skinIdMap = summaries.stream()
+          .filter(s -> s.skinId() != null)
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, ProfileSummaryResponse::skinId, (a, b) -> a));
     } catch (Exception e) {
       log.warn("닉네임 조회 실패: {}", e.getMessage());
     }
@@ -421,9 +452,11 @@ public class LeaderboardService {
     int rank = page * size + 1;
     for (ReportWeekly report : weekly) {
       String nickname = nicknameMap.getOrDefault(report.getUserId(), "");
+      Long skinId = skinIdMap.get(report.getUserId());
       entries.add(new RankDtos.LeaderboardEntry(
           report.getUserId(),
           nickname,
+          skinId,
           report.getXpGained(),
           rank++,
           (long) report.getXpGained(),
@@ -438,14 +471,22 @@ public class LeaderboardService {
     List<UserStreak> streaks = userStreakRepository.findTop10ByOrderByBestDaysDesc();
     List<String> userIds = streaks.stream().limit(limit).map(UserStreak::getUserId).toList();
     
-    // 닉네임 조회
+    // XP 조회
+    Map<String, UserXpWallet> wallets = xpWalletRepository.findAllById(userIds).stream()
+        .collect(Collectors.toMap(UserXpWallet::getUserId, w -> w));
+    
+    // 닉네임 및 skinId 조회
     Map<String, String> nicknameMap = new HashMap<>();
+    Map<String, Long> skinIdMap = new HashMap<>();
     try {
       List<ProfileSummaryResponse> summaries = userIds.isEmpty()
           ? List.of()
           : accountClient.summaries(userIds);
       nicknameMap = summaries.stream()
           .collect(Collectors.toMap(ProfileSummaryResponse::userId, s -> s.nickname() != null ? s.nickname() : "", (a, b) -> a));
+      skinIdMap = summaries.stream()
+          .filter(s -> s.skinId() != null)
+          .collect(Collectors.toMap(ProfileSummaryResponse::userId, ProfileSummaryResponse::skinId, (a, b) -> a));
     } catch (Exception e) {
       log.warn("닉네임 조회 실패: {}", e.getMessage());
     }
@@ -453,13 +494,16 @@ public class LeaderboardService {
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     int rank = 1;
     for (UserStreak streak : streaks.stream().limit(limit).toList()) {
+      UserXpWallet wallet = wallets.get(streak.getUserId());
       String nickname = nicknameMap.getOrDefault(streak.getUserId(), "");
+      Long skinId = skinIdMap.get(streak.getUserId());
       entries.add(new RankDtos.LeaderboardEntry(
           streak.getUserId(),
           nickname,
+          skinId,
           streak.getBestDays(),
           rank++,
-          null,
+          wallet == null ? null : wallet.getXpTotal(),
           streak.getBestDays(),
           Instant.now()
       ));
