@@ -80,134 +80,303 @@ ON DUPLICATE KEY UPDATE
   exam_mode_scope=VALUES(exam_mode_scope);
 
 -- =========================================
--- 4) EXAM_SCHEDULE (회차별 일정)
---  - 예시 날짜(실제와 다를 수 있음). start<=end 보장.
--- =========================================
--- 2025-1회 (정보처리기사)
-INSERT INTO exam_schedule
-  (round_id, phase, start_date, end_date)
-VALUES
-  (101, 'REGISTER',  '2025-01-06', '2025-01-10'),
-  (101, 'WRITTEN',   '2025-02-08', '2025-02-08'),
-  (101, 'PRACTICAL', '2025-03-22', '2025-03-22'),
-  (101, 'RESULT',    '2025-04-05', '2025-04-05')
-ON DUPLICATE KEY UPDATE
-  start_date=VALUES(start_date),
-  end_date=VALUES(end_date);
-
--- 2025-2회 (정보처리기사)
-INSERT INTO exam_schedule
-  (round_id, phase, start_date, end_date)
-VALUES
-  (102, 'REGISTER',  '2025-04-07', '2025-04-11'),
-  (102, 'WRITTEN',   '2025-05-10', '2025-05-10'),
-  (102, 'PRACTICAL', '2025-06-21', '2025-06-21'),
-  (102, 'RESULT',    '2025-07-05', '2025-07-05')
-ON DUPLICATE KEY UPDATE
-  start_date=VALUES(start_date),
-  end_date=VALUES(end_date);
-
--- 2025-3회 (정보처리기사)
-INSERT INTO exam_schedule
-  (round_id, phase, start_date, end_date)
-VALUES
-  (103, 'REGISTER',  '2025-08-11', '2025-08-15'),
-  (103, 'WRITTEN',   '2025-09-13', '2025-09-13'),
-  (103, 'PRACTICAL', '2025-10-25', '2025-10-25'),
-  (103, 'RESULT',    '2025-11-08', '2025-11-08')
-ON DUPLICATE KEY UPDATE
-  start_date=VALUES(start_date),
-  end_date=VALUES(end_date);
-
--- 2026-1회 (정보처리기사) 예시
-INSERT INTO exam_schedule
-  (round_id, phase, start_date, end_date)
-VALUES
-  (104, 'REGISTER',  '2026-01-05', '2026-01-09'),
-  (104, 'WRITTEN',   '2026-02-07', '2026-02-07'),
-  (104, 'PRACTICAL', '2026-03-21', '2026-03-21'),
-  (104, 'RESULT',    '2026-04-04', '2026-04-04')
-ON DUPLICATE KEY UPDATE
-  start_date=VALUES(start_date),
-  end_date=VALUES(end_date);
-
--- 2025-1회 (컴활2급 예시)
-INSERT INTO exam_schedule
-  (round_id, phase, start_date, end_date)
-VALUES
-  (201, 'REGISTER',  '2025-01-06', '2025-01-08'),
-  (201, 'WRITTEN',   '2025-02-01', '2025-02-01'),
-  (201, 'PRACTICAL', '2025-02-15', '2025-02-15'),
-  (201, 'RESULT',    '2025-02-22', '2025-02-22')
-ON DUPLICATE KEY UPDATE
-  start_date=VALUES(start_date),
-  end_date=VALUES(end_date);
-
--- =========================================
--- 5) TOPIC (커리큘럼 트리 with 이모지)
---  - 정보처리기사 WRITTEN + PRACTICAL 일부 트리
---  - order_no로 정렬 보장
---  - 코드 유니크: (cert_id, code)
+-- 4) TOPIC (커리큘럼 트리 with 이모지)
+-- - 정보처리기사 WRITTEN 트리 (1~5 + 하위 2~5.x.x까지 반영)
+-- - order_no 로 정렬 보장
+-- - 코드 유니크: (cert_id, code)
 -- =========================================
 
+-- -------------------------------------------------
 -- Major (1~5, 필기)
-INSERT INTO topic (id, cert_id, parent_id, code,  title,               emoji, exam_mode, order_no) VALUES
-  (10001, 1, NULL, '1',   '소프트웨어 설계',         '🧩', 'WRITTEN', 1),
-  (10002, 1, NULL, '2',   '소프트웨어 개발',         '💻', 'WRITTEN', 2),
-  (10003, 1, NULL, '3',   '데이터베이스 구축',       '🗄️', 'WRITTEN', 3),
-  (10004, 1, NULL, '4',   '프로그래밍 언어 활용',    '🧠', 'WRITTEN', 4),
-  (10005, 1, NULL, '5',   '정보시스템 운영',         '🛠️', 'WRITTEN', 5)
+-- -------------------------------------------------
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (10001, 1, NULL, '1', '소프트웨어 설계',       '🧩', 'WRITTEN', 1),
+  (10002, 1, NULL, '2', '소프트웨어 개발',       '💻', 'WRITTEN', 2),
+  (10003, 1, NULL, '3', '데이터베이스 구축',     '🗄️', 'WRITTEN', 3),
+  (10004, 1, NULL, '4', '프로그래밍 언어 활용',  '🧠', 'WRITTEN', 4),
+  (10005, 1, NULL, '5', '정보시스템 구축 관리', '🛠️', 'WRITTEN', 5)
 ON DUPLICATE KEY UPDATE
-  title=VALUES(title),
-  emoji=VALUES(emoji),
-  order_no=VALUES(order_no);
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
 
--- Sub under 1 (설계 - 필기)
-INSERT INTO topic (id, cert_id, parent_id, code,   title,            emoji, exam_mode, order_no) VALUES
-  (11001, 1, 10001, '1.1', '요구사항 확인',       '📝', 'WRITTEN', 1),
-  (11002, 1, 10001, '1.2', '화면설계',           '🖥️', 'WRITTEN', 2),
-  (11003, 1, 10001, '1.3', '애플리케이션 설계',   '🏗️', 'WRITTEN', 3),
-  (11004, 1, 10001, '1.4', '인터페이스 설계',     '🔗', 'WRITTEN', 4)
+-- -------------------------------------------------
+-- Sub under 1 (소프트웨어 설계 - 필기)
+-- -------------------------------------------------
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (11001, 1, 10001, '1.1', '요구사항 확인',        '📝', 'WRITTEN', 1),
+  (11002, 1, 10001, '1.2', '화면설계',            '🖥️', 'WRITTEN', 2),
+  (11003, 1, 10001, '1.3', '애플리케이션 설계',    '🏗️', 'WRITTEN', 3),
+  (11004, 1, 10001, '1.4', '인터페이스 설계',      '🔗', 'WRITTEN', 4)
 ON DUPLICATE KEY UPDATE
-  title=VALUES(title),
-  emoji=VALUES(emoji),
-  order_no=VALUES(order_no);
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
 
--- Micro under 1.1 (요구사항 확인 - 필기)
-INSERT INTO topic (id, cert_id, parent_id, code,     title,              emoji, exam_mode, order_no) VALUES
-  (11101, 1, 11001, '1.1.1', '현행 시스템 분석',        '🔍', 'WRITTEN', 1),
-  (11102, 1, 11001, '1.1.2', '요구사항 확인 기법',      '✅', 'WRITTEN', 2),
-  (11103, 1, 11001, '1.1.3', '분석 모델/요구 관리',     '🧪', 'WRITTEN', 3)
+-- Micro under 1.1
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (11101, 1, 11001, '1.1.1', '현행 시스템 분석',   '🔍', 'WRITTEN', 1),
+  (11102, 1, 11001, '1.1.2', '요구사항 확인',     '✅', 'WRITTEN', 2),
+  (11103, 1, 11001, '1.1.3', '분석 모델 확인',    '🧪', 'WRITTEN', 3)
 ON DUPLICATE KEY UPDATE
-  title=VALUES(title),
-  emoji=VALUES(emoji),
-  order_no=VALUES(order_no);
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
 
--- Micro under 1.2 (화면설계 - 필기)
-INSERT INTO topic (id, cert_id, parent_id, code,     title,                 emoji, exam_mode, order_no) VALUES
-  (11201, 1, 11002, '1.2.1', 'UI 요구사항 확인 및 화면흐름',  '🎯', 'WRITTEN', 1)
+-- Micro under 1.2
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (11201, 1, 11002, '1.2.1', 'UI 요구사항 확인', '🎯', 'WRITTEN', 1)
 ON DUPLICATE KEY UPDATE
-  title=VALUES(title),
-  emoji=VALUES(emoji),
-  order_no=VALUES(order_no);
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
 
--- Micro under 1.3 (애플리케이션 설계 - 필기)
-INSERT INTO topic (id, cert_id, parent_id, code,     title,               emoji, exam_mode, order_no) VALUES
-  (11301, 1, 11003, '1.3.1', '공통 모듈 설계',       '🧩', 'WRITTEN', 1),
-  (11302, 1, 11003, '1.3.2', '객체 지향 설계 원칙',   '🧱', 'WRITTEN', 2)
+-- Micro under 1.3
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (11301, 1, 11003, '1.3.1', '공통 모듈 설계',     '🧩', 'WRITTEN', 1),
+  (11302, 1, 11003, '1.3.2', '객체 지향 설계',     '🧱', 'WRITTEN', 2)
 ON DUPLICATE KEY UPDATE
-  title=VALUES(title),
-  emoji=VALUES(emoji),
-  order_no=VALUES(order_no);
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
 
--- Micro under 1.4 (인터페이스 설계 - 필기)
-INSERT INTO topic (id, cert_id, parent_id, code,     title,                 emoji, exam_mode, order_no) VALUES
+-- Micro under 1.4
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
   (11401, 1, 11004, '1.4.1', '인터페이스 요구사항 확인', '🗂️', 'WRITTEN', 1),
   (11402, 1, 11004, '1.4.2', '인터페이스 대상 식별',     '🧭', 'WRITTEN', 2),
   (11403, 1, 11004, '1.4.3', '인터페이스 상세 설계',     '🛠️', 'WRITTEN', 3)
 ON DUPLICATE KEY UPDATE
-  title=VALUES(title),
-  emoji=VALUES(emoji),
-  order_no=VALUES(order_no);
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- -------------------------------------------------
+-- Sub under 2 (소프트웨어 개발 - 필기)
+-- -------------------------------------------------
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (12001, 1, 10002, '2.1', '데이터 입출력 구현',         '📥', 'WRITTEN', 1),
+  (12002, 1, 10002, '2.2', '통합 구현',                 '🔗', 'WRITTEN', 2),
+  (12003, 1, 10002, '2.3', '제품 소프트웨어 패키징',     '📦', 'WRITTEN', 3),
+  (12004, 1, 10002, '2.4', '애플리케이션 테스트 관리',   '🧪', 'WRITTEN', 4),
+  (12005, 1, 10002, '2.5', '인터페이스 구현',           '🔌', 'WRITTEN', 5)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 2.1
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (12101, 1, 12001, '2.1.1', '논리 데이터 저장소 확인', '📂', 'WRITTEN', 1)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 2.2
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (12201, 1, 12002, '2.2.1', '모듈 구현',        '⚙️', 'WRITTEN', 1),
+  (12202, 1, 12002, '2.2.2', '통합 구현 관리',   '🧩', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 2.3
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (12301, 1, 12003, '2.3.1', '제품 소프트웨어 패키징',   '📦', 'WRITTEN', 1),
+  (12302, 1, 12003, '2.3.2', '제품 소프트웨어 메뉴얼 작성', '📖', 'WRITTEN', 2),
+  (12303, 1, 12003, '2.3.3', '제품 소프트웨어 버전 관리',   '🔢', 'WRITTEN', 3)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 2.4
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (12401, 1, 12004, '2.4.1', '애플리케이션 테스트 케이스 설계', '🧪', 'WRITTEN', 1),
+  (12402, 1, 12004, '2.4.2', '애플리케이션 통합 테스트',        '📱', 'WRITTEN', 2),
+  (12403, 1, 12004, '2.4.3', '애플리케이션 성능 개선',          '📊', 'WRITTEN', 3)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 2.5
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (12501, 1, 12005, '2.5.1', '인터페이스 설계 확인', '🧾', 'WRITTEN', 1),
+  (12502, 1, 12005, '2.5.2', '인터페이스 기능 구현', '🔌', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- -------------------------------------------------
+-- Sub under 3 (데이터베이스 구축 - 필기)
+-- -------------------------------------------------
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (13001, 1, 10003, '3.1', 'SQL 응용',              '🧮', 'WRITTEN', 1),
+  (13002, 1, 10003, '3.2', 'SQL 활용',              '📊', 'WRITTEN', 2),
+  (13003, 1, 10003, '3.3', '논리 데이터베이스 설계', '📐', 'WRITTEN', 3),
+  (13004, 1, 10003, '3.4', '물리 데이터베이스 설계', '🏗️', 'WRITTEN', 4)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 3.1
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (13101, 1, 13001, '3.1.1', '절차형 SQL 작성', '🧾', 'WRITTEN', 1),
+  (13102, 1, 13001, '3.1.2', '응용 SQL 작성',   '🧾', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 3.2
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (13201, 1, 13002, '3.2.1', '기본 SQL 작성', '📄', 'WRITTEN', 1),
+  (13202, 1, 13002, '3.2.2', '고급 SQL 작성', '📄', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 3.3
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (13301, 1, 13003, '3.3.1', '관계 데이터베이스 모델', '🧱', 'WRITTEN', 1),
+  (13302, 1, 13003, '3.3.2', '데이터 모델링 및 설계',   '📐', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 3.4
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (13401, 1, 13004, '3.4.1', '물리 요소 조사 분석',        '🔍', 'WRITTEN', 1),
+  (13402, 1, 13004, '3.4.2', 'DB 물리 속성 설계',          '📦', 'WRITTEN', 2),
+  (13403, 1, 13004, '3.4.3', '데이터베이스 무결성과 키',   '🔑', 'WRITTEN', 3),
+  (13404, 1, 13004, '3.4.4', 'DB 반 정규화',               '🧬', 'WRITTEN', 4)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- -------------------------------------------------
+-- Sub under 4 (프로그래밍 언어 활용 - 필기)
+-- -------------------------------------------------
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (14001, 1, 10004, '4.1', '서버 프로그램 구현',      '🖥️', 'WRITTEN', 1),
+  (14002, 1, 10004, '4.2', '프로그래밍 언어 활용',    '💻', 'WRITTEN', 2),
+  (14003, 1, 10004, '4.3', '응용 SW 기초 기술 활용',  '⚙️', 'WRITTEN', 3)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 4.1
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (14101, 1, 14001, '4.1.1', '개발환경 구축',      '🧱', 'WRITTEN', 1),
+  (14102, 1, 14001, '4.1.2', '서버 프로그램 구현', '🖥️', 'WRITTEN', 2),
+  (14103, 1, 14001, '4.1.3', '배치 프로그램 구현', '📦', 'WRITTEN', 3)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 4.2
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (14201, 1, 14002, '4.2.1', '기본문법 활용',   '📘', 'WRITTEN', 1),
+  (14202, 1, 14002, '4.2.2', '언어특성 활용',   '📗', 'WRITTEN', 2),
+  (14203, 1, 14002, '4.2.3', '라이브러리 활용', '📚', 'WRITTEN', 3)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 4.3
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (14301, 1, 14003, '4.3.1', '운영체제 기초 활용', '🧠', 'WRITTEN', 1),
+  (14302, 1, 14003, '4.3.2', '네트워크 기초 활용', '🌐', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- -------------------------------------------------
+-- Sub under 5 (정보시스템 구축 관리 - 필기)
+-- -------------------------------------------------
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (15001, 1, 10005, '5.1', '소프트웨어 개발방법론 활용',      '📚', 'WRITTEN', 1),
+  (15002, 1, 10005, '5.2', 'IT 프로젝트 정보 시스템 구축관리', '🏗️', 'WRITTEN', 2),
+  (15003, 1, 10005, '5.3', '소프트웨어 개발 보안 구축',        '🔒', 'WRITTEN', 3),
+  (15004, 1, 10005, '5.4', '시스템 보안 구축',                  '🛡️', 'WRITTEN', 4)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 5.1
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (15101, 1, 15001, '5.1.1', '소프트웨어 개발방법론 선정',        '📌', 'WRITTEN', 1),
+  (15102, 1, 15001, '5.1.2', '소프트웨어 개발방법론 테일러링',    '✂️', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 5.2
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (15201, 1, 15002, '5.2.1', '네트워크 구축관리', '🌐', 'WRITTEN', 1),
+  (15202, 1, 15002, '5.2.2', 'SW 구축관리',       '💾', 'WRITTEN', 2),
+  (15203, 1, 15002, '5.2.3', 'HW 구축관리',       '🖥️', 'WRITTEN', 3),
+  (15204, 1, 15002, '5.2.4', 'DB 구축관리',       '🗄️', 'WRITTEN', 4)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 5.3
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (15301, 1, 15003, '5.3.1', '소프트웨어 개발 보안 설계', '🛡️', 'WRITTEN', 1),
+  (15302, 1, 15003, '5.3.2', '소프트웨어 개발 보안 구현', '🔐', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
+
+-- Micro under 5.4
+INSERT INTO topic (id, cert_id, parent_id, code, title, emoji, exam_mode, order_no)
+VALUES
+  (15401, 1, 15004, '5.4.1', '시스템 보안 설계', '🛡️', 'WRITTEN', 1),
+  (15402, 1, 15004, '5.4.2', '시스템 보안 구현', '🔐', 'WRITTEN', 2)
+ON DUPLICATE KEY UPDATE
+  title    = VALUES(title),
+  emoji    = VALUES(emoji),
+  order_no = VALUES(order_no);
 
 SET FOREIGN_KEY_CHECKS = 1;

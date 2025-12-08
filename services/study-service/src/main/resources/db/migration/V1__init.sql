@@ -27,11 +27,11 @@ CREATE TABLE IF NOT EXISTS question (
 
 CREATE TABLE IF NOT EXISTS question_choice (
   id            BIGINT AUTO_INCREMENT PRIMARY KEY,
-  question_id   BIGINT       NOT NULL,
-  label         CHAR(1)      NOT NULL,
+  question_id   BIGINT        NOT NULL,
+  label         CHAR(1)       NOT NULL,
   content       VARCHAR(1000) NOT NULL,
-  is_correct    TINYINT(1)   NOT NULL DEFAULT 0,
-  created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_correct    TINYINT(1)    NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_choice (question_id, label),
   INDEX ix_choice_question (question_id),
   CONSTRAINT fk_choice_question FOREIGN KEY (question_id) REFERENCES question(id)
@@ -51,12 +51,49 @@ CREATE TABLE IF NOT EXISTS question_tag (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =========================================================
+-- LearningSession / LearningStep (계층적 학습 세션)
+-- =========================================================
+
+-- 전체 학습 플로우
+CREATE TABLE IF NOT EXISTS learning_session (
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id          VARCHAR(100) NOT NULL,
+  topic_id         BIGINT NOT NULL,
+  mode             VARCHAR(50) NOT NULL COMMENT 'WRITTEN | PRACTICAL | REVIEW | ASSIST_PRACTICAL_DIFFICULTY | ASSIST_WRITTEN_DIFFICULTY',
+  status           VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS' COMMENT 'IN_PROGRESS | DONE',
+  truly_completed  TINYINT(1) NULL DEFAULT NULL COMMENT '진정한 완료 여부 (MCQ 완료) - NULL: 미완료, 1: 완료',
+  started_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX ix_ls_user_topic (user_id, topic_id),
+  INDEX ix_ls_user_updated (user_id, updated_at),
+  INDEX ix_ls_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 단계별 학습 스텝
+CREATE TABLE IF NOT EXISTS learning_step (
+  id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+  learning_session_id BIGINT NOT NULL,
+  step_code           VARCHAR(30) NOT NULL COMMENT 'MINI | REVIEW_WRONG | MCQ | PRACTICAL | REVIEW_WRONG2 | SUMMARY',
+  status              VARCHAR(20) NOT NULL DEFAULT 'READY' COMMENT 'READY | IN_PROGRESS | COMPLETE',
+  score_pct           INT NULL COMMENT '정답률(%)',
+  metadata_json       JSON NULL COMMENT '단계별 메타데이터',
+  created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX ix_ls_learning_session (learning_session_id),
+  INDEX ix_ls_step_code (learning_session_id, step_code),
+  UNIQUE KEY uq_ls_session_step (learning_session_id, step_code),
+  CONSTRAINT fk_ls_learning_session FOREIGN KEY (learning_session_id) REFERENCES learning_session(id)
+    ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =========================================================
 -- 학습 세션 및 진행
 -- =========================================================
 CREATE TABLE IF NOT EXISTS study_session (
   id               BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id          VARCHAR(100) NOT NULL,
-  mode             ENUM('MICRO','REVIEW','ASSIST_CATEGORY','ASSIST_DIFFICULTY','ASSIST_WEAK') NOT NULL,
+  -- mode: 기존 ENUM → VARCHAR(50)로 확장
+  mode             VARCHAR(50) NOT NULL COMMENT 'MICRO | REVIEW | ASSIST_CATEGORY | ASSIST_DIFFICULTY | ASSIST_WEAK | ASSIST_PRACTICAL_DIFFICULTY | ASSIST_WRITTEN_DIFFICULTY',
   exam_mode        ENUM('WRITTEN','PRACTICAL') NOT NULL,
   topic_scope_json JSON NULL,
   question_count   INT NOT NULL,
@@ -65,9 +102,21 @@ CREATE TABLE IF NOT EXISTS study_session (
   score_pct        DECIMAL(5,2) NULL,
   summary_json     JSON NULL,
   status           ENUM('OPEN','SUBMITTED','CLOSED') NOT NULL DEFAULT 'OPEN',
+
+  -- V13: 완료/합격/XP 플래그
+  completed        TINYINT(1) NOT NULL DEFAULT 0 COMMENT '모든 문제를 풀었는지',
+  passed           TINYINT(1) NOT NULL DEFAULT 0 COMMENT '모든 문제를 맞췄는지',
+  xp_granted       TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'XP가 이미 반영되었는지',
+
+  -- V14: 어떤 학습 단계(learning_step)에 속하는 세션인지
+  learning_step_id BIGINT NULL COMMENT '어떤 학습 단계의 문제 풀이 세션인지',
+
   INDEX ix_ss_user_status (user_id, status),
   INDEX ix_ss_user_started (user_id, started_at),
-  INDEX ix_ss_mode (mode, exam_mode)
+  INDEX ix_ss_mode (mode, exam_mode),
+  INDEX ix_ss_learning_step (learning_step_id),
+  CONSTRAINT fk_ss_learning_step FOREIGN KEY (learning_step_id) REFERENCES learning_step(id)
+    ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS study_session_item (
