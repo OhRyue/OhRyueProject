@@ -1515,7 +1515,7 @@ public class VersusService {
      * 타임아웃된 참가자 자동 제거
      * - WAIT 상태: 참가자 제거
      * - ONGOING DUEL: 참가자 제거 후 게임 종료 처리
-     * 하트비트가 1분 이상 없는 참가자를 제거
+     * 하트비트가 30초 이상 없는 참가자를 제거
      */
     @Transactional
     public int removeTimeoutParticipants() {
@@ -1525,6 +1525,11 @@ public class VersusService {
         int removedCount = 0;
         for (MatchParticipant participant : timeoutParticipants) {
             try {
+                // 봇은 하트비트를 보내지 않으므로 타임아웃 체크에서 제외
+                if (participant.getUserId().startsWith("BOT_")) {
+                    continue;
+                }
+                
                 MatchRoom room = findRoomOrThrow(participant.getRoomId());
 
                 if (room.getStatus() == MatchStatus.WAIT) {

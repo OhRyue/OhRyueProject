@@ -50,13 +50,15 @@ public interface MatchParticipantRepository extends JpaRepository<MatchParticipa
    * 하트비트 타임아웃된 참가자 조회
    * - WAIT 상태의 모든 방
    * - ONGOING 상태의 DUEL 방
+   * - 봇(BOT_로 시작하는 userId)은 제외
    * lastHeartbeatAt이 thresholdTime 이전인 참가자들을 조회
    */
   @Query("SELECT p FROM MatchParticipant p " +
          "JOIN MatchRoom r ON p.roomId = r.id " +
          "WHERE (r.status = 'WAIT' OR (r.status = 'ONGOING' AND r.mode = 'DUEL')) " +
          "AND p.lastHeartbeatAt IS NOT NULL " +
-         "AND p.lastHeartbeatAt < :thresholdTime")
+         "AND p.lastHeartbeatAt < :thresholdTime " +
+         "AND NOT p.userId LIKE 'BOT_%'")
   List<MatchParticipant> findTimeoutParticipants(@Param("thresholdTime") java.time.Instant thresholdTime);
 }
  

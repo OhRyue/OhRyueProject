@@ -78,7 +78,7 @@ public class GoldenbellSchedulerService {
 
     /**
      * 매 30초마다 실행: 하트비트 타임아웃된 참가자 자동 제거
-     * 대기 중인 방에서 1분 이상 하트비트가 없는 참가자를 제거
+     * 대기 중인 방 또는 진행 중인 DUEL 방에서 30초 이상 하트비트가 없는 참가자를 제거
      */
     @Scheduled(fixedRate = 30000) // 30초마다
     @Transactional
