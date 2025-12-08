@@ -48,7 +48,12 @@ public class VersusDtos {
       @Schema(description = "예약 시작 시간 (GOLDENBELL 모드용, ISO 8601 형식)\n" +
           "예: \"2024-12-25T14:00:00Z\"\n" +
           "설정 시 10분 전부터 입장 가능, 시간이 되면 자동 시작")
-      Instant scheduledAt
+      Instant scheduledAt,
+      
+      @Schema(description = "방 생성자 자동 참가 스킵 여부 (기본값: false)\n" +
+          "true로 설정하면 방 생성자가 자동으로 참가하지 않습니다.\n" +
+          "0명인 방을 만들고 싶을 때 사용합니다.", example = "false")
+      Boolean skipCreatorJoin
   ) {}
 
   // JoinRoomReq 는 더 이상 필요 없으므로 제거했습니다.
@@ -93,7 +98,9 @@ public class VersusDtos {
       int participantCount,
       Instant createdAt,
       @Schema(description = "예약 시작 시간 (GOLDENBELL 모드용, ISO 8601 형식). 예약이 없으면 null", example = "2024-12-25T14:00:00Z")
-      Instant scheduledAt
+      Instant scheduledAt,
+      @Schema(description = "시험 모드 (WRITTEN: 필기, PRACTICAL: 실기). scopeJson에서 추출. 없으면 null", example = "WRITTEN")
+      String examMode
   ) {}
 
   public record QuestionInfo(
@@ -178,7 +185,9 @@ public class VersusDtos {
       @Schema(description = "현재 진행 중인 문제 정보. 문제가 진행 중이 아니면 null")
       CurrentQuestionInfo currentQuestion,
       @Schema(description = "쉬는 시간 정보. 쉬는 시간 중일 때만 null이 아님")
-      IntermissionInfo intermission
+      IntermissionInfo intermission,
+      @Schema(description = "매치 종료 시 progress-service에서 계산된 XP 지급 결과")
+      List<XpResult> xpResults
   ) {}
 
   public record TimelineEvent(
@@ -222,5 +231,19 @@ public class VersusDtos {
   public record QuestionAnswersResp(
       Long questionId,
       List<AnswerInfo> answers
+  ) {}
+
+  @Schema(description = "XP 지급 결과")
+  public record XpResult(
+      @Schema(description = "사용자 ID", example = "user1")
+      String userId,
+      @Schema(description = "이번 경기에서 지급된 XP", example = "30")
+      Integer xpDelta,
+      @Schema(description = "지급 사유", example = "DUEL_WIN")
+      String reason,
+      @Schema(description = "지급 후 누적 XP", example = "1500")
+      Long totalXp,
+      @Schema(description = "레벨업 여부", example = "false")
+      Boolean leveledUp
   ) {}
 }

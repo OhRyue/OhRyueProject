@@ -129,30 +129,102 @@ public class TopicProgressService {
         })
         .collect(Collectors.toList());
 
-    long totalCount = microTopics.size();
+    // 3. review 학습 가능한 topic 필터링 (code에 점이 1개인 루트 토픽)
+    List<CertCurriculumClient.TopicResponse> reviewTopics = allTopics.stream()
+        .filter(topic -> {
+          if (topic.code() == null) return false;
+          long dotCount = topic.code().chars().filter(c -> c == '.').count();
+          return dotCount == 1; // "1.1", "P.1" 같은 형태
+        })
+        .collect(Collectors.toList());
+
+    long totalCount = microTopics.size() + reviewTopics.size();
     if (totalCount == 0) {
       return new MicroLearningStatsResp(0L, 0L, 0.0);
     }
 
-    // 3. micro topic들의 ID 추출
+    // 4. micro topic들의 ID 추출
     List<Long> microTopicIds = microTopics.stream()
         .map(CertCurriculumClient.TopicResponse::id)
         .collect(Collectors.toList());
 
-    // 4. 해당 topic들의 LearningSession 조회
-    List<LearningSession> sessions = learningSessionRepository
-        .findByUserIdAndTopicIdInAndMode(userId, microTopicIds, modeStr);
+    // 5. review topic들의 ID 추출
+    List<Long> reviewTopicIds = reviewTopics.stream()
+        .map(CertCurriculumClient.TopicResponse::id)
+        .collect(Collectors.toList());
 
-    // 5. 진정한 완료(trulyCompleted = true)한 토픽 개수 계산
-    // 한 번이라도 완료한 토픽을 카운트 (중복 카운트 방지)
-    java.util.Set<Long> completedTopicIds = sessions.stream()
-        .filter(session -> Boolean.TRUE.equals(session.getTrulyCompleted()))
+    // 6. micro 완료 카운트: getBatchTopicMicroStatus와 동일한 로직 사용
+    // StudySession을 조회하여 passed 필드 기반으로 완료 상태 판단
+    List<StudySession> allMicroSessions = studySessionRepository
+        .findByUserIdAndModeAndExamMode(userId, "MICRO", examMode);
+
+    // topicId별로 세션 그룹화 (topic_scope_json에서 topicId 추출)
+    Map<Long, List<StudySession>> sessionsByTopic = allMicroSessions.stream()
+        .filter(session -> {
+          try {
+            if (session.getTopicScopeJson() == null || session.getTopicScopeJson().isBlank()) {
+              return false;
+            }
+            Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
+            Object topicIdObj = scope.get("topicId");
+            return topicIdObj != null && microTopicIds.contains(((Number) topicIdObj).longValue());
+          } catch (Exception e) {
+            return false;
+          }
+        })
+        .collect(Collectors.groupingBy(session -> {
+          try {
+            Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
+            Object topicIdObj = scope.get("topicId");
+            return topicIdObj != null ? ((Number) topicIdObj).longValue() : 0L;
+          } catch (Exception e) {
+            return 0L;
+          }
+        }));
+
+    // 각 micro 토픽에 대한 완료 상태 확인 (getBatchTopicMicroStatus와 동일한 로직)
+    long completedMicroCount = microTopicIds.stream()
+        .filter(topicId -> {
+          List<StudySession> topicSessions = sessionsByTopic.getOrDefault(topicId, List.of());
+          
+          if (topicSessions.isEmpty()) {
+            return false;
+          }
+          
+          // MINI 세션(question_count=4)과 MCQ 세션(question_count=5) 찾기 (가장 최신 세션)
+          StudySession miniSession = topicSessions.stream()
+              .filter(s -> s.getQuestionCount() != null && s.getQuestionCount() == 4)
+              .max((s1, s2) -> s1.getStartedAt().compareTo(s2.getStartedAt()))
+              .orElse(null);
+          StudySession mcqSession = topicSessions.stream()
+              .filter(s -> s.getQuestionCount() != null && s.getQuestionCount() == 5)
+              .max((s1, s2) -> s1.getStartedAt().compareTo(s2.getStartedAt()))
+              .orElse(null);
+          
+          // 완료 상태 결정 (passed 필드 기반)
+          boolean miniPassed = miniSession != null && Boolean.TRUE.equals(miniSession.getPassed());
+          boolean mcqPassed = mcqSession != null && Boolean.TRUE.equals(mcqSession.getPassed());
+          
+          // TRULY_COMPLETED 상태인 경우만 완료로 카운트 (miniPassed && mcqPassed)
+          return miniPassed && mcqPassed;
+        })
+        .count();
+
+    // 7. review 완료 카운트: getBatchTopicReviewStatus와 동일한 로직 사용
+    // LearningSession의 status="DONE"이고 trulyCompleted=true인 것만 카운트 (TRULY_COMPLETED만 포함)
+    List<LearningSession> reviewSessions = reviewTopicIds.isEmpty() 
+        ? List.of()
+        : learningSessionRepository.findByUserIdAndTopicIdInAndMode(userId, reviewTopicIds, "REVIEW");
+
+    long completedReviewCount = reviewSessions.stream()
+        .filter(session -> "DONE".equals(session.getStatus()) && Boolean.TRUE.equals(session.getTrulyCompleted()))
         .map(LearningSession::getTopicId)
-        .collect(Collectors.toSet());
+        .distinct()
+        .count();
 
-    long completedCount = completedTopicIds.size();
+    long completedCount = completedMicroCount + completedReviewCount;
 
-    // 6. 비율 계산
+    // 8. 비율 계산
     double completionRate = totalCount == 0 
         ? 0.0 
         : Math.round(((double) completedCount / totalCount) * 10000.0) / 100.0; // 소수점 2자리

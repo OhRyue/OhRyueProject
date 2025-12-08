@@ -21,6 +21,7 @@ import com.OhRyue.certpilot.progress.feign.dto.ProfileSummaryResponse;
 import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
 import com.OhRyue.certpilot.progress.repository.UserPointWalletRepository;
 import com.OhRyue.certpilot.progress.repository.UserXpWalletRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,7 @@ public class HomeDashboardService {
   private final ReportDailyRepository reportDailyRepository;
   private final UserXpWalletRepository userXpWalletRepository;
   private final UserPointWalletRepository userPointWalletRepository;
+  private final ObjectMapper objectMapper;
 
   public HomeOverview overview(String userId) {
     try {
@@ -110,7 +112,7 @@ public class HomeDashboardService {
     }
   }
 
-  public HomeProgressCard progressCard(String userId) {
+  public HomeProgressCard progressCard(String userId, String mode) {
     try {
       AccountMeResponse me = accountClient.me();
       
@@ -122,8 +124,73 @@ public class HomeDashboardService {
       if (me == null || me.goal() == null || me.goal().certId() == null) {
         return new HomeProgressCard(0, 0, 0, 0.0, null);
       }
+      
+      // mode 파라미터 검증 및 정규화
+      String normalizedMode = mode != null ? mode.trim().toUpperCase() : "WRITTEN";
+      if (!normalizedMode.equals("WRITTEN") && !normalizedMode.equals("PRACTICAL")) {
+        // 잘못된 mode 값인 경우 기본값 반환
+        return new HomeProgressCard(0, 0, 0, 0.0, null);
+      }
+      
       // StudyReportClient 쪽은 JWT 기반으로 현재 사용자 기준 집계한다고 가정
-      return studyReportClient.progressCard(me.goal().certId());
+      // study-service가 실제 응답 구조를 확인해야 함
+      // 가능성 1: 단일 모드 응답 {"totalTopics":13,...} -> Feign이 자동 매핑
+      // 가능성 2: 복합 응답 {"written":{...},"practical":{...}} -> 수동 파싱 필요
+      try {
+        String rawResponse = studyReportClient.progressCardRaw(me.goal().certId(), normalizedMode);
+        
+        if (rawResponse == null || rawResponse.isBlank()) {
+          return new HomeProgressCard(0, 0, 0, 0.0, null);
+        }
+        
+        // JSON 파싱 시도
+        Map<String, Object> responseMap = objectMapper.readValue(rawResponse, Map.class);
+        
+        // 복합 응답인지 확인: {"written":{...},"practical":{...}} 형태
+        String modeKey = normalizedMode.toLowerCase(); // "WRITTEN" -> "written"
+        if (responseMap.containsKey("written") || responseMap.containsKey("practical")) {
+          // 복합 응답: 요청한 모드만 추출
+          if (!responseMap.containsKey(modeKey)) {
+            return new HomeProgressCard(0, 0, 0, 0.0, null);
+          }
+          
+          @SuppressWarnings("unchecked")
+          Map<String, Object> modeData = (Map<String, Object>) responseMap.get(modeKey);
+          
+          // modeData에서 HomeProgressCard로 변환
+          int totalTopics = modeData.get("totalTopics") != null ? 
+              ((Number) modeData.get("totalTopics")).intValue() : 0;
+          int completedTopics = modeData.get("completedTopics") != null ? 
+              ((Number) modeData.get("completedTopics")).intValue() : 0;
+          int pendingTopics = modeData.get("pendingTopics") != null ? 
+              ((Number) modeData.get("pendingTopics")).intValue() : 0;
+          double completionRate = modeData.get("completionRate") != null ? 
+              ((Number) modeData.get("completionRate")).doubleValue() : 0.0;
+          String lastStudiedAt = modeData.get("lastStudiedAt") != null ? 
+              modeData.get("lastStudiedAt").toString() : null;
+          
+          return new HomeProgressCard(totalTopics, completedTopics, pendingTopics, completionRate, lastStudiedAt);
+        } else {
+          // 단일 응답: {"totalTopics":13,...} 형태 - 직접 파싱
+          int totalTopics = responseMap.get("totalTopics") != null ? 
+              ((Number) responseMap.get("totalTopics")).intValue() : 0;
+          int completedTopics = responseMap.get("completedTopics") != null ? 
+              ((Number) responseMap.get("completedTopics")).intValue() : 0;
+          int pendingTopics = responseMap.get("pendingTopics") != null ? 
+              ((Number) responseMap.get("pendingTopics")).intValue() : 0;
+          double completionRate = responseMap.get("completionRate") != null ? 
+              ((Number) responseMap.get("completionRate")).doubleValue() : 0.0;
+          String lastStudiedAt = responseMap.get("lastStudiedAt") != null ? 
+              responseMap.get("lastStudiedAt").toString() : null;
+          
+          return new HomeProgressCard(totalTopics, completedTopics, pendingTopics, completionRate, lastStudiedAt);
+        }
+      } catch (Exception feignException) {
+        // 예외 발생 시 로깅하고 기본값 반환
+        System.err.println("[HomeDashboardService.progressCard] 파싱 실패: " + feignException.getMessage());
+        feignException.printStackTrace();
+        return new HomeProgressCard(0, 0, 0, 0.0, null);
+      }
     } catch (com.OhRyue.certpilot.progress.exception.OnboardingRequiredException e) {
       // 온보딩 미완료 예외는 그대로 전파
       throw e;

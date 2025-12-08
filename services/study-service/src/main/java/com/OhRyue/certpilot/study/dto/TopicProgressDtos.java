@@ -20,10 +20,10 @@ public class TopicProgressDtos {
       @Schema(description = "토픽별 상태 목록") List<TopicMicroStatus> statuses
   ) {}
 
-  @Schema(description = "Micro 학습 통계 응답")
+  @Schema(description = "Micro + Review 학습 통계 응답")
   public record MicroLearningStatsResp(
-      @Schema(description = "전체 micro 학습 개수") Long totalCount,
-      @Schema(description = "진정한 완료한 micro 학습 개수") Long completedCount,
+      @Schema(description = "전체 학습 개수 (micro + review)") Long totalCount,
+      @Schema(description = "진정한 완료(TRULY_COMPLETED)한 학습 개수 (micro: MINI+MCQ 모두 통과, review: trulyCompleted=true)") Long completedCount,
       @Schema(description = "완료 비율(%)") Double completionRate
   ) {}
 

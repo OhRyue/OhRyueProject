@@ -17,14 +17,8 @@ public class StudyReportFallback implements StudyReportClient {
   }
 
   @Override
-  public HomeProgressCard progressCard(Long certId) {
-    // 실패 시 진행률 0, 토픽 정보 0으로 초기화
-    return new HomeProgressCard(
-        0,      // totalTopics
-        0,      // completedTopics
-        0,      // pendingTopics
-        0.0,    // completionRate
-        null    // lastStudiedAt
-    );
+  public String progressCardRaw(Long certId, String mode) {
+    // 실패 시 빈 JSON 반환
+    return "{}";
   }
 }

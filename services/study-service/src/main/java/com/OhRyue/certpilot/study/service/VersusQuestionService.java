@@ -34,6 +34,7 @@ public class VersusQuestionService {
     private final QuestionChoiceRepository choiceRepository;
     private final TopicTreeService topicTreeService;
     private final ObjectMapper objectMapper;
+    private final AIExplanationService aiExplanationService;
 
     /**
      * Versus 모드용 문제 세트 생성
@@ -118,23 +119,28 @@ public class VersusQuestionService {
         if (question.getType() == QuestionType.OX || question.getType() == QuestionType.MCQ) {
             // OX, MCQ: label 비교
             isCorrect = correctAnswer.equalsIgnoreCase(userAnswerText);
-            log.debug("Answer validation (OX/MCQ): questionId={}, correctAnswer={}, userAnswer={}, isCorrect={}",
-                    questionId, correctAnswer, userAnswerText, isCorrect);
+            log.info("Answer validation (OX/MCQ): questionId={}, questionType={}, correctAnswer=[{}], userAnswer=[{}], isCorrect={}, answerKey={}",
+                    questionId, question.getType(), correctAnswer, userAnswerText, isCorrect, question.getAnswerKey());
         } else if (question.getType() == QuestionType.SHORT || question.getType() == QuestionType.LONG) {
-            // SHORT, LONG: 텍스트 비교 (대소문자 무시, 공백 정규화)
-            String normalizedCorrect = normalizeText(correctAnswer);
-            String normalizedUser = normalizeText(userAnswerText);
-            isCorrect = normalizedCorrect.equals(normalizedUser);
-            
-            log.info("Answer validation (SHORT/LONG): questionId={}, questionType={}, " +
-                    "correctAnswer=[{}], userAnswer=[{}], " +
-                    "normalizedCorrect=[{}], normalizedUser=[{}], isCorrect={}",
-                    questionId, question.getType(),
-                    correctAnswer, userAnswerText,
-                    normalizedCorrect, normalizedUser, isCorrect);
-            
-            // 실기는 AI 채점이 필요할 수 있지만, 일단 간단한 텍스트 비교
-            // 향후 AIExplanationService 활용 가능
+            // SHORT, LONG: AI 채점 사용 (해설 제외, 채점만)
+            try {
+                isCorrect = aiExplanationService.scorePracticalOnly(question, userAnswerText);
+                log.info("Answer validation (SHORT/LONG with AI): questionId={}, questionType={}, userAnswer=[{}], isCorrect={}",
+                        questionId, question.getType(), userAnswerText, isCorrect);
+            } catch (Exception e) {
+                log.warn("AI 채점 실패, 텍스트 비교로 fallback: questionId={}, error={}", questionId, e.getMessage());
+                // AI 채점 실패 시 텍스트 비교로 fallback
+                String normalizedCorrect = normalizeText(correctAnswer);
+                String normalizedUser = normalizeText(userAnswerText);
+                isCorrect = normalizedCorrect.equals(normalizedUser);
+                
+                log.info("Answer validation (SHORT/LONG with text comparison fallback): questionId={}, questionType={}, " +
+                        "correctAnswer=[{}], userAnswer=[{}], " +
+                        "normalizedCorrect=[{}], normalizedUser=[{}], isCorrect={}",
+                        questionId, question.getType(),
+                        correctAnswer, userAnswerText,
+                        normalizedCorrect, normalizedUser, isCorrect);
+            }
         }
 
         return new VersusDtos.AnswerValidationResult(
@@ -176,16 +182,16 @@ public class VersusQuestionService {
             .toList();
     }
 
+    /**
+     * 정답 키 반환
+     * 모든 문제 유형에서 answerKey를 직접 사용합니다.
+     * QuestionChoice의 correct 레이블은 프론트엔드 표시용이며, 정답 판정에는 사용하지 않습니다.
+     */
     private String getCorrectAnswer(Question question) {
-        if (question.getType() == QuestionType.OX || question.getType() == QuestionType.MCQ) {
-            // MCQ/OX: QuestionChoice에서 정답 label 찾기
-            return choiceRepository.findFirstByQuestionIdAndCorrectTrue(question.getId())
-                .map(QuestionChoice::getLabel)
-                .orElse(Optional.ofNullable(question.getAnswerKey()).orElse(""));
-        } else {
-            // SHORT/LONG: answerKey 직접 사용
-            return Optional.ofNullable(question.getAnswerKey()).orElse("");
-        }
+        String answerKey = Optional.ofNullable(question.getAnswerKey()).orElse("");
+        log.debug("Getting correct answer from answerKey: questionId={}, questionType={}, answerKey=[{}]",
+                question.getId(), question.getType(), answerKey);
+        return answerKey;
     }
 
     private VersusDtos.QuestionDto toQuestionDto(Question question) {
@@ -209,9 +215,11 @@ public class VersusQuestionService {
             List<QuestionChoice> choices = choiceRepository.findByQuestionIdOrderByLabelAsc(question.getId());
             List<Map<String, Object>> choicesList;
             
+            // answerKey를 기준으로 정답 판단 (백엔드 정답 판정 기준)
+            String correctAnswer = getCorrectAnswer(question);
+            
             if (choices.isEmpty() && question.getType() == QuestionType.OX) {
                 // OX 문제의 경우 선택지가 없으면 기본 선택지 생성
-                String correctAnswer = getCorrectAnswer(question);
                 choicesList = new ArrayList<>();
                 
                 Map<String, Object> oChoice = new HashMap<>();
@@ -227,12 +235,14 @@ public class VersusQuestionService {
                 choicesList.add(xChoice);
             } else {
                 // MCQ 문제 또는 DB에 선택지가 있는 OX 문제
+                // answerKey를 기준으로 correct 값 계산 (QuestionChoice의 correct 값 무시)
                 choicesList = choices.stream()
                     .map(choice -> {
                         Map<String, Object> choiceMap = new HashMap<>();
                         choiceMap.put("label", choice.getLabel());
                         choiceMap.put("content", choice.getContent());
-                        choiceMap.put("correct", choice.isCorrect());
+                        // answerKey와 label을 비교하여 correct 값 결정
+                        choiceMap.put("correct", correctAnswer.equalsIgnoreCase(choice.getLabel()));
                         return choiceMap;
                     })
                     .collect(Collectors.toList());

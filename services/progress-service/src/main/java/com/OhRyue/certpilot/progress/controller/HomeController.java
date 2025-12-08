@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import static com.OhRyue.common.auth.AuthUserUtil.getCurrentUserId;
@@ -33,9 +34,9 @@ public class HomeController {
 
   @Operation(summary = "학습 진행률 카드 데이터")
   @GetMapping("/progress-card")
-  public ResponseEntity<HomeProgressCard> progressCard() {
+  public ResponseEntity<HomeProgressCard> progressCard(@RequestParam String mode) {
     String userId = getCurrentUserId();
-    return ResponseEntity.ok(homeDashboardService.progressCard(userId));
+    return ResponseEntity.ok(homeDashboardService.progressCard(userId, mode));
   }
 
   @Operation(summary = "실시간 랭킹 카드 데이터")

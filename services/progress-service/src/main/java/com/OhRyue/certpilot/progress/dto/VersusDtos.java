@@ -42,7 +42,10 @@ public class VersusDtos {
         Long durationMs,
         
         @Schema(description = "시험 모드 (WRITTEN, PRACTICAL)")
-        String examMode
+        String examMode,
+
+        @Schema(description = "봇 매칭 여부", example = "false")
+        Boolean botMatch
     ) {}
 
     @Schema(description = "참가자 결과")
@@ -104,6 +107,39 @@ public class VersusDtos {
         
         @Schema(description = "페이즈 (MAIN, FINAL, REVIVAL)")
         String phase
+    ) {}
+
+    @Schema(description = "XP 지급 결과")
+    public record XpResult(
+        @Schema(description = "사용자 ID", example = "user1", required = true)
+        String userId,
+        
+        @Schema(description = "이번 경기에서 추가로 지급된 XP 양", example = "30", required = true)
+        Integer xpDelta,
+        
+        @Schema(description = "XP 지급 사유", 
+            example = "DUEL_WIN", 
+            allowableValues = {"DUEL_WIN", "DUEL_PARTICIPATE", "TOURNAMENT_WIN", "TOURNAMENT_PARTICIPATE", "GOLDENBELL_WIN", "GOLDENBELL_PARTICIPATE"},
+            required = true)
+        String reason,
+        
+        @Schema(description = "지급 후 총 XP", example = "1500")
+        Long totalXp,
+        
+        @Schema(description = "레벨업 여부", example = "false")
+        Boolean leveledUp
+    ) {}
+
+    @Schema(description = "Versus 매치 결과 응답")
+    public record VersusResultResponse(
+        @Schema(description = "대전 모드 (DUEL, TOURNAMENT, GOLDENBELL)", example = "DUEL", required = true)
+        String mode,
+        
+        @Schema(description = "방 ID", example = "123", required = true)
+        Long roomId,
+        
+        @Schema(description = "참가자별 XP 지급 결과", required = true)
+        List<XpResult> xpResults
     ) {}
 }
 

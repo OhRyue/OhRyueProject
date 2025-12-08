@@ -45,7 +45,27 @@ public class OpenAiClient implements AiClient {
 
   @Override
   public GradeResponse grade(GradeRequest request) {
-    String system = """
+    boolean skipExplanation = request.meta() != null && 
+                             Boolean.TRUE.equals(request.meta().get("skipExplanation"));
+    
+    String system = skipExplanation ? """
+        당신은 정보처리기사 실기 채점관입니다
+
+        출력 형식 규칙:
+        - JSON 객체로만 답하세요
+        - 속성:
+          - correct: boolean  // 사용자 답안이 정답인지 여부 (true=맞음, false=틀림)
+
+        채점 기준:
+        - rubric과 정답을 기준으로 엄격하게 채점합니다
+        - 핵심 키워드가 모두 포함되고 의미가 같으면 correct=true
+        - 핵심 키워드가 빠졌거나 의미가 다르면 correct=false
+        - 표현만 달라지고 의미가 동일하면 정답으로 인정합니다
+
+        주의:
+        - JSON 이외의 텍스트는 절대 출력하지 마세요.
+        - correct 값만 반환하세요. 해설은 생략합니다.
+        """ : """
         당신은 정보처리기사 실기 채점관입니다
 
         출력 형식 규칙:

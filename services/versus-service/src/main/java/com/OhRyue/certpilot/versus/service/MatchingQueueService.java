@@ -291,7 +291,8 @@ public class MatchingQueueService {
                 null,  // tournamentBracketJson
                 null,  // tournamentBracketRound
                 null,  // goldenbellRuleJson
-                null   // scheduledAt
+                null,  // scheduledAt
+                false  // skipCreatorJoin (기본값: false)
             );
             
             // 방 생성 (첫 번째 플레이어가 생성자)
@@ -399,7 +400,8 @@ public class MatchingQueueService {
                 null,  // tournamentBracketJson
                 null,  // tournamentBracketRound
                 null,  // goldenbellRuleJson
-                null   // scheduledAt
+                null,  // scheduledAt
+                false  // skipCreatorJoin (기본값: false)
             );
             
             // 방 생성 (첫 번째 플레이어가 생성자)

@@ -43,6 +43,7 @@ public class VersusService {
 
     private static final int TOURNAMENT_ROUNDS = 3;
     private static final int TOURNAMENT_QUESTIONS_PER_ROUND = 3;
+    private static final int TOURNAMENT_WRITTEN_OX_LIMIT_SEC = 8; // 토너먼트 필기 OX 시간 제한
     private static final int GOLDENBELL_REVIVE_CHECK_ROUND = 2; // 라운드 2 종료 후 (OX+MCQ 총 4문제) 체크
     private static final int GOLDENBELL_REVIVE_TARGET = 5;
     private static final int GOLDENBELL_TIME_LIMIT_SEC = 10;
@@ -51,6 +52,7 @@ public class VersusService {
     private static final int SPEED_BONUS_MAX = 200;
     private static final int MAX_TIMELINE_FETCH = 200;
     private static final int QUESTION_INTERMISSION_SEC = 5; // 문제 간 쉬는 시간 (초)
+    private static final int HEARTBEAT_TIMEOUT_SECONDS = 30; // 하트비트 타임아웃 시간 (초). 30초 동안 하트비트가 없으면 타임아웃
 
     private final MatchRoomRepository roomRepository;
     private final MatchParticipantRepository participantRepository;
@@ -92,8 +94,9 @@ public class VersusService {
         }
         recordEvent(room.getId(), "ROOM_CREATED", eventPayload);
 
-        // 방 생성자는 자동으로 참가
-        if (creatorUserId != null && !creatorUserId.isBlank()) {
+        // 방 생성자는 자동으로 참가 (skipCreatorJoin이 true가 아닐 때만)
+        boolean skipCreatorJoin = Optional.ofNullable(req.skipCreatorJoin()).orElse(false);
+        if (!skipCreatorJoin && creatorUserId != null && !creatorUserId.isBlank()) {
             try {
                 int currentCount = (int) participantRepository.countByRoomId(room.getId());
                 validateParticipantLimit(room, currentCount);
@@ -230,7 +233,8 @@ public class VersusService {
                         room.getStatus(),
                         participantCount.getOrDefault(room.getId(), 0L).intValue(),
                         room.getCreatedAt(),
-                        room.getScheduledAt()))
+                        room.getScheduledAt(),
+                        extractExamMode(room)))
                 .toList();
     }
 
@@ -262,7 +266,8 @@ public class VersusService {
                         room.getStatus(),
                         participantCount.getOrDefault(room.getId(), 0L).intValue(),
                         room.getCreatedAt(),
-                        room.getScheduledAt()))
+                        room.getScheduledAt(),
+                        extractExamMode(room)))
                 .toList();
     }
 
@@ -293,7 +298,8 @@ public class VersusService {
                         room.getStatus(),
                         participantCount.getOrDefault(room.getId(), 0L).intValue(),
                         room.getCreatedAt(),
-                        room.getScheduledAt()))
+                        room.getScheduledAt(),
+                        extractExamMode(room)))
                 .toList();
     }
 
@@ -1001,12 +1007,51 @@ public class VersusService {
         }
 
         // 라운드의 마지막 문제 완료 - 탈락 처리
-        int questionsInRound = questionRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo()).size();
-        long answersInRound = answerRepository.countByRoomIdAndRoundNo(roomId, question.getRoundNo());
-        long expectedAnswers = (long) activeParticipants.size() * questionsInRound;
-        boolean roundCompleted = expectedAnswers > 0 && answersInRound >= expectedAnswers;
+        // 활성 참가자가 해당 라운드의 모든 문제에 답안을 제출했는지 확인
+        List<MatchQuestion> questionsInRound = questionRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo());
+        int questionCount = questionsInRound.size();
+        
+        // 활성 참가자 각각이 라운드의 모든 문제에 답안을 제출했는지 확인
+        Set<String> activeUserIds = activeParticipants.stream()
+                .map(MatchParticipant::getUserId)
+                .collect(Collectors.toSet());
+        
+        // 각 활성 참가자가 제출한 답안 수 확인
+        List<MatchAnswer> answersInRound = answerRepository.findByRoomIdAndRoundNo(roomId, question.getRoundNo());
+        Map<String, Long> answerCountByUser = answersInRound.stream()
+                .filter(answer -> activeUserIds.contains(answer.getUserId()))
+                .collect(Collectors.groupingBy(MatchAnswer::getUserId, Collectors.counting()));
+        
+        // 모든 활성 참가자가 라운드의 모든 문제에 답안을 제출했는지 확인
+        boolean roundCompleted = activeUserIds.stream()
+                .allMatch(userId -> answerCountByUser.getOrDefault(userId, 0L) >= questionCount);
+
+        log.info("토너먼트 라운드 완료 체크: roomId={}, round={}, questionsInRound={}, activeParticipants={}, answerCountByUser={}, roundCompleted={}",
+                roomId, question.getRoundNo(), questionCount, activeUserIds, answerCountByUser, roundCompleted);
 
         if (!roundCompleted) {
+            return ModeResolution.none();
+        }
+
+        // 중복 탈락 처리 방지: 이미 라운드 완료 이벤트가 기록되었는지 확인
+        List<MatchEvent> roundCompletedEvents = eventRepository.findByRoomIdAndEventType(roomId, "ROUND_COMPLETED");
+        boolean alreadyProcessed = roundCompletedEvents.stream()
+                .anyMatch(event -> {
+                    try {
+                        if (event.getPayloadJson() == null) return false;
+                        Map<String, Object> payload = objectMapper.readValue(
+                                event.getPayloadJson(),
+                                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}
+                        );
+                        Object roundObj = payload.get("round");
+                        return roundObj != null && question.getRoundNo().equals(Integer.valueOf(roundObj.toString()));
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
+
+        if (alreadyProcessed) {
+            log.info("토너먼트 라운드 {} 이미 처리됨 (중복 방지): roomId={}", question.getRoundNo(), roomId);
             return ModeResolution.none();
         }
 
@@ -1470,16 +1515,21 @@ public class VersusService {
      * 타임아웃된 참가자 자동 제거
      * - WAIT 상태: 참가자 제거
      * - ONGOING DUEL: 참가자 제거 후 게임 종료 처리
-     * 하트비트가 1분 이상 없는 참가자를 제거
+     * 하트비트가 30초 이상 없는 참가자를 제거
      */
     @Transactional
     public int removeTimeoutParticipants() {
-        Instant thresholdTime = Instant.now().minus(1, ChronoUnit.MINUTES);
+        Instant thresholdTime = Instant.now().minus(HEARTBEAT_TIMEOUT_SECONDS, ChronoUnit.SECONDS);
         List<MatchParticipant> timeoutParticipants = participantRepository.findTimeoutParticipants(thresholdTime);
 
         int removedCount = 0;
         for (MatchParticipant participant : timeoutParticipants) {
             try {
+                // 봇은 하트비트를 보내지 않으므로 타임아웃 체크에서 제외
+                if (participant.getUserId().startsWith("BOT_")) {
+                    continue;
+                }
+                
                 MatchRoom room = findRoomOrThrow(participant.getRoomId());
 
                 if (room.getStatus() == MatchStatus.WAIT) {
@@ -1504,11 +1554,20 @@ public class VersusService {
 
                 } else if (room.getStatus() == MatchStatus.ONGOING && room.getMode() == MatchMode.DUEL) {
                     // DUEL 모드 진행 중: 참가자 제거 후 게임 종료
+                    String disconnectedUserId = participant.getUserId();
                     participantRepository.delete(participant);
                     removedCount++;
 
+                    // 상대방이 나갔음을 명확히 알리는 이벤트 추가
+                    recordEvent(room.getId(), "PLAYER_DISCONNECTED", Map.of(
+                            "userId", disconnectedUserId,
+                            "disconnectedAt", Instant.now().toString(),
+                            "reason", "HEARTBEAT_TIMEOUT",
+                            "mode", "DUEL"
+                    ));
+
                     recordEvent(room.getId(), "PLAYER_TIMEOUT", Map.of(
-                            "userId", participant.getUserId(),
+                            "userId", disconnectedUserId,
                             "timeoutAt", Instant.now().toString(),
                             "reason", "HEARTBEAT_TIMEOUT"
                     ));
@@ -1533,7 +1592,9 @@ public class VersusService {
                         recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
                                 "mode", "DUEL",
                                 "winner", winner != null ? winner : "NONE",
-                                "reason", "OPPONENT_TIMEOUT"
+                                "reason", "OPPONENT_TIMEOUT",
+                                "disconnectedUserId", disconnectedUserId,
+                                "finishedAt", Instant.now().toString()
                         ));
 
                         // 스코어보드 계산하여 보상 지급
@@ -1541,11 +1602,11 @@ public class VersusService {
                         notifyProgressService(room, scoreboard);
 
                         log.info("DUEL game ended due to timeout: roomId={}, timeoutUserId={}, winner={}",
-                                room.getId(), participant.getUserId(), winner);
+                                room.getId(), disconnectedUserId, winner);
                     }
 
                     log.info("Removed timeout participant from ONGOING DUEL: roomId={}, userId={}, remainingParticipants={}",
-                            participant.getRoomId(), participant.getUserId(), remainingParticipants);
+                            participant.getRoomId(), disconnectedUserId, remainingParticipants);
                 }
             } catch (Exception e) {
                 log.error("Failed to remove timeout participant: roomId={}, userId={}",
@@ -1632,6 +1693,7 @@ public class VersusService {
     /**
      * 빈 방 정리 (스케줄러용)
      * 참가자가 0명이고 생성된 지 1분 이상 지난 WAIT 상태 방을 삭제
+     * 토너먼트 모드에만 적용 (골든벨은 예약 시스템으로 인해 0명 상태가 정상)
      * 
      * @return 삭제된 방 개수
      */
@@ -1645,6 +1707,11 @@ public class VersusService {
         int deletedCount = 0;
         for (MatchRoom room : waitRooms) {
             try {
+                // 토너먼트 모드만 체크 (골든벨은 예약 시스템으로 인해 0명 상태가 정상)
+                if (room.getMode() != MatchMode.TOURNAMENT) {
+                    continue;
+                }
+                
                 // 참가자 수 확인
                 long participantCount = participantRepository.countByRoomId(room.getId());
                 
@@ -1738,7 +1805,8 @@ public class VersusService {
                 room.getStatus(),
                 participantSummaries.size(),
                 room.getCreatedAt(),
-                room.getScheduledAt()
+                room.getScheduledAt(),
+                extractExamMode(room)
         );
 
         return new VersusDtos.RoomDetailResp(
@@ -2015,7 +2083,8 @@ public class VersusService {
             intermissionInfo = getCurrentIntermissionInfo(roomId);
         }
 
-        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo, intermissionInfo);
+        List<VersusDtos.XpResult> xpResults = fetchXpResults(roomId);
+        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo, intermissionInfo, xpResults);
     }
 
     private boolean hasNextRound(Long roomId, int currentRound) {
@@ -2222,7 +2291,7 @@ public class VersusService {
                             "토너먼트 라운드 " + round + "는 3문제를 가져야 합니다.");
                 }
                 int expectedLimitSec = switch (round) {
-                    case 1 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : DUEL_WRITTEN_OX_LIMIT_SEC;
+                    case 1 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : TOURNAMENT_WRITTEN_OX_LIMIT_SEC;
                     case 2 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : DUEL_WRITTEN_MCQ_LIMIT_SEC;
                     default -> DUEL_WRITTEN_MCQ_LIMIT_SEC;
                 };
@@ -3850,7 +3919,7 @@ public class VersusService {
             // TOURNAMENT 모드 시간 제한
             if ("WRITTEN".equals(examMode)) {
                 return switch (questionType) {
-                    case "OX" -> DUEL_WRITTEN_OX_LIMIT_SEC;      // 5초
+                    case "OX" -> TOURNAMENT_WRITTEN_OX_LIMIT_SEC;      // 8초
                     case "MCQ" -> DUEL_WRITTEN_MCQ_LIMIT_SEC;    // 10초
                     default -> DUEL_WRITTEN_MCQ_LIMIT_SEC;
                 };
@@ -4222,6 +4291,10 @@ public class VersusService {
     // ========== 개선 사항 6: progress-service 연동 ==========
 
     private void notifyProgressService(MatchRoom room, VersusDtos.ScoreBoardResp scoreboard) {
+        if (room.getResultReported() != null && room.getResultReported()) {
+            log.info("Progress notification already sent for room {}, skipping", room.getId());
+            return;
+        }
         if (scoreboard.items().isEmpty()) {
             log.warn("No participants in scoreboard for room {}, skipping progress-service notification", room.getId());
             return;
@@ -4230,29 +4303,57 @@ public class VersusService {
         Timer.Sample timer = monitoringConfig.startTimer("notifyProgressService");
 
         try {
+            Long roomId = room.getId();
             // ExamMode 추출
             String examMode = extractExamMode(room);
 
+            // 참가자/집계 정보 조회
+            List<MatchParticipant> participantEntities = participantRepository.findByRoomId(roomId);
+            Map<String, MatchParticipant> participantMap = participantEntities.stream()
+                    .collect(Collectors.toMap(MatchParticipant::getUserId, p -> p, (a, b) -> a));
+            Map<String, MatchAnswerRepository.AnswerAggregate> aggregateMap = answerRepository.aggregateByRoomId(roomId).stream()
+                    .collect(Collectors.toMap(MatchAnswerRepository.AnswerAggregate::getUserId, a -> a));
+
             // 각 참가자의 개별 답안 정보 수집
-            List<ProgressServiceClient.ParticipantResult> participants = scoreboard.items().stream()
-                    .map(item -> {
-                        List<ProgressServiceClient.AnswerDetail> answers = collectParticipantAnswers(
-                                room.getId(), item.userId());
+            List<ProgressServiceClient.ParticipantResult> participants = participantEntities.stream()
+                    .map(p -> {
+                        List<ProgressServiceClient.AnswerDetail> answers = collectParticipantAnswers(roomId, p.getUserId());
+                        MatchAnswerRepository.AnswerAggregate agg = aggregateMap.get(p.getUserId());
+                        VersusDtos.ScoreBoardItem boardItem = scoreboard.items().stream()
+                                .filter(it -> Objects.equals(it.userId(), p.getUserId()))
+                                .findFirst()
+                                .orElse(null);
+                        Integer score = Optional.ofNullable(p.getFinalScore())
+                                .orElse(boardItem != null ? boardItem.score() : 0);
+                        Integer rank = Optional.ofNullable(p.getPlayerRank())
+                                .orElse(boardItem != null ? boardItem.rank() : null);
+                        Integer correctCount = agg != null ? agg.getCorrectCount().intValue()
+                                : boardItem != null ? boardItem.correctCount() : 0;
+                        Integer totalCount = agg != null ? agg.getTotalCount().intValue()
+                                : boardItem != null ? boardItem.totalCount() : 0;
+                        Long totalTimeMs = agg != null ? agg.getTotalTimeMs()
+                                : boardItem != null ? boardItem.totalTimeMs() : 0L;
                         return new ProgressServiceClient.ParticipantResult(
-                                item.userId(),
-                                item.score(),
-                                item.rank(),
-                                item.correctCount(),
-                                item.totalCount(),
-                                item.totalTimeMs(),
+                                p.getUserId(),
+                                score,
+                                rank,
+                                correctCount,
+                                totalCount,
+                                totalTimeMs,
                                 answers
                         );
                     })
                     .toList();
 
-            String winner = scoreboard.items().get(0).userId(); // 1등이 우승자
-            int questionCount = (int) questionRepository.countByRoomId(room.getId());
-            long durationMs = calculateMatchDuration(room);
+            String winner = resolveWinner(room, scoreboard, participantEntities);
+            Integer questionCount = (int) answerRepository.countDistinctQuestionIdByRoomId(roomId);
+            if (questionCount == 0) {
+                questionCount = (int) scoreboard.items().stream()
+                        .map(VersusDtos.ScoreBoardItem::totalCount)
+                        .max(Integer::compareTo)
+                        .orElse(0);
+            }
+            Long durationMs = calculateMatchDuration(room);
 
             ProgressServiceClient.VersusResultRequest request = new ProgressServiceClient.VersusResultRequest(
                     room.getMode().name(),
@@ -4261,15 +4362,27 @@ public class VersusService {
                     participants,
                     questionCount,
                     durationMs,
-                    examMode
+                    examMode,
+                    room.getIsBotMatch()
             );
 
             log.info("Notifying progress-service for room {} completion: mode={}, winner={}, participants={}, questions={}, duration={}ms",
                     room.getId(), room.getMode(), winner, participants.size(), questionCount, durationMs);
 
-            progressServiceClient.recordVersusResult(request);
+            ProgressServiceClient.VersusResultResponse xpResponse = progressServiceClient.recordVersusResult(request);
             monitoringConfig.recordTimer(timer, "notifyProgressService", "status", "success");
             log.info("Successfully notified progress-service for room {} completion", room.getId());
+
+            // XP 결과 이벤트 저장 후 결과 보고 플래그 업데이트
+            try {
+                String xpPayload = objectMapper.writeValueAsString(xpResponse);
+                recordEvent(room.getId(), "XP_REWARDED", Map.of("xpResults", xpResponse.xpResults()));
+                room.setResultReported(true);
+                roomRepository.save(room);
+                log.info("XP result stored as event for room {} and resultReported set", room.getId());
+            } catch (Exception e) {
+                log.warn("Failed to store XP_REWARDED event for room {}: {}", room.getId(), e.getMessage());
+            }
 
             // 각 참가자별로 ProgressActivity 생성 (비동기)
             createProgressActivitiesForParticipants(room, scoreboard, examMode);
@@ -4299,8 +4412,8 @@ public class VersusService {
                         .toList();
 
                 String winner = scoreboard.items().get(0).userId();
-                int questionCount = (int) questionRepository.countByRoomId(room.getId());
-                long durationMs = calculateMatchDuration(room);
+                Integer questionCount = (int) questionRepository.countByRoomId(room.getId());
+                Long durationMs = calculateMatchDuration(room);
 
                 ProgressServiceClient.VersusResultRequest request = new ProgressServiceClient.VersusResultRequest(
                         room.getMode().name(),
@@ -4309,7 +4422,8 @@ public class VersusService {
                         participants,
                         questionCount,
                         durationMs,
-                        examMode
+                        examMode,
+                        room.getIsBotMatch()
                 );
 
                 rewardRetryService.retryRewardPayment(room.getId(), request);
@@ -4318,6 +4432,70 @@ public class VersusService {
                 log.error("보상 지급 재시도 큐 추가 실패: roomId={}", room.getId(), retryException);
             }
         }
+    }
+
+    private List<VersusDtos.XpResult> fetchXpResults(Long roomId) {
+        try {
+            return eventRepository.findByRoomIdAndEventType(roomId, "XP_REWARDED").stream()
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt))
+                    .map(MatchEvent::getPayloadJson)
+                    .map(json -> {
+                        try {
+                            Map<String, Object> payload = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+                            Object xpResultsObj = payload.get("xpResults");
+                            if (xpResultsObj == null) {
+                                return null;
+                            }
+                            List<ProgressServiceClient.XpResult> xpList = objectMapper.convertValue(
+                                    xpResultsObj, new TypeReference<List<ProgressServiceClient.XpResult>>() {});
+                            if (xpList == null) return null;
+                            return xpList.stream()
+                                    .map(xp -> new VersusDtos.XpResult(
+                                            xp.userId(),
+                                            xp.xpDelta(),
+                                            xp.reason(),
+                                            xp.totalXp(),
+                                            xp.leveledUp()
+                                    ))
+                                    .toList();
+                        } catch (Exception e) {
+                            log.warn("Failed to parse XP_REWARDED payload for room {}: {}", roomId, e.getMessage());
+                            return null;
+                        }
+                    })
+                    .orElse(null);
+        } catch (Exception e) {
+            log.warn("Failed to load XP results for room {}: {}", roomId, e.getMessage());
+            return null;
+        }
+    }
+
+    private String resolveWinner(MatchRoom room, VersusDtos.ScoreBoardResp scoreboard, List<MatchParticipant> participants) {
+        try {
+            Optional<MatchEvent> finishEvent = eventRepository.findByRoomIdAndEventType(room.getId(), "MATCH_FINISHED")
+                    .stream()
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+            if (finishEvent.isPresent() && finishEvent.get().getPayloadJson() != null) {
+                Map<String, Object> payload = objectMapper.readValue(
+                        finishEvent.get().getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                Object winnerObj = payload.get("winner");
+                if (winnerObj != null && !"NONE".equalsIgnoreCase(winnerObj.toString())) {
+                    return winnerObj.toString();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve winner from MATCH_FINISHED event for room {}: {}", room.getId(), e.getMessage());
+        }
+
+        if (scoreboard != null && scoreboard.items() != null && !scoreboard.items().isEmpty()) {
+            return scoreboard.items().get(0).userId();
+        }
+
+        return participants.stream()
+                .filter(p -> p.getPlayerRank() != null && p.getPlayerRank() == 1)
+                .findFirst()
+                .map(MatchParticipant::getUserId)
+                .orElse(null);
     }
 
     private long calculateMatchDuration(MatchRoom room) {

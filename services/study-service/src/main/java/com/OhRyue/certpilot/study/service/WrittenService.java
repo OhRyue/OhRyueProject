@@ -825,8 +825,9 @@ public class WrittenService {
     String metadataJson = toJson(mcqMeta);
 
     // 4. 진정한 완료 설정 (MCQ 완료 시 - 모든 문제를 맞춰야 완료)
+    // REVIEW 모드가 아닌 경우에만 여기서 설정 (REVIEW는 finalizeStudySession 후 checkReviewCompletionAndXp에서 처리)
     boolean newlyCompleted = false;
-    if (finalCompleted && allWrongIds.isEmpty() && learningSession.getTrulyCompleted() == null) {
+    if (!"REVIEW".equals(learningSession.getMode()) && finalCompleted && allWrongIds.isEmpty() && learningSession.getTrulyCompleted() == null) {
       learningSession.setTrulyCompleted(true);
       learningSessionService.saveLearningSession(learningSession);
       newlyCompleted = true;
@@ -2343,10 +2344,20 @@ public class WrittenService {
 
     String userId = learningSession.getUserId();
     
-    // REVIEW 세션이 완료되었는지 확인 (passed는 체크하지 않음)
+    // REVIEW 세션이 완료되었는지 확인
     if (reviewSession == null || !Boolean.TRUE.equals(reviewSession.getCompleted()) ||
         reviewSession.getScorePct() == null) {
       return;
+    }
+
+    // REVIEW 모드에서는 study_session의 passed가 1이어야만 truly_completed를 1로 설정
+    if (Boolean.TRUE.equals(reviewSession.getPassed()) && learningSession.getTrulyCompleted() == null) {
+      learningSession.setTrulyCompleted(true);
+      learningSessionService.saveLearningSession(learningSession);
+    } else if (!Boolean.TRUE.equals(reviewSession.getPassed()) && Boolean.TRUE.equals(learningSession.getTrulyCompleted())) {
+      // passed가 0인데 truly_completed가 1인 경우, 0으로 되돌림
+      learningSession.setTrulyCompleted(false);
+      learningSessionService.saveLearningSession(learningSession);
     }
 
     // XP 지급 (idempotent, xp_granted만 체크)

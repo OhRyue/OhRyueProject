@@ -245,8 +245,8 @@ public class VersusController {
           "**동작 방식:**\n" +
           "- WAIT 상태: 모든 모드(DUEL, TOURNAMENT, GOLDENBELL)에서 동작\n" +
           "- ONGOING 상태: DUEL 모드에서만 동작 (TOURNAMENT, GOLDENBELL은 불필요)\n" +
-          "- DUEL 모드에서 상대방이 하트비트를 보내지 않으면 1분 후 자동으로 게임이 종료됩니다.\n\n" +
-          "**권장 호출 주기:** 30초마다"
+          "- DUEL 모드에서 상대방이 하트비트를 보내지 않으면 30초 후 자동으로 게임이 종료됩니다.\n\n" +
+          "**권장 호출 주기:** 15초마다 (타임아웃 30초의 절반으로 설정하여 안전 여유 확보)"
   )
   @ApiResponses(value = {
       @ApiResponse(responseCode = "200", description = "하트비트 업데이트 성공"),

@@ -37,10 +37,14 @@ public class VersusResultService {
     private static final int XP_GOLDENBELL_PARTICIPATE = 20;
 
     @Transactional
-    public void recordVersusResult(VersusDtos.VersusResultRequest request) {
+    public VersusDtos.VersusResultResponse recordVersusResult(VersusDtos.VersusResultRequest request) {
         if (request.participants() == null || request.participants().isEmpty()) {
             log.warn("No participants in versus result for roomId={}", request.roomId());
-            return;
+            return new VersusDtos.VersusResultResponse(
+                request.mode(),
+                request.roomId(),
+                List.of()
+            );
         }
 
         log.info("Recording versus result: mode={}, roomId={}, winner={}, participants={}, questionCount={}, durationMs={}",
@@ -48,9 +52,11 @@ public class VersusResultService {
             request.questionCount(), request.durationMs());
 
         String mode = request.mode().toUpperCase();
-        // Assist/Duel/Tournament/Goldenbell은 매번 지급되므로 refId를 null로 설정
-        String refId = null;
+        boolean isBotMatch = Boolean.TRUE.equals(request.botMatch());
+        // (mode, roomId, userId) 단위로 idempotent 처리
+        String refIdPrefix = mode + "-" + request.roomId() + "-";
 
+        List<VersusDtos.XpResult> xpResults = new ArrayList<>();
         int successCount = 0;
         int failCount = 0;
 
@@ -67,7 +73,13 @@ public class VersusResultService {
         // 각 참가자에게 보상 지급 및 배틀 기록 저장
         for (VersusDtos.ParticipantResult participant : request.participants()) {
             try {
-                processParticipantReward(mode, request.winner(), participant, refId);
+                VersusDtos.XpResult xpResult = processParticipantReward(
+                    mode,
+                    request.winner(),
+                    participant,
+                    refIdPrefix + participant.userId()
+                );
+                xpResults.add(xpResult);
                 
                 // 배틀 기록 저장
                 saveBattleRecord(request, participant, examMode);
@@ -78,15 +90,23 @@ public class VersusResultService {
                 
                 successCount++;
             } catch (Exception e) {
-                log.error("Failed to process reward for participant {} in room {}: {}", 
-                    participant.userId(), request.roomId(), e.getMessage(), e);
+                log.error("Failed to process reward for participant {} in room {}: {} - Cause: {}",
+                    participant.userId(), request.roomId(), e.getMessage(), 
+                    e.getCause() != null ? e.getCause().getMessage() : "N/A", e);
                 failCount++;
                 // 개별 참가자 실패해도 다른 참가자 처리는 계속
+                // 실패한 참가자는 XP 결과에 포함하지 않음
             }
         }
 
-        log.info("Completed versus result recording for roomId={}: success={}, failed={}",
-            request.roomId(), successCount, failCount);
+        log.info("Completed versus result recording for roomId={}: success={}, failed={}, xpResults={}",
+            request.roomId(), successCount, failCount, xpResults.size());
+
+        return new VersusDtos.VersusResultResponse(
+            request.mode(),
+            request.roomId(),
+            xpResults
+        );
     }
     
     private void saveBattleRecord(
@@ -110,7 +130,12 @@ public class VersusResultService {
                 .completedAt(Instant.now())
                 .build();
             
+            log.debug("Saving battle record: userId={}, roomId={}, mode={}, rank={}, score={}, correctCount={}, totalCount={}",
+                participant.userId(), request.roomId(), request.mode(), participant.rank(), 
+                participant.score(), participant.correctCount(), participant.totalCount());
+            
             battleRecord = battleRecordRepository.save(battleRecord);
+            log.debug("Battle record saved with id={}", battleRecord.getId());
             
             // 개별 답안 저장
             if (participant.answers() != null && !participant.answers().isEmpty()) {
@@ -137,13 +162,16 @@ public class VersusResultService {
             log.info("Saved battle record for user {} in room {} (mode: {}, rank: {})",
                 participant.userId(), request.roomId(), request.mode(), participant.rank());
         } catch (Exception e) {
-            log.error("Failed to save battle record for user {} in room {}: {}",
-                participant.userId(), request.roomId(), e.getMessage(), e);
+            log.error("Failed to save battle record for user {} in room {}: {} - Cause: {} - StackTrace: {}",
+                participant.userId(), request.roomId(), e.getMessage(), 
+                e.getCause() != null ? e.getCause().getMessage() : "N/A",
+                e.getClass().getName(), e);
             // 배틀 기록 저장 실패는 치명적이지 않으므로 예외를 던지지 않음
+            // 하지만 로그는 상세하게 기록
         }
     }
 
-    private void processParticipantReward(
+    private VersusDtos.XpResult processParticipantReward(
         String mode,
         String winner,
         VersusDtos.ParticipantResult participant,
@@ -152,42 +180,86 @@ public class VersusResultService {
         String userId = participant.userId();
         if (userId == null || userId.isBlank()) {
             log.warn("Invalid userId in participant result, skipping");
-            return;
+            throw new IllegalArgumentException("Invalid userId: " + userId);
         }
 
         boolean isWinner = userId.equals(winner);
+        String reason = buildXpReason(mode, isWinner);
 
-        // 1. XP 지급
+        boolean isBotUser = userId.startsWith("BOT_");
+        // 1. XP 지급 전 지갑 상태 확인 (봇도 총 XP 표시용으로 조회)
+        UserXpWallet walletBefore = xpService.getWallet(userId);
+        long xpBefore = walletBefore.getXpTotal();
+        int levelBefore = walletBefore.getLevel();
+
+        if (isBotUser) {
+            log.info("Skipping XP for bot user: userId={}, mode={}, roomIdPrefix={}", userId, mode, refId);
+            return new VersusDtos.XpResult(userId, 0, reason, xpBefore, false);
+        }
+
+        // 2. XP 지급
         int xpDelta = calculateXpReward(mode, isWinner);
         if (xpDelta > 0) {
             try {
-                UserXpWallet wallet = xpService.addXp(userId, xpDelta, XpReason.BATTLE, refId);
-                log.info("Awarded {} XP to user {} for {} mode (winner: {}, rank: {}). New total: {} XP, level: {}", 
-                    xpDelta, userId, mode, isWinner, participant.rank(), wallet.getXpTotal(), wallet.getLevel());
+                UserXpWallet walletAfter = xpService.addXp(userId, xpDelta, XpReason.BATTLE, refId);
+                long xpAfter = walletAfter.getXpTotal();
+                int levelAfter = walletAfter.getLevel();
+                boolean leveledUp = levelAfter > levelBefore;
+                
+                log.info("Awarded {} XP to user {} for {} mode (winner: {}, rank: {}). Before: {} XP (Lv{}), After: {} XP (Lv{}), LeveledUp: {}", 
+                    xpDelta, userId, mode, isWinner, participant.rank(), 
+                    xpBefore, levelBefore, xpAfter, levelAfter, leveledUp);
+                
+                // 3. 랭킹 재계산
+                try {
+                    rankService.recomputeForUser(userId);
+                } catch (Exception e) {
+                    log.warn("Failed to recompute rank for user {}: {}", userId, e.getMessage(), e);
+                    // 랭킹 재계산 실패는 치명적이지 않으므로 계속 진행
+                }
+
+                // 4. 뱃지 평가 (배틀 관련 뱃지 체크)
+                try {
+                    badgeService.evaluate(userId);
+                } catch (Exception e) {
+                    log.warn("Failed to evaluate badges for user {}: {}", userId, e.getMessage(), e);
+                    // 뱃지 평가 실패는 치명적이지 않으므로 계속 진행
+                }
+
+                return new VersusDtos.XpResult(
+                    userId,
+                    xpDelta,
+                    reason,
+                    xpAfter,
+                    leveledUp
+                );
             } catch (Exception e) {
-                log.error("Failed to award XP to user {}: {}", userId, e.getMessage(), e);
+                log.error("Failed to award XP to user {}: {} - Cause: {} - StackTrace: {}", 
+                    userId, e.getMessage(), 
+                    e.getCause() != null ? e.getCause().getMessage() : "N/A",
+                    e.getClass().getName(), e);
                 throw e; // XP 지급 실패는 재시도 필요할 수 있으므로 예외 전파
             }
         } else {
             log.warn("XP reward is 0 for user {} in {} mode (winner: {}, rank: {})", 
                 userId, mode, isWinner, participant.rank());
+            return new VersusDtos.XpResult(
+                userId,
+                0,
+                reason,
+                xpBefore,
+                false
+            );
         }
+    }
 
-        // 2. 랭킹 재계산
-        try {
-            rankService.recomputeForUser(userId);
-        } catch (Exception e) {
-            log.warn("Failed to recompute rank for user {}: {}", userId, e.getMessage());
-            // 랭킹 재계산 실패는 치명적이지 않으므로 계속 진행
-        }
-
-        // 3. 뱃지 평가 (배틀 관련 뱃지 체크)
-        try {
-            badgeService.evaluate(userId);
-        } catch (Exception e) {
-            log.warn("Failed to evaluate badges for user {}: {}", userId, e.getMessage());
-            // 뱃지 평가 실패는 치명적이지 않으므로 계속 진행
-        }
+    private String buildXpReason(String mode, boolean isWinner) {
+        return switch (mode) {
+            case "DUEL" -> isWinner ? "DUEL_WIN" : "DUEL_PARTICIPATE";
+            case "TOURNAMENT" -> isWinner ? "TOURNAMENT_WIN" : "TOURNAMENT_PARTICIPATE";
+            case "GOLDENBELL" -> isWinner ? "GOLDENBELL_WIN" : "GOLDENBELL_PARTICIPATE";
+            default -> "BATTLE_PARTICIPATE";
+        };
     }
 
     private int calculateXpReward(String mode, boolean isWinner) {

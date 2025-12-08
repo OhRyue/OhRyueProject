@@ -194,6 +194,59 @@ public class CurriculumController {
         return sb.toString();
     }
 
+    @Operation(
+            summary = "루트 노드 조회",
+            description = """
+                written 또는 practical의 루트 노드(code에 소수점이 없는 노드)를 반환합니다.
+                - written: 필기의 루트 노드 반환
+                - practical: 실기의 루트 노드 반환
+                """
+    )
+    @GetMapping("/topics/root/{mode}")
+    public String getRootNodes(@PathVariable String mode) {
+        ExamMode examMode;
+        if ("written".equalsIgnoreCase(mode)) {
+            examMode = ExamMode.WRITTEN;
+        } else if ("practical".equalsIgnoreCase(mode)) {
+            examMode = ExamMode.PRACTICAL;
+        } else {
+            throw new IllegalArgumentException("Invalid mode: " + mode + ". Use 'written' or 'practical'.");
+        }
+
+        List<Topic> rootNodes = topicRepository.findRootNodesByExamMode(examMode);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"topics\":[");
+        for (int i = 0; i < rootNodes.size(); i++) {
+            Topic t = rootNodes.get(i);
+            if (i > 0) sb.append(',');
+
+            sb.append('{')
+                    .append("\"id\":").append(t.getId()).append(',')
+                    .append("\"certId\":").append(t.getCertId()).append(',');
+
+            sb.append("\"parentId\":");
+            if (t.getParentId() == null) sb.append("null,");
+            else sb.append(t.getParentId()).append(',');
+
+            sb.append("\"code\":\"").append(escape(t.getCode())).append("\",")
+                    .append("\"title\":\"").append(escape(t.getTitle())).append("\",");
+
+            if (t.getEmoji() == null) {
+                sb.append("\"emoji\":null,");
+            } else {
+                sb.append("\"emoji\":\"").append(escape(t.getEmoji())).append("\",");
+            }
+
+            sb.append("\"examMode\":\"").append(t.getExamMode().name()).append("\",")
+                    .append("\"orderNo\":").append(t.getOrderNo())
+                    .append('}');
+        }
+        sb.append("]}");
+
+        return sb.toString();
+    }
+
     /* ========================= Concept ========================= */
 
     @Operation(

@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.community.service;
 
+import com.OhRyue.certpilot.community.client.AccountServiceClient;
 import com.OhRyue.certpilot.community.client.NotificationClient;
 import com.OhRyue.certpilot.community.domain.Comment;
 import com.OhRyue.certpilot.community.domain.Post;
@@ -22,8 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,6 +39,7 @@ public class CommentService {
     private final PostRepository postRepository;
     private final ReactionRepository reactionRepository;
     private final NotificationClient notificationClient;
+    private final AccountServiceClient accountServiceClient;
     private final Clock clock = Clock.systemUTC();
 
     @Timed(value = "community.comments.create", histogram = true)
@@ -133,9 +139,17 @@ public class CommentService {
                                                                                   Set<String> blockedUserIds) {
         Pageable pageable = PageRequest.of(
                 page, size, Sort.by(Sort.Direction.ASC, "createdAt"));
-        var pageData = commentRepository
-                .findByPostIdAndDeletedAtIsNullOrderByCreatedAtAsc(postId, pageable)
-                .map(comment -> toResponse(comment, viewerId));
+        var commentsPage = commentRepository
+                .findByPostIdAndDeletedAtIsNullOrderByCreatedAtAsc(postId, pageable);
+
+        // 닉네임 조회를 위한 authorId 수집
+        List<String> authorIds = commentsPage.getContent().stream()
+                .map(Comment::getAuthorId)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<String, String> nicknameMap = fetchNicknames(authorIds);
+
+        var pageData = commentsPage.map(comment -> toResponse(comment, viewerId, nicknameMap));
 
         if (blockedUserIds == null || blockedUserIds.isEmpty()) {
             return pageData;
@@ -151,23 +165,55 @@ public class CommentService {
     }
 
     public CommentDtos.CommentResponse toResponse(Comment comment, String viewerId) {
+        Map<String, String> nicknameMap = fetchNicknames(List.of(comment.getAuthorId()));
+        return toResponse(comment, viewerId, nicknameMap);
+    }
+
+    public CommentDtos.CommentResponse toResponse(Comment comment, String viewerId, Map<String, String> nicknameMap) {
         boolean liked = viewerId != null &&
                 reactionRepository.findByTargetTypeAndTargetIdAndUserId(
                         ReactionTargetType.COMMENT, comment.getId(), viewerId
                 ).isPresent();
+
+        String nickname = nicknameMap.getOrDefault(comment.getAuthorId(), comment.getAuthorId());
+        String displayName = comment.isAnonymous() ? "익명" : nickname;
 
         return new CommentDtos.CommentResponse(
                 comment.getId(),
                 comment.getPostId(),
                 comment.isAnonymous(),
                 comment.getAuthorId(),
-                comment.isAnonymous() ? "익명" : comment.getAuthorId(),
+                displayName,
                 comment.getContent(),
                 comment.getLikeCount(),
                 liked,
                 comment.getCreatedAt(),
                 comment.getUpdatedAt()
         );
+    }
+
+    /**
+     * account-service에서 여러 사용자의 닉네임을 일괄 조회
+     */
+    private Map<String, String> fetchNicknames(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        try {
+            List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
+            return profiles.stream()
+                    .collect(Collectors.toMap(
+                            AccountServiceClient.ProfileSummary::userId,
+                            profile -> profile.nickname() != null ? profile.nickname() : profile.userId(),
+                            (existing, replacement) -> existing
+                    ));
+        } catch (Exception e) {
+            log.warn("Failed to fetch nicknames for userIds={}: {}", userIds, e.getMessage());
+            // Fallback: userId를 닉네임으로 사용
+            return userIds.stream()
+                    .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        }
     }
 
     @Timed(value = "community.comments.recent-by-user", histogram = true)

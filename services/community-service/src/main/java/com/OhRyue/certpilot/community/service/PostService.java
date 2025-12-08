@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.community.service;
 
+import com.OhRyue.certpilot.community.client.AccountServiceClient;
 import com.OhRyue.certpilot.community.domain.Post;
 import com.OhRyue.certpilot.community.domain.PostCategory;
 import com.OhRyue.certpilot.community.domain.ReactionTargetType;
@@ -12,6 +13,7 @@ import com.OhRyue.certpilot.community.repository.PostRepository;
 import com.OhRyue.certpilot.community.repository.ReactionRepository;
 import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,12 +22,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PostService {
@@ -36,6 +40,7 @@ public class PostService {
   private final CategoryService categoryService;
   private final ViewLogService viewLogService;
   private final ModerationService moderationService;
+  private final AccountServiceClient accountServiceClient;
   private final Clock clock = Clock.systemUTC();
 
   @Timed(value = "community.posts.list", histogram = true)
@@ -78,8 +83,15 @@ public class PostService {
     Map<Byte, PostCategory> categoryMap = categoryService.findAll().stream()
         .collect(Collectors.toMap(PostCategory::getId, Function.identity()));
 
+    // 닉네임 조회를 위한 authorId 수집
+    List<String> authorIds = result.getContent().stream()
+        .map(Post::getAuthorId)
+        .distinct()
+        .collect(Collectors.toList());
+    Map<String, String> nicknameMap = fetchNicknames(authorIds);
+
     List<PostDtos.PostSummary> summaries = result.getContent().stream()
-        .map(post -> toSummary(post, categoryMap))
+        .map(post -> toSummary(post, categoryMap, nicknameMap))
         .collect(Collectors.toList());
 
     return new PostDtos.PostListResponse(PageDto.of(result), summaries);
@@ -107,8 +119,15 @@ public class PostService {
     Map<Byte, PostCategory> categoryMap = categoryService.findAll().stream()
         .collect(Collectors.toMap(PostCategory::getId, Function.identity()));
 
+    // 닉네임 조회를 위한 authorId 수집
+    List<String> authorIds = posts.getContent().stream()
+        .map(Post::getAuthorId)
+        .distinct()
+        .collect(Collectors.toList());
+    Map<String, String> nicknameMap = fetchNicknames(authorIds);
+
     List<PostDtos.PostSummary> myPostSummaries = posts.getContent().stream()
-        .map(post -> toSummary(post, categoryMap))
+        .map(post -> toSummary(post, categoryMap, nicknameMap))
         .toList();
 
     PostDtos.PostListResponse myPostsPage =
@@ -138,13 +157,16 @@ public class PostService {
     Map<Byte, PostCategory> categoryMap = categoryService.findAll().stream()
         .collect(Collectors.toMap(PostCategory::getId, Function.identity()));
 
+    // 닉네임 조회
+    Map<String, String> nicknameMap = fetchNicknames(List.of(post.getAuthorId()));
+
     boolean likedByViewer = viewerId != null &&
         reactionRepository.findByTargetTypeAndTargetIdAndUserId(ReactionTargetType.POST, postId, viewerId).isPresent();
 
     Page<CommentDtos.CommentResponse> commentPage = commentService.list(postId, viewerId, 0, commentSize, blockedUsers);
     List<CommentDtos.CommentResponse> comments = commentPage.getContent();
 
-    PostDtos.PostSummary summary = toSummary(post, categoryMap);
+    PostDtos.PostSummary summary = toSummary(post, categoryMap, nicknameMap);
     return new PostDtos.PostDetailResponse(
         summary,
         post.getContent(),
@@ -210,8 +232,16 @@ public class PostService {
         : postRepository.findTopHotSinceExcluding(since, blockedAuthors, PageRequest.of(0, normalizedLimit));
     Map<Byte, PostCategory> categoryMap = categoryService.findAll().stream()
         .collect(Collectors.toMap(PostCategory::getId, Function.identity()));
+    
+    // 닉네임 조회를 위한 authorId 수집
+    List<String> authorIds = posts.stream()
+        .map(Post::getAuthorId)
+        .distinct()
+        .collect(Collectors.toList());
+    Map<String, String> nicknameMap = fetchNicknames(authorIds);
+    
     List<PostDtos.PostSummary> summaries = posts.stream()
-        .map(p -> toSummary(p, categoryMap))
+        .map(p -> toSummary(p, categoryMap, nicknameMap))
         .collect(Collectors.toList());
     return new PostDtos.HotPostResponse(since, summaries);
   }
@@ -236,8 +266,15 @@ public class PostService {
     Map<Byte, PostCategory> categoryMap = categoryService.findAll().stream()
         .collect(Collectors.toMap(PostCategory::getId, Function.identity()));
 
+    // 닉네임 조회를 위한 authorId 수집
+    List<String> authorIds = page.getContent().stream()
+        .map(Post::getAuthorId)
+        .distinct()
+        .collect(Collectors.toList());
+    Map<String, String> nicknameMap = fetchNicknames(authorIds);
+
     List<PostDtos.PostSummary> summaries = page.getContent().stream()
-        .map(post -> toSummary(post, categoryMap))
+        .map(post -> toSummary(post, categoryMap, nicknameMap))
         .toList();
 
     return new PostDtos.PostListResponse(PageDto.of(page), summaries);
@@ -288,13 +325,15 @@ public class PostService {
   public PostDtos.PostSummary summarize(Post post) {
     Map<Byte, PostCategory> categoryMap = categoryService.findAll().stream()
         .collect(Collectors.toMap(PostCategory::getId, Function.identity()));
-    return toSummary(post, categoryMap);
+    Map<String, String> nicknameMap = fetchNicknames(List.of(post.getAuthorId()));
+    return toSummary(post, categoryMap, nicknameMap);
   }
 
-  private PostDtos.PostSummary toSummary(Post post, Map<Byte, PostCategory> categoryMap) {
+  private PostDtos.PostSummary toSummary(Post post, Map<Byte, PostCategory> categoryMap, Map<String, String> nicknameMap) {
     PostCategory category = categoryMap.getOrDefault(post.getCategoryId(), null);
     String categoryCode = category != null ? category.getCode() : null;
     String categoryName = category != null ? category.getName() : null;
+    String nickname = nicknameMap.getOrDefault(post.getAuthorId(), post.getAuthorId());
     return new PostDtos.PostSummary(
         post.getId(),
         categoryCode,
@@ -303,7 +342,7 @@ public class PostService {
         buildExcerpt(post.getContent()),
         post.isAnonymous(),
         post.getAuthorId(),
-        displayName(post.isAnonymous(), post.getAuthorId()),
+        displayName(post.isAnonymous(), post.getAuthorId(), nickname),
         post.getLikeCount(),
         post.getCommentCount(),
         post.getViewCount(),
@@ -322,8 +361,36 @@ public class PostService {
     return trimmed.substring(0, 137) + "...";
   }
 
-  private String displayName(boolean anonymous, String authorId) {
-    return anonymous ? "익명" : authorId;
+  /**
+   * account-service에서 여러 사용자의 닉네임을 일괄 조회
+   */
+  private Map<String, String> fetchNicknames(List<String> userIds) {
+    if (userIds == null || userIds.isEmpty()) {
+      return new HashMap<>();
+    }
+
+    try {
+      List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
+      return profiles.stream()
+          .collect(Collectors.toMap(
+              AccountServiceClient.ProfileSummary::userId,
+              profile -> profile.nickname() != null ? profile.nickname() : profile.userId(),
+              (existing, replacement) -> existing
+          ));
+    } catch (Exception e) {
+      log.warn("Failed to fetch nicknames for userIds={}: {}", userIds, e.getMessage());
+      // Fallback: userId를 닉네임으로 사용
+      return userIds.stream()
+          .collect(Collectors.toMap(Function.identity(), Function.identity()));
+    }
+  }
+
+  private String displayName(boolean anonymous, String authorId, String nickname) {
+    if (anonymous) {
+      return "익명";
+    }
+    // 닉네임이 있으면 닉네임 사용, 없으면 authorId 사용
+    return nickname != null && !nickname.equals(authorId) ? nickname : authorId;
   }
 
   private void validateAuthor(String authorId, String requesterId) {

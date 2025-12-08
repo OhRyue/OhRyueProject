@@ -36,6 +36,10 @@ public class MatchRoom {
   @Builder.Default
   private Boolean isBotMatch = false;  // 봇과의 연습 매치 여부
 
+  @Column(name = "result_reported", nullable = false)
+  @Builder.Default
+  private Boolean resultReported = false; // progress-service 통지 여부
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
@@ -46,6 +50,9 @@ public class MatchRoom {
     }
     if (status == null) {
       status = MatchStatus.WAIT;
+    }
+    if (resultReported == null) {
+      resultReported = false;
     }
   }
 }
