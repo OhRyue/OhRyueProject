@@ -1,19 +1,32 @@
 package com.OhRyue.certpilot.study.service;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.OhRyue.certpilot.study.client.CertCurriculumClient;
 import com.OhRyue.certpilot.study.client.CurriculumGateway;
 import com.OhRyue.certpilot.study.domain.LearningSession;
 import com.OhRyue.certpilot.study.domain.StudySession;
 import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.domain.UserAnswer;
-import com.OhRyue.certpilot.study.domain.UserProgress;
 import com.OhRyue.certpilot.study.domain.enums.ExamMode;
-import com.OhRyue.certpilot.study.dto.ReportDtos.ReportSummaryResp;
+import com.OhRyue.certpilot.study.dto.ReportDtos.ProgressCardResp;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentDailyItem;
-import com.OhRyue.certpilot.study.dto.ReportDtos.RecentResultsResp;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentRecord;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentRecordsResp;
-import com.OhRyue.certpilot.study.dto.ReportDtos.ProgressCardResp;
+import com.OhRyue.certpilot.study.dto.ReportDtos.RecentResultsResp;
+import com.OhRyue.certpilot.study.dto.ReportDtos.ReportSummaryResp;
 import com.OhRyue.certpilot.study.repository.LearningSessionRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionRepository;
@@ -21,14 +34,11 @@ import com.OhRyue.certpilot.study.repository.UserAnswerRepository;
 import com.OhRyue.certpilot.study.repository.UserProgressRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
-import java.time.*;
-import java.util.*;
-import java.util.stream.Collectors;
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -345,25 +355,119 @@ public class ReportService {
     }
 
     private String resolvePartTitle(StudySession session) {
+        String mode = session.getMode();
+        log.info("resolvePartTitle: sessionId={}, mode={}, topicScopeJson={}", 
+            session.getId(), mode, session.getTopicScopeJson() != null ? "present" : "null");
+        
+        // ASSIST 모드의 경우 topicScopeJson 없이도 처리 가능
+        if (mode != null && mode.startsWith("ASSIST_")) {
+            if (mode.contains("DIFFICULTY")) {
+                log.info("resolvePartTitle: ASSIST_DIFFICULTY mode detected, returning '난이도 학습'");
+                return "난이도 학습";
+            } else if (mode.contains("WEAKNESS")) {
+                log.info("resolvePartTitle: ASSIST_WEAKNESS mode detected, returning '약점 보완'");
+                return "약점 보완";
+            } else if (mode.contains("CATEGORY")) {
+                log.info("resolvePartTitle: ASSIST_CATEGORY mode detected, returning '카테고리 학습'");
+                return "카테고리 학습";
+            }
+            log.info("resolvePartTitle: ASSIST mode detected but no specific type, returning '보조 학습'");
+            return "보조 학습";
+        }
+        
         try {
             // topicScopeJson에서 topicId 또는 rootTopicId 추출
             if (session.getTopicScopeJson() != null && !session.getTopicScopeJson().isBlank()) {
                 TypeReference<Map<String, Object>> typeRef = new TypeReference<>() {};
                 Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), typeRef);
-                Long topicId = scope.containsKey("topicId") 
-                        ? ((Number) scope.get("topicId")).longValue()
-                        : (scope.containsKey("rootTopicId") 
-                                ? ((Number) scope.get("rootTopicId")).longValue() 
-                                : null);
+                
+                // 1. ASSIST 모드의 경우 scope에서 추가 정보 추출
+                if (mode != null && mode.startsWith("ASSIST_")) {
+                    if (scope.containsKey("difficulty")) {
+                        String difficulty = String.valueOf(scope.get("difficulty"));
+                        return "난이도: " + difficulty;
+                    } else if (scope.containsKey("weaknessTags")) {
+                        Object weaknessTagsObj = scope.get("weaknessTags");
+                        if (weaknessTagsObj instanceof List && !((List<?>) weaknessTagsObj).isEmpty()) {
+                            List<?> tags = (List<?>) weaknessTagsObj;
+                            if (tags.size() == 1) {
+                                return "약점: " + tags.get(0);
+                            } else {
+                                return "약점: " + tags.get(0) + " 외 " + (tags.size() - 1) + "개";
+                            }
+                        }
+                        return "약점 보완";
+                    } else if (scope.containsKey("topicIds")) {
+                        // topicIds가 있으면 첫 번째 topicId로 토픽 제목 조회 시도
+                        Object topicIdsObj = scope.get("topicIds");
+                        if (topicIdsObj instanceof List && !((List<?>) topicIdsObj).isEmpty()) {
+                            Object firstTopicId = ((List<?>) topicIdsObj).get(0);
+                            if (firstTopicId instanceof Number) {
+                                Long topicId = ((Number) firstTopicId).longValue();
+                                try {
+                                    CurriculumGateway.CurriculumConcept concept = curriculumGateway.getConceptWithTopic(topicId);
+                                    if (concept != null && concept.topicTitle() != null && !concept.topicTitle().isBlank()) {
+                                        return concept.topicTitle();
+                                    }
+                                } catch (Exception e) {
+                                    // curriculumGateway 호출 실패 시 "카테고리 학습"으로 fallback
+                                    log.debug("Failed to get topic title for topicId={} in ASSIST_CATEGORY: {}", topicId, e.getMessage());
+                                }
+                            }
+                        }
+                        return "카테고리 학습";
+                    }
+                    return "보조 학습";
+                }
+                
+                // 2. 단일 topicId 확인 (MICRO, REVIEW 등)
+                Long topicId = null;
+                if (scope.containsKey("topicId")) {
+                    topicId = ((Number) scope.get("topicId")).longValue();
+                } else if (scope.containsKey("rootTopicId")) {
+                    topicId = ((Number) scope.get("rootTopicId")).longValue();
+                }
                 
                 if (topicId != null) {
-                    CurriculumGateway.CurriculumConcept concept = curriculumGateway.getConceptWithTopic(topicId);
-                    return concept != null ? concept.topicTitle() : "알 수 없음";
+                    try {
+                        CurriculumGateway.CurriculumConcept concept = curriculumGateway.getConceptWithTopic(topicId);
+                        if (concept != null && concept.topicTitle() != null && !concept.topicTitle().isBlank()) {
+                            return concept.topicTitle();
+                        }
+                    } catch (Exception e) {
+                        // curriculumGateway 호출 실패 시 로그만 남기고 fallback
+                        log.debug("Failed to get topic title for topicId={}: {}", topicId, e.getMessage());
+                    }
                 }
             }
         } catch (Exception e) {
-            // 조회 실패 시 기본값
+            // JSON 파싱 실패 등
+            log.debug("Failed to parse topicScopeJson for session {}: {}", session.getId(), e.getMessage());
         }
+        
+        // 최종 fallback: 모드에 따라 기본값 반환
+        if (mode != null && mode.startsWith("ASSIST_")) {
+            if (mode.contains("DIFFICULTY")) {
+                log.info("resolvePartTitle: Fallback - ASSIST_DIFFICULTY mode, returning '난이도 학습'");
+                return "난이도 학습";
+            } else if (mode.contains("WEAKNESS")) {
+                log.info("resolvePartTitle: Fallback - ASSIST_WEAKNESS mode, returning '약점 보완'");
+                return "약점 보완";
+            } else if (mode.contains("CATEGORY")) {
+                log.info("resolvePartTitle: Fallback - ASSIST_CATEGORY mode, returning '카테고리 학습'");
+                return "카테고리 학습";
+            }
+            log.info("resolvePartTitle: Fallback - ASSIST mode, returning '보조 학습'");
+            return "보조 학습";
+        } else if ("MICRO".equals(mode)) {
+            log.info("resolvePartTitle: Fallback - MICRO mode, returning 'Micro 학습'");
+            return "Micro 학습";
+        } else if ("REVIEW".equals(mode)) {
+            log.info("resolvePartTitle: Fallback - REVIEW mode, returning 'Review 학습'");
+            return "Review 학습";
+        }
+        
+        log.warn("resolvePartTitle: Unknown mode '{}' for session {}, returning '알 수 없음'", mode, session.getId());
         return "알 수 없음";
     }
 
