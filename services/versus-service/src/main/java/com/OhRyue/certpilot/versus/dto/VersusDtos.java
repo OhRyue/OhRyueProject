@@ -185,7 +185,9 @@ public class VersusDtos {
       @Schema(description = "현재 진행 중인 문제 정보. 문제가 진행 중이 아니면 null")
       CurrentQuestionInfo currentQuestion,
       @Schema(description = "쉬는 시간 정보. 쉬는 시간 중일 때만 null이 아님")
-      IntermissionInfo intermission
+      IntermissionInfo intermission,
+      @Schema(description = "매치 종료 시 progress-service에서 계산된 XP 지급 결과")
+      List<XpResult> xpResults
   ) {}
 
   public record TimelineEvent(
@@ -229,5 +231,19 @@ public class VersusDtos {
   public record QuestionAnswersResp(
       Long questionId,
       List<AnswerInfo> answers
+  ) {}
+
+  @Schema(description = "XP 지급 결과")
+  public record XpResult(
+      @Schema(description = "사용자 ID", example = "user1")
+      String userId,
+      @Schema(description = "이번 경기에서 지급된 XP", example = "30")
+      Integer xpDelta,
+      @Schema(description = "지급 사유", example = "DUEL_WIN")
+      String reason,
+      @Schema(description = "지급 후 누적 XP", example = "1500")
+      Long totalXp,
+      @Schema(description = "레벨업 여부", example = "false")
+      Boolean leveledUp
   ) {}
 }

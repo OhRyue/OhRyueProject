@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Versus Result", description = "Versus 매치 결과 기록 및 보상 지급 API")
@@ -32,18 +31,20 @@ public class VersusResultController {
             "2. 배틀 기록 저장 (battle_record, battle_answer 테이블)\n" +
             "3. 뱃지 평가 (배틀 관련 뱃지 체크)\n" +
             "4. 랭킹 재계산\n\n" +
+            "**응답:**\n" +
+            "- 각 참가자별 XP 지급 결과를 반환합니다.\n" +
+            "- xpResults 배열에는 userId, xpDelta, reason, totalXp, leveledUp 정보가 포함됩니다.\n\n" +
             "**주의사항:**\n" +
             "- winner는 1등 참가자의 userId입니다.\n" +
             "- participants는 점수 순으로 정렬된 리스트여야 합니다.\n" +
             "- 개별 참가자 처리 실패 시에도 다른 참가자 처리는 계속됩니다."
     )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "204", description = "처리 완료 (No Content)"),
+        @ApiResponse(responseCode = "200", description = "처리 완료 및 XP 지급 결과 반환"),
         @ApiResponse(responseCode = "400", description = "잘못된 요청 (participants가 비어있음 등)")
     })
     @PostMapping("/result")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void recordVersusResult(
+    public VersusDtos.VersusResultResponse recordVersusResult(
         @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "매치 결과 요청",
             required = true,
@@ -113,7 +114,7 @@ public class VersusResultController {
             )
         )
         @Valid @RequestBody VersusDtos.VersusResultRequest request) {
-        versusResultService.recordVersusResult(request);
+        return versusResultService.recordVersusResult(request);
     }
 }
 

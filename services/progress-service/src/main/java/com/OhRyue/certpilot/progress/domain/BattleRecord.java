@@ -39,7 +39,7 @@ public class BattleRecord {
     @Column(name = "score", nullable = false)
     private Integer score;
 
-    @Column(name = "rank", nullable = false)
+    @Column(name = "player_rank", nullable = false)
     private Integer rank;
 
     @Column(name = "correct_count", nullable = false)

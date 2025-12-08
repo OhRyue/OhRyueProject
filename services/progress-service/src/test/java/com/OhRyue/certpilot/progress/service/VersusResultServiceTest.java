@@ -71,7 +71,8 @@ class VersusResultServiceTest {
                 ),
                 10,
                 120000L,
-                "WRITTEN"
+                "WRITTEN",
+                false
         );
 
         when(xpService.addXp(anyString(), anyInt(), any(), isNull())).thenReturn(
@@ -113,7 +114,8 @@ class VersusResultServiceTest {
                 ),
                 10,
                 120000L,
-                "WRITTEN"
+                "WRITTEN",
+                false
         );
 
         when(xpService.addXp(eq("winner-user"), anyInt(), any(), isNull())).thenReturn(
@@ -153,7 +155,8 @@ class VersusResultServiceTest {
                 ),
                 9,
                 180000L,
-                "WRITTEN"
+                "WRITTEN",
+                false
         );
 
         when(xpService.addXp(anyString(), anyInt(), any(), isNull())).thenReturn(
@@ -191,7 +194,8 @@ class VersusResultServiceTest {
                 ),
                 6,
                 60000L,
-                "WRITTEN"
+                "WRITTEN",
+                false
         );
 
         when(xpService.addXp(anyString(), anyInt(), any(), isNull())).thenReturn(
@@ -231,7 +235,8 @@ class VersusResultServiceTest {
                 ),
                 6,
                 60000L,
-                "WRITTEN"
+                "WRITTEN",
+                false
         );
 
         when(xpService.addXp(eq("winner-user"), anyInt(), any(), isNull())).thenReturn(

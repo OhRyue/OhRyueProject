@@ -2078,7 +2078,8 @@ public class VersusService {
             intermissionInfo = getCurrentIntermissionInfo(roomId);
         }
 
-        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo, intermissionInfo);
+        List<VersusDtos.XpResult> xpResults = fetchXpResults(roomId);
+        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo, intermissionInfo, xpResults);
     }
 
     private boolean hasNextRound(Long roomId, int currentRound) {
@@ -4285,6 +4286,10 @@ public class VersusService {
     // ========== 개선 사항 6: progress-service 연동 ==========
 
     private void notifyProgressService(MatchRoom room, VersusDtos.ScoreBoardResp scoreboard) {
+        if (room.getResultReported() != null && room.getResultReported()) {
+            log.info("Progress notification already sent for room {}, skipping", room.getId());
+            return;
+        }
         if (scoreboard.items().isEmpty()) {
             log.warn("No participants in scoreboard for room {}, skipping progress-service notification", room.getId());
             return;
@@ -4293,29 +4298,57 @@ public class VersusService {
         Timer.Sample timer = monitoringConfig.startTimer("notifyProgressService");
 
         try {
+            Long roomId = room.getId();
             // ExamMode 추출
             String examMode = extractExamMode(room);
 
+            // 참가자/집계 정보 조회
+            List<MatchParticipant> participantEntities = participantRepository.findByRoomId(roomId);
+            Map<String, MatchParticipant> participantMap = participantEntities.stream()
+                    .collect(Collectors.toMap(MatchParticipant::getUserId, p -> p, (a, b) -> a));
+            Map<String, MatchAnswerRepository.AnswerAggregate> aggregateMap = answerRepository.aggregateByRoomId(roomId).stream()
+                    .collect(Collectors.toMap(MatchAnswerRepository.AnswerAggregate::getUserId, a -> a));
+
             // 각 참가자의 개별 답안 정보 수집
-            List<ProgressServiceClient.ParticipantResult> participants = scoreboard.items().stream()
-                    .map(item -> {
-                        List<ProgressServiceClient.AnswerDetail> answers = collectParticipantAnswers(
-                                room.getId(), item.userId());
+            List<ProgressServiceClient.ParticipantResult> participants = participantEntities.stream()
+                    .map(p -> {
+                        List<ProgressServiceClient.AnswerDetail> answers = collectParticipantAnswers(roomId, p.getUserId());
+                        MatchAnswerRepository.AnswerAggregate agg = aggregateMap.get(p.getUserId());
+                        VersusDtos.ScoreBoardItem boardItem = scoreboard.items().stream()
+                                .filter(it -> Objects.equals(it.userId(), p.getUserId()))
+                                .findFirst()
+                                .orElse(null);
+                        Integer score = Optional.ofNullable(p.getFinalScore())
+                                .orElse(boardItem != null ? boardItem.score() : 0);
+                        Integer rank = Optional.ofNullable(p.getPlayerRank())
+                                .orElse(boardItem != null ? boardItem.rank() : null);
+                        Integer correctCount = agg != null ? agg.getCorrectCount().intValue()
+                                : boardItem != null ? boardItem.correctCount() : 0;
+                        Integer totalCount = agg != null ? agg.getTotalCount().intValue()
+                                : boardItem != null ? boardItem.totalCount() : 0;
+                        Long totalTimeMs = agg != null ? agg.getTotalTimeMs()
+                                : boardItem != null ? boardItem.totalTimeMs() : 0L;
                         return new ProgressServiceClient.ParticipantResult(
-                                item.userId(),
-                                item.score(),
-                                item.rank(),
-                                item.correctCount(),
-                                item.totalCount(),
-                                item.totalTimeMs(),
+                                p.getUserId(),
+                                score,
+                                rank,
+                                correctCount,
+                                totalCount,
+                                totalTimeMs,
                                 answers
                         );
                     })
                     .toList();
 
-            String winner = scoreboard.items().get(0).userId(); // 1등이 우승자
-            int questionCount = (int) questionRepository.countByRoomId(room.getId());
-            long durationMs = calculateMatchDuration(room);
+            String winner = resolveWinner(room, scoreboard, participantEntities);
+            Integer questionCount = (int) answerRepository.countDistinctQuestionIdByRoomId(roomId);
+            if (questionCount == 0) {
+                questionCount = (int) scoreboard.items().stream()
+                        .map(VersusDtos.ScoreBoardItem::totalCount)
+                        .max(Integer::compareTo)
+                        .orElse(0);
+            }
+            Long durationMs = calculateMatchDuration(room);
 
             ProgressServiceClient.VersusResultRequest request = new ProgressServiceClient.VersusResultRequest(
                     room.getMode().name(),
@@ -4324,15 +4357,27 @@ public class VersusService {
                     participants,
                     questionCount,
                     durationMs,
-                    examMode
+                    examMode,
+                    room.getIsBotMatch()
             );
 
             log.info("Notifying progress-service for room {} completion: mode={}, winner={}, participants={}, questions={}, duration={}ms",
                     room.getId(), room.getMode(), winner, participants.size(), questionCount, durationMs);
 
-            progressServiceClient.recordVersusResult(request);
+            ProgressServiceClient.VersusResultResponse xpResponse = progressServiceClient.recordVersusResult(request);
             monitoringConfig.recordTimer(timer, "notifyProgressService", "status", "success");
             log.info("Successfully notified progress-service for room {} completion", room.getId());
+
+            // XP 결과 이벤트 저장 후 결과 보고 플래그 업데이트
+            try {
+                String xpPayload = objectMapper.writeValueAsString(xpResponse);
+                recordEvent(room.getId(), "XP_REWARDED", Map.of("xpResults", xpResponse.xpResults()));
+                room.setResultReported(true);
+                roomRepository.save(room);
+                log.info("XP result stored as event for room {} and resultReported set", room.getId());
+            } catch (Exception e) {
+                log.warn("Failed to store XP_REWARDED event for room {}: {}", room.getId(), e.getMessage());
+            }
 
             // 각 참가자별로 ProgressActivity 생성 (비동기)
             createProgressActivitiesForParticipants(room, scoreboard, examMode);
@@ -4362,8 +4407,8 @@ public class VersusService {
                         .toList();
 
                 String winner = scoreboard.items().get(0).userId();
-                int questionCount = (int) questionRepository.countByRoomId(room.getId());
-                long durationMs = calculateMatchDuration(room);
+                Integer questionCount = (int) questionRepository.countByRoomId(room.getId());
+                Long durationMs = calculateMatchDuration(room);
 
                 ProgressServiceClient.VersusResultRequest request = new ProgressServiceClient.VersusResultRequest(
                         room.getMode().name(),
@@ -4372,7 +4417,8 @@ public class VersusService {
                         participants,
                         questionCount,
                         durationMs,
-                        examMode
+                        examMode,
+                        room.getIsBotMatch()
                 );
 
                 rewardRetryService.retryRewardPayment(room.getId(), request);
@@ -4381,6 +4427,70 @@ public class VersusService {
                 log.error("보상 지급 재시도 큐 추가 실패: roomId={}", room.getId(), retryException);
             }
         }
+    }
+
+    private List<VersusDtos.XpResult> fetchXpResults(Long roomId) {
+        try {
+            return eventRepository.findByRoomIdAndEventType(roomId, "XP_REWARDED").stream()
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt))
+                    .map(MatchEvent::getPayloadJson)
+                    .map(json -> {
+                        try {
+                            Map<String, Object> payload = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+                            Object xpResultsObj = payload.get("xpResults");
+                            if (xpResultsObj == null) {
+                                return null;
+                            }
+                            List<ProgressServiceClient.XpResult> xpList = objectMapper.convertValue(
+                                    xpResultsObj, new TypeReference<List<ProgressServiceClient.XpResult>>() {});
+                            if (xpList == null) return null;
+                            return xpList.stream()
+                                    .map(xp -> new VersusDtos.XpResult(
+                                            xp.userId(),
+                                            xp.xpDelta(),
+                                            xp.reason(),
+                                            xp.totalXp(),
+                                            xp.leveledUp()
+                                    ))
+                                    .toList();
+                        } catch (Exception e) {
+                            log.warn("Failed to parse XP_REWARDED payload for room {}: {}", roomId, e.getMessage());
+                            return null;
+                        }
+                    })
+                    .orElse(null);
+        } catch (Exception e) {
+            log.warn("Failed to load XP results for room {}: {}", roomId, e.getMessage());
+            return null;
+        }
+    }
+
+    private String resolveWinner(MatchRoom room, VersusDtos.ScoreBoardResp scoreboard, List<MatchParticipant> participants) {
+        try {
+            Optional<MatchEvent> finishEvent = eventRepository.findByRoomIdAndEventType(room.getId(), "MATCH_FINISHED")
+                    .stream()
+                    .max(Comparator.comparing(MatchEvent::getCreatedAt));
+            if (finishEvent.isPresent() && finishEvent.get().getPayloadJson() != null) {
+                Map<String, Object> payload = objectMapper.readValue(
+                        finishEvent.get().getPayloadJson(), new TypeReference<Map<String, Object>>() {});
+                Object winnerObj = payload.get("winner");
+                if (winnerObj != null && !"NONE".equalsIgnoreCase(winnerObj.toString())) {
+                    return winnerObj.toString();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve winner from MATCH_FINISHED event for room {}: {}", room.getId(), e.getMessage());
+        }
+
+        if (scoreboard != null && scoreboard.items() != null && !scoreboard.items().isEmpty()) {
+            return scoreboard.items().get(0).userId();
+        }
+
+        return participants.stream()
+                .filter(p -> p.getPlayerRank() != null && p.getPlayerRank() == 1)
+                .findFirst()
+                .map(MatchParticipant::getUserId)
+                .orElse(null);
     }
 
     private long calculateMatchDuration(MatchRoom room) {

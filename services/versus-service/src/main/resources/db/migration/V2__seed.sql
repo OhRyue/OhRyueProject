@@ -1,29 +1,31 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- ------------------------------------------------------------
+-- =========================================
+-- V2__seed_versus_sample_data.sql
+-- - DUEL / TOURNAMENT / GOLDENBELL 테스트 룸 및 참가자/질문/룰 시드
+-- =========================================
+
 -- 0) 방 ID 고정 (중복 실행에 안전하게 ON DUPLICATE 사용)
--- ------------------------------------------------------------
 SET @r_duel := 1101;
 SET @r_tour := 1201;
 SET @r_gb   := 1301;
 
--- ------------------------------------------------------------
 -- 1) match_room
--- ------------------------------------------------------------
 INSERT INTO match_room (id, mode, status, scope_json, created_at)
 VALUES
 (@r_duel, 'DUEL',       'WAIT', JSON_OBJECT('examMode','WRITTEN','topicScope','ALL','difficulty','NORMAL'), NOW()),
 (@r_tour, 'TOURNAMENT', 'WAIT', JSON_OBJECT('examMode','WRITTEN','size',8,'seed','random','topicScope','ALL'), NOW()),
 (@r_gb,   'GOLDENBELL', 'WAIT', JSON_OBJECT('maxPlayers',20,'examMode','WRITTEN','topicScope','ALL'), NOW())
-ON DUPLICATE KEY UPDATE id = VALUES(id);
+ON DUPLICATE KEY UPDATE
+  scope_json = VALUES(scope_json),
+  status     = VALUES(status);
 
--- ------------------------------------------------------------
 -- 2) match_participant
 --    - DUEL: 2명
---    - TOURNAMENT: 4명(예시)  ※ 필요 시 더 추가
+--    - TOURNAMENT: 4명(예시)
 --    - GOLDENBELL: 4명(예시)
--- ------------------------------------------------------------
+
 -- DUEL 참가
 INSERT INTO match_participant (room_id, user_id, joined_at)
 VALUES
@@ -46,11 +48,9 @@ VALUES
 (@r_gb, 'guest',  NOW()),
 (@r_gb, 'admin',  NOW());
 
--- ------------------------------------------------------------
 -- 3) match_question
 --    라운드/페이즈 포함 배치
 --    ※ question_id는 study-service 실제 ID로 교체 필요
--- ------------------------------------------------------------
 
 -- [DUEL] 3문제, 메인 페이즈
 INSERT INTO match_question (room_id, round_no, phase, order_no, question_id, time_limit_sec)
@@ -67,7 +67,9 @@ VALUES
 (@r_tour, 1, 'MAIN', 3, 11003, 12),
 (@r_tour, 1, 'MAIN', 4, 11004, 12);
 
--- [GOLDENBELL] 기획 반영: OX×2 -> MCQ×2 -> SHORT×1 -> LONG×1 (모두 10초)
+-- [GOLDENBELL]
+-- 기획: OX×2 -> MCQ×2 -> SHORT×1 -> LONG×1 (모두 10초)
+-- + FINAL (SHORT 1 + LONG 1 → 합산)
 INSERT INTO match_question (room_id, round_no, phase, order_no, question_id, time_limit_sec)
 VALUES
 -- R1 OX
@@ -86,9 +88,7 @@ VALUES
 (@r_gb, 99, 'FINAL', 1, 12007, 10),
 (@r_gb, 99, 'FINAL', 2, 12008, 10);
 
--- ------------------------------------------------------------
--- 4) tournament_bracket  (토너먼트 8강 예시: 현재 4명만 참가 → BYE 포함)
--- ------------------------------------------------------------
+-- 4) tournament_bracket (토너먼트 8강 예시: 현재 4명만 참가 → BYE 포함)
 INSERT INTO tournament_bracket (room_id, round_no, pairing_json)
 VALUES
 (
@@ -106,23 +106,7 @@ VALUES
 )
 ON DUPLICATE KEY UPDATE pairing_json = VALUES(pairing_json);
 
--- ------------------------------------------------------------
--- 5) goldenbell_rule (기획 정합: 부활/최종전 포함)
---   골든벨 규칙 (필기/실기 모드별로 다름)
---   필기 골든벨:
---     라운드 1: OX 2문제 (8초)
---     라운드 2: MCQ 2문제 (12초)
---     라운드 3: MCQ 1문제 (REVIVAL, 15초)
---     라운드 4: MCQ 2문제 (HARD, FINAL, 12초)
---   실기 골든벨:
---     라운드 1: SHORT 2문제 (25초)
---     라운드 2: SHORT 2문제 (25초, 난이도 ↑)
---     라운드 3: SHORT 1문제 (REVIVAL, 25초)
---     라운드 4: SHORT 2문제 (FINAL, 25초, 난이도 ↑)
---   부활:
---     - OX+MCQ 총 4문제 종료 후(라운드 1~2) 생존 ≤ 5 → 부활전(정답+가장 빠른 1명)
---     - 조기 전멸(4문제 전에 생존=0) → TOP5 즉시 부활
--- ------------------------------------------------------------
+-- 5) goldenbell_rule (필기 골든벨 규칙 샘플)
 INSERT INTO goldenbell_rule (room_id, round_flow_json, elimination, revival_rule_json)
 SELECT
   @r_gb,
@@ -155,15 +139,15 @@ SELECT
   )
 WHERE NOT EXISTS (SELECT 1 FROM goldenbell_rule WHERE room_id = @r_gb);
 
--- ------------------------------------------------------------
 -- 6) goldenbell_state (초기 생존 표기)
--- ------------------------------------------------------------
 INSERT INTO goldenbell_state (room_id, user_id, alive, revived)
 VALUES
 (@r_gb, 'ohryue', 1, 0),
 (@r_gb, 'user2',  1, 0),
 (@r_gb, 'guest',  1, 0),
 (@r_gb, 'admin',  1, 0)
-ON DUPLICATE KEY UPDATE alive = VALUES(alive);
+ON DUPLICATE KEY UPDATE
+  alive   = VALUES(alive),
+  revived = VALUES(revived);
 
 SET FOREIGN_KEY_CHECKS = 1;

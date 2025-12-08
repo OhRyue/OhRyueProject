@@ -17,7 +17,7 @@ public interface ProgressServiceClient {
      * Versus 매치 결과 기록 및 보상 지급
      */
     @PostMapping("/versus/result")
-    void recordVersusResult(@RequestBody VersusResultRequest request);
+    VersusResultResponse recordVersusResult(@RequestBody VersusResultRequest request);
 
     record VersusResultRequest(
         String mode,  // DUEL, TOURNAMENT, GOLDENBELL
@@ -26,7 +26,8 @@ public interface ProgressServiceClient {
         List<ParticipantResult> participants,
         Integer questionCount,
         Long durationMs,
-        String examMode  // WRITTEN, PRACTICAL
+        String examMode,  // WRITTEN, PRACTICAL
+        Boolean botMatch
     ) {}
 
     record ParticipantResult(
@@ -47,6 +48,20 @@ public interface ProgressServiceClient {
         Integer scoreDelta,
         Integer roundNo,
         String phase
+    ) {}
+
+    record VersusResultResponse(
+        String mode,
+        Long roomId,
+        List<XpResult> xpResults
+    ) {}
+
+    record XpResult(
+        String userId,
+        Integer xpDelta,
+        String reason,
+        Long totalXp,
+        Boolean leveledUp
     ) {}
 }
 
