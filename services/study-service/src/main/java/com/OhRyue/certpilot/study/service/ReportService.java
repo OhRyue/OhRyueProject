@@ -2,16 +2,19 @@ package com.OhRyue.certpilot.study.service;
 
 import com.OhRyue.certpilot.study.client.CertCurriculumClient;
 import com.OhRyue.certpilot.study.client.CurriculumGateway;
+import com.OhRyue.certpilot.study.domain.LearningSession;
 import com.OhRyue.certpilot.study.domain.StudySession;
 import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.domain.UserAnswer;
 import com.OhRyue.certpilot.study.domain.UserProgress;
+import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.dto.ReportDtos.ReportSummaryResp;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentDailyItem;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentResultsResp;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentRecord;
 import com.OhRyue.certpilot.study.dto.ReportDtos.RecentRecordsResp;
 import com.OhRyue.certpilot.study.dto.ReportDtos.ProgressCardResp;
+import com.OhRyue.certpilot.study.repository.LearningSessionRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionRepository;
 import com.OhRyue.certpilot.study.repository.UserAnswerRepository;
@@ -39,8 +42,11 @@ public class ReportService {
     // 최근 학습 결과를 위한 의존성
     private final StudySessionRepository studySessionRepository;
     private final StudySessionItemRepository studySessionItemRepository;
+    private final LearningSessionRepository learningSessionRepository;
     private final CurriculumGateway curriculumGateway;
     private final ObjectMapper objectMapper;
+    
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     /* ======================= 요약 카드 ======================= */
 
@@ -120,58 +126,166 @@ public class ReportService {
 
     /* ======================= 진행 카드(자격증별) ======================= */
 
-    public ProgressCardResp progressCard(String userId, Long certId) {
+    public ProgressCardResp progressCard(String userId, Long certId, ExamMode examMode) {
         if (certId == null) {
             return new ProgressCardResp(0, 0, 0, 0.0, null);
         }
 
-        // 🔸 cert-service의 커리큘럼 토픽 목록을 Feign으로 조회
-        CertCurriculumClient.TopicListResponse topicList =
-                certCurriculumClient.listTopics(certId, null, null); // examMode/parentId 필터 없음
+        return calculateProgressCardData(userId, certId, examMode);
+    }
 
-        List<CertCurriculumClient.TopicResponse> topics =
-                (topicList != null && topicList.topics() != null)
-                        ? topicList.topics()
-                        : List.of();
+    private ProgressCardResp calculateProgressCardData(String userId, Long certId, ExamMode examMode) {
+        String modeStr = examMode.name();
 
-        int totalTopics = topics.size();
+        // 1. cert-service에서 해당 모드의 모든 topic 조회
+        CertCurriculumClient.TopicListResponse topicList;
+        try {
+            topicList = certCurriculumClient.listTopics(certId, modeStr, null);
+        } catch (Exception e) {
+            // cert-service 호출 실패 시 빈 응답 반환
+            return new ProgressCardResp(0, 0, 0, 0.0, null);
+        }
+        
+        List<CertCurriculumClient.TopicResponse> allTopics = 
+            (topicList != null && topicList.topics() != null) ? topicList.topics() : List.of();
+
+        // 2. micro 학습 가능한 topic 필터링 (code에 점이 2개인 경우)
+        List<CertCurriculumClient.TopicResponse> microTopics = allTopics.stream()
+            .filter(topic -> {
+                if (topic.code() == null) return false;
+                long dotCount = topic.code().chars().filter(c -> c == '.').count();
+                return dotCount == 2; // "1.1.1", "P.1.1" 같은 형태
+            })
+            .collect(Collectors.toList());
+
+        // 3. review 학습 가능한 topic 필터링 (code에 점이 1개인 루트 토픽)
+        List<CertCurriculumClient.TopicResponse> reviewTopics = allTopics.stream()
+            .filter(topic -> {
+                if (topic.code() == null) return false;
+                long dotCount = topic.code().chars().filter(c -> c == '.').count();
+                return dotCount == 1; // "1.1", "P.1" 같은 형태
+            })
+            .collect(Collectors.toList());
+
+        long totalTopics = microTopics.size() + reviewTopics.size();
         if (totalTopics == 0) {
             return new ProgressCardResp(0, 0, 0, 0.0, null);
         }
 
-        Set<Long> topicIds = topics.stream()
-                .map(CertCurriculumClient.TopicResponse::id)
-                .collect(Collectors.toSet());
+        // 4. micro topic들의 ID 추출
+        List<Long> microTopicIds = microTopics.stream()
+            .map(CertCurriculumClient.TopicResponse::id)
+            .collect(Collectors.toList());
 
-        List<UserProgress> progresses = userProgressRepository.findByUserId(userId);
+        // 5. review topic들의 ID 추출
+        List<Long> reviewTopicIds = reviewTopics.stream()
+            .map(CertCurriculumClient.TopicResponse::id)
+            .collect(Collectors.toList());
 
-        long completed = progresses.stream()
-                .filter(progress -> topicIds.contains(progress.getTopicId()))
-                .filter(progress ->
-                        Optional.ofNullable(progress.getWrittenDoneCnt()).orElse(0) > 0 ||
-                                Optional.ofNullable(progress.getPracticalDoneCnt()).orElse(0) > 0
-                )
-                .count();
+        // 6. micro 완료 카운트: truly_completed만 카운트
+        List<StudySession> allMicroSessions = studySessionRepository
+            .findByUserIdAndModeAndExamMode(userId, "MICRO", examMode);
 
-        long pending = Math.max(0, totalTopics - completed);
-        double completionRate = totalTopics == 0
-                ? 0.0
-                : Math.round(((double) completed / totalTopics) * 1000.0) / 10.0;
+        // topicId별로 세션 그룹화 (topic_scope_json에서 topicId 추출)
+        Map<Long, List<StudySession>> sessionsByTopic = allMicroSessions.stream()
+            .filter(session -> {
+                try {
+                    if (session.getTopicScopeJson() == null || session.getTopicScopeJson().isBlank()) {
+                        return false;
+                    }
+                    Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
+                    Object topicIdObj = scope.get("topicId");
+                    return topicIdObj != null && microTopicIds.contains(((Number) topicIdObj).longValue());
+                } catch (Exception e) {
+                    return false;
+                }
+            })
+            .collect(Collectors.groupingBy(session -> {
+                try {
+                    Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
+                    Object topicIdObj = scope.get("topicId");
+                    return topicIdObj != null ? ((Number) topicIdObj).longValue() : 0L;
+                } catch (Exception e) {
+                    return 0L;
+                }
+            }));
 
-        String lastStudiedAt = progresses.stream()
-                .filter(progress -> topicIds.contains(progress.getTopicId()))
-                .map(UserProgress::getLastStudiedAt)
-                .filter(Objects::nonNull)
-                .max(Comparator.naturalOrder())
-                .map(instant -> instant.atZone(ZONE).toOffsetDateTime().toString())
-                .orElse(null);
+        // 각 micro 토픽에 대한 완료 상태 확인 (truly_completed만)
+        long completedMicroCount = microTopicIds.stream()
+            .filter(topicId -> {
+                List<StudySession> topicSessions = sessionsByTopic.getOrDefault(topicId, List.of());
+                
+                if (topicSessions.isEmpty()) {
+                    return false;
+                }
+                
+                // MINI 세션(question_count=4)과 MCQ 세션(question_count=5) 찾기 (가장 최신 세션)
+                StudySession miniSession = topicSessions.stream()
+                    .filter(s -> s.getQuestionCount() != null && s.getQuestionCount() == 4)
+                    .max((s1, s2) -> s1.getStartedAt().compareTo(s2.getStartedAt()))
+                    .orElse(null);
+                StudySession mcqSession = topicSessions.stream()
+                    .filter(s -> s.getQuestionCount() != null && s.getQuestionCount() == 5)
+                    .max((s1, s2) -> s1.getStartedAt().compareTo(s2.getStartedAt()))
+                    .orElse(null);
+                
+                // TRULY_COMPLETED 상태인 경우만 완료로 카운트 (miniPassed && mcqPassed)
+                boolean miniPassed = miniSession != null && Boolean.TRUE.equals(miniSession.getPassed());
+                boolean mcqPassed = mcqSession != null && Boolean.TRUE.equals(mcqSession.getPassed());
+                return miniPassed && mcqPassed;
+            })
+            .count();
+
+        // 7. review 완료 카운트: truly_completed만 카운트
+        List<LearningSession> reviewSessions = reviewTopicIds.isEmpty() 
+            ? List.of()
+            : learningSessionRepository.findByUserIdAndTopicIdInAndMode(userId, reviewTopicIds, "REVIEW");
+
+        long completedReviewCount = reviewSessions.stream()
+            .filter(session -> "DONE".equals(session.getStatus()) && Boolean.TRUE.equals(session.getTrulyCompleted()))
+            .map(LearningSession::getTopicId)
+            .distinct()
+            .count();
+
+        long completedTopics = completedMicroCount + completedReviewCount;
+        long pendingTopics = Math.max(0, totalTopics - completedTopics);
+
+        // 8. 비율 계산
+        double completionRate = totalTopics == 0 
+            ? 0.0 
+            : Math.round(((double) completedTopics / totalTopics) * 10000.0) / 100.0; // 소수점 2자리
+
+        // 9. 마지막 학습 시각 계산 (micro와 review 세션 모두 고려)
+        String lastStudiedAt = null;
+        Instant lastMicroAt = allMicroSessions.stream()
+            .map(StudySession::getStartedAt)
+            .filter(Objects::nonNull)
+            .max(Comparator.naturalOrder())
+            .orElse(null);
+        Instant lastReviewAt = reviewSessions.stream()
+            .map(LearningSession::getStartedAt)
+            .filter(Objects::nonNull)
+            .max(Comparator.naturalOrder())
+            .orElse(null);
+        
+        if (lastMicroAt != null || lastReviewAt != null) {
+            Instant lastAt = null;
+            if (lastMicroAt != null && lastReviewAt != null) {
+                lastAt = lastMicroAt.isAfter(lastReviewAt) ? lastMicroAt : lastReviewAt;
+            } else if (lastMicroAt != null) {
+                lastAt = lastMicroAt;
+            } else {
+                lastAt = lastReviewAt;
+            }
+            lastStudiedAt = lastAt.atZone(ZONE).toOffsetDateTime().toString();
+        }
 
         return new ProgressCardResp(
-                totalTopics,
-                (int) completed,
-                (int) pending,
-                completionRate,
-                lastStudiedAt
+            (int) totalTopics,
+            (int) completedTopics,
+            (int) pendingTopics,
+            completionRate,
+            lastStudiedAt
         );
     }
 

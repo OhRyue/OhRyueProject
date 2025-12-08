@@ -36,8 +36,8 @@ public final class HomeDtos {
 
   @Schema(description = "학습 진행 카드")
   public record HomeProgressCard(
-      @Schema(description = "총 토픽 수") int totalTopics,
-      @Schema(description = "완료된 토픽 수") int completedTopics,
+      @Schema(description = "총 토픽 수 (micro + review)") int totalTopics,
+      @Schema(description = "완료된 토픽 수 (truly_completed만)") int completedTopics,
       @Schema(description = "미완료 토픽 수") int pendingTopics,
       @Schema(description = "달성률(%)") double completionRate,
       @Schema(description = "마지막 학습 시각") String lastStudiedAt

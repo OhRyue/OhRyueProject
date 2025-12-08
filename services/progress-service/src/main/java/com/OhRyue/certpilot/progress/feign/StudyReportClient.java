@@ -24,10 +24,14 @@ public interface StudyReportClient {
 
   /**
    * /api/study/report/progress-card
-   * userId는 JWT에서 가져오고, certId만 QueryParam으로 전달.
+   * userId는 JWT에서 가져오고, certId와 mode를 QueryParam으로 전달.
+   * 
+   * 주의: study-service가 실제로는 {"written":{...},"practical":{...}} 형태로 반환하므로
+   * String으로 받아서 수동으로 파싱해야 함
    */
   @GetMapping("/report/progress-card")
-  HomeProgressCard progressCard(
-      @RequestParam("certId") Long certId
+  String progressCardRaw(
+      @RequestParam("certId") Long certId,
+      @RequestParam("mode") String mode
   );
 }

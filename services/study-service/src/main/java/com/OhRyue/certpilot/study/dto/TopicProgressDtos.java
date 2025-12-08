@@ -23,7 +23,7 @@ public class TopicProgressDtos {
   @Schema(description = "Micro + Review 학습 통계 응답")
   public record MicroLearningStatsResp(
       @Schema(description = "전체 학습 개수 (micro + review)") Long totalCount,
-      @Schema(description = "완료(passed=true)한 학습 개수") Long completedCount,
+      @Schema(description = "진정한 완료(TRULY_COMPLETED)한 학습 개수 (micro: MINI+MCQ 모두 통과, review: trulyCompleted=true)") Long completedCount,
       @Schema(description = "완료 비율(%)") Double completionRate
   ) {}
 

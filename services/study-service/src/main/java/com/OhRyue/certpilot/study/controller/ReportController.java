@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.study.controller;
 
+import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.OhRyue.certpilot.study.dto.ReportDtos.*;
 import com.OhRyue.certpilot.study.service.ReportService;
 import com.OhRyue.common.auth.AuthUserUtil;
@@ -25,9 +26,18 @@ public class ReportController {
 
   @Operation(summary = "학습 진행 카드 요약")
   @GetMapping("/progress-card")
-  public ProgressCardResp progressCard(@RequestParam Long certId) {
+  public ProgressCardResp progressCard(
+      @RequestParam Long certId,
+      @RequestParam String mode) {
     String userId = AuthUserUtil.getCurrentUserId();
-    return report.progressCard(userId, certId);
+    ExamMode examMode;
+    try {
+      examMode = ExamMode.valueOf(mode.trim().toUpperCase());
+    } catch (IllegalArgumentException e) {
+      // 잘못된 mode 값인 경우 기본값 반환
+      return new ProgressCardResp(0, 0, 0, 0.0, null);
+    }
+    return report.progressCard(userId, certId, examMode);
   }
 
   @Operation(summary = "최근 학습 결과(일자별)")

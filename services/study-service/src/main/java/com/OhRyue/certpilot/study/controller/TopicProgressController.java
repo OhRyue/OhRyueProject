@@ -46,7 +46,9 @@ public class TopicProgressController {
           모든 micro와 review 학습에 대한 통계를 조회합니다.
           - mode: WRITTEN(필기) 또는 PRACTICAL(실기) - 필수
           - totalCount: 전체 학습 개수 (micro: code에 점이 2개 + review: code에 점이 1개)
-          - completedCount: 완료(status=DONE and passed=true)한 학습 개수
+          - completedCount: 진정한 완료(TRULY_COMPLETED)한 학습 개수
+            * micro: MINI와 MCQ 모두 통과(passed=true)
+            * review: status=DONE이고 trulyCompleted=true
           - completionRate: 완료 비율(%)
           """
   )
