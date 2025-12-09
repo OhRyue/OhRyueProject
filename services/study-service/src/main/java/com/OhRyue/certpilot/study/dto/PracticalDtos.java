@@ -11,7 +11,8 @@ public class PracticalDtos {
       Long questionId, // 문제 ID
       String type,     // SHORT | LONG
       String text,     // 문제 본문
-      String imageUrl  // 문제 이미지(선택)
+      String imageUrl, // 문제 이미지(선택)
+      @Schema(description = "태그 목록") List<com.OhRyue.common.dto.TagViewDto> tags
   ) {}
 
   // 실기 세트(여러 문제)

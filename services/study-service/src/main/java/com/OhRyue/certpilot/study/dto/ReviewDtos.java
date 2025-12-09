@@ -11,7 +11,8 @@ public class ReviewDtos {
       Long questionId,
       String text,
       List<Choice> choices,
-      String imageUrl
+      String imageUrl,
+      @Schema(description = "태그 목록") List<com.OhRyue.common.dto.TagViewDto> tags
   ) {
     public record Choice(String label, String text) {}
   }

@@ -72,6 +72,7 @@ public class PracticalService {
 
   // cert-service 커리큘럼 연동 (토픽 제목/개념 조회용)
   private final CurriculumGateway curriculumGateway;
+  private final TagQueryService tagQueryService;
 
   /* ========================= 개념 ========================= */
 
@@ -157,7 +158,10 @@ public class PracticalService {
     Map<Long, Question> questionMap = questionRepository.findByIdIn(questionIds).stream()
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 6. 순서대로 문제 반환
     List<WrittenDtos.MiniQuestion> questions = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -165,7 +169,8 @@ public class PracticalService {
           if (q == null) {
             throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
           }
-          return new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse(""));
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+          return new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse(""), tags);
         })
         .toList();
 
@@ -479,6 +484,9 @@ public class PracticalService {
         .filter(q -> q.getMode() == ExamMode.PRACTICAL)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
+    // 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
     // 순서대로 문제 반환
     List<PracticalDtos.PracticalQuestion> items;
     if (practicalItems.isEmpty()) {
@@ -486,22 +494,30 @@ public class PracticalService {
       items = questionIds.stream()
           .map(qId -> questionMap.get(qId))
           .filter(Objects::nonNull)
-          .map(q -> new PracticalDtos.PracticalQuestion(
-              q.getId(),
-              q.getType().name(),
-              Optional.ofNullable(q.getStem()).orElse(""),
-              q.getImageUrl()))
+          .map(q -> {
+            List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+            return new PracticalDtos.PracticalQuestion(
+                q.getId(),
+                q.getType().name(),
+                Optional.ofNullable(q.getStem()).orElse(""),
+                q.getImageUrl(),
+                tags);
+          })
           .toList();
     } else {
       // 이미 할당된 경우: practicalItems 순서대로
       items = practicalItems.stream()
           .map(item -> questionMap.get(item.getQuestionId()))
           .filter(Objects::nonNull)
-          .map(q -> new PracticalDtos.PracticalQuestion(
-              q.getId(),
-              q.getType().name(),
-              Optional.ofNullable(q.getStem()).orElse(""),
-              q.getImageUrl()))
+          .map(q -> {
+            List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+            return new PracticalDtos.PracticalQuestion(
+                q.getId(),
+                q.getType().name(),
+                Optional.ofNullable(q.getStem()).orElse(""),
+                q.getImageUrl(),
+                tags);
+          })
           .toList();
     }
 
@@ -837,7 +853,10 @@ public class PracticalService {
         .filter(q -> q.getMode() == ExamMode.PRACTICAL)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 6. 순서대로 문제 반환
     List<PracticalDtos.PracticalQuestion> practicalQuestions = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -845,11 +864,13 @@ public class PracticalService {
           if (q == null) {
             throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
           }
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
           return new PracticalDtos.PracticalQuestion(
               q.getId(),
               q.getType().name(),
               Optional.ofNullable(q.getStem()).orElse(""),
-              q.getImageUrl());
+              q.getImageUrl(),
+              tags);
         })
         .toList();
 

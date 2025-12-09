@@ -61,6 +61,7 @@ public class AssistPracticalService {
   private final com.OhRyue.certpilot.study.client.ProgressHookClient progressHookClient;
   private final ObjectMapper objectMapper;
   private final com.OhRyue.certpilot.study.client.ProgressXpClient progressXpClient;
+  private final TagQueryService tagQueryService;
 
   /* ================= 카테고리: 토픽 배열 선택 → 해당 토픽들에서 출제 ================= */
 
@@ -302,14 +303,21 @@ public class AssistPracticalService {
         .toList();
     sessionManager.allocateQuestions(studySession, questionIds);
 
-    // 7. 문제 반환
+    // 7. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 8. 문제 반환
     List<AssistDtos.QuizQ> items = selectedQuestions.stream()
-        .map(q -> new AssistDtos.QuizQ(
-            q.getId(),
-            Optional.ofNullable(q.getStem()).orElse(""),
-            List.of(), // 실기는 선택지 없음
-            q.getImageUrl()
-        ))
+        .map(q -> {
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+          return new AssistDtos.QuizQ(
+              q.getId(),
+              Optional.ofNullable(q.getStem()).orElse(""),
+              List.of(), // 실기는 선택지 없음
+              q.getImageUrl(),
+              tags
+          );
+        })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(items);
@@ -365,7 +373,10 @@ public class AssistPracticalService {
         .filter(q -> q.getMode() == ExamMode.PRACTICAL)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 6. 순서대로 문제 반환
     List<AssistDtos.QuizQ> quizItems = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -373,18 +384,20 @@ public class AssistPracticalService {
           if (q == null) {
             throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
           }
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
           return new AssistDtos.QuizQ(
               q.getId(),
               Optional.ofNullable(q.getStem()).orElse(""),
               List.of(), // 실기는 선택지 없음
-              q.getImageUrl()
+              q.getImageUrl(),
+              tags
           );
         })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(quizItems);
 
-    // 6. 단계 상태 확인
+    // 7. 단계 상태 확인
     String status = categoryStep.getStatus();
     boolean completed = "COMPLETE".equals(status);
     if ("READY".equals(status)) {
@@ -513,14 +526,21 @@ public class AssistPracticalService {
         .toList();
     sessionManager.allocateQuestions(studySession, questionIds);
 
-    // 7. 문제 반환
+    // 7. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 8. 문제 반환
     List<AssistDtos.QuizQ> items = selectedQuestions.stream()
-        .map(q -> new AssistDtos.QuizQ(
-            q.getId(),
-            Optional.ofNullable(q.getStem()).orElse(""),
-            List.of(), // 실기는 선택지 없음
-            q.getImageUrl()
-        ))
+        .map(q -> {
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+          return new AssistDtos.QuizQ(
+              q.getId(),
+              Optional.ofNullable(q.getStem()).orElse(""),
+              List.of(), // 실기는 선택지 없음
+              q.getImageUrl(),
+              tags
+          );
+        })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(items);
@@ -576,7 +596,10 @@ public class AssistPracticalService {
         .filter(q -> q.getMode() == ExamMode.PRACTICAL)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 6. 순서대로 문제 반환
     List<AssistDtos.QuizQ> quizItems = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -584,18 +607,20 @@ public class AssistPracticalService {
           if (q == null) {
             throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
           }
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
           return new AssistDtos.QuizQ(
               q.getId(),
               Optional.ofNullable(q.getStem()).orElse(""),
               List.of(), // 실기는 선택지 없음
-              q.getImageUrl()
+              q.getImageUrl(),
+              tags
           );
         })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(quizItems);
 
-    // 6. 단계 상태 확인
+    // 7. 단계 상태 확인
     String status = difficultyStep.getStatus();
     boolean completed = "COMPLETE".equals(status);
     if ("READY".equals(status)) {
@@ -885,14 +910,21 @@ public class AssistPracticalService {
         .toList();
     sessionManager.allocateQuestions(studySession, questionIds);
 
-    // 8. 문제 반환
+    // 8. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 9. 문제 반환
     List<AssistDtos.QuizQ> items = pool.stream()
-        .map(q -> new AssistDtos.QuizQ(
-            q.getId(),
-            Optional.ofNullable(q.getStem()).orElse(""),
-            List.of(), // 실기는 선택지 없음
-            q.getImageUrl()
-        ))
+        .map(q -> {
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+          return new AssistDtos.QuizQ(
+              q.getId(),
+              Optional.ofNullable(q.getStem()).orElse(""),
+              List.of(), // 실기는 선택지 없음
+              q.getImageUrl(),
+              tags
+          );
+        })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(items);
@@ -948,7 +980,10 @@ public class AssistPracticalService {
         .filter(q -> q.getMode() == ExamMode.PRACTICAL)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 6. 순서대로 문제 반환
     List<AssistDtos.QuizQ> quizItems = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -956,18 +991,20 @@ public class AssistPracticalService {
           if (q == null) {
             throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
           }
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
           return new AssistDtos.QuizQ(
               q.getId(),
               Optional.ofNullable(q.getStem()).orElse(""),
               List.of(), // 실기는 선택지 없음
-              q.getImageUrl()
+              q.getImageUrl(),
+              tags
           );
         })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(quizItems);
 
-    // 6. 단계 상태 확인
+    // 7. 단계 상태 확인
     String status = weaknessStep.getStatus();
     boolean completed = "COMPLETE".equals(status);
     if ("READY".equals(status)) {
@@ -1682,13 +1719,25 @@ public class AssistPracticalService {
 
     int lim = Math.min(copy.size(), Math.max(1, count));
 
-    List<AssistDtos.QuizQ> items = copy.subList(0, lim).stream()
-        .map(q -> new AssistDtos.QuizQ(
-            q.getId(),
-            Optional.ofNullable(q.getStem()).orElse(""),
-            List.of(), // 실기는 선택지 없음
-            q.getImageUrl()
-        ))
+    List<Question> selectedQuestions = copy.subList(0, lim);
+    List<Long> questionIds = selectedQuestions.stream()
+        .map(Question::getId)
+        .toList();
+
+    // 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    List<AssistDtos.QuizQ> items = selectedQuestions.stream()
+        .map(q -> {
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+          return new AssistDtos.QuizQ(
+              q.getId(),
+              Optional.ofNullable(q.getStem()).orElse(""),
+              List.of(), // 실기는 선택지 없음
+              q.getImageUrl(),
+              tags
+          );
+        })
         .toList();
 
     return new AssistDtos.QuizSet(items);

@@ -43,7 +43,8 @@ public class AssistDtos {
       @Schema(description = "문항 ID") Long questionId,
       @Schema(description = "문항 본문") String text,
       @Schema(description = "선택지 목록(실기는 빈 리스트)") List<Choice> choices,
-      @Schema(description = "문항 이미지 URL(선택)") String imageUrl
+      @Schema(description = "문항 이미지 URL(선택)") String imageUrl,
+      @Schema(description = "태그 목록") List<com.OhRyue.common.dto.TagViewDto> tags
   ) {}
 
   @Schema(description = "객관식 선택지 (Written 전용)")

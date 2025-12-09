@@ -74,6 +74,7 @@ public class AssistWrittenService {
   private final ObjectMapper objectMapper;
   private final AIExplanationService aiExplanationService;
   private final com.OhRyue.certpilot.study.client.ProgressXpClient progressXpClient;
+  private final TagQueryService tagQueryService;
 
   /* ================= 카테고리: 토픽 배열 선택 → 해당 토픽들에서 출제 ================= */
 
@@ -310,7 +311,10 @@ public class AssistWrittenService {
         .toList();
     sessionManager.allocateQuestions(studySession, questionIds);
 
-    // 7. 문제 반환 (MCQ 형식으로 변환)
+    // 7. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 8. 문제 반환 (MCQ 형식으로 변환)
     List<AssistDtos.QuizQ> items = new ArrayList<>();
     for (Question q : selectedQuestions) {
       List<QuestionChoice> raw = Optional.ofNullable(
@@ -330,11 +334,14 @@ public class AssistWrittenService {
           ))
           .toList();
 
+      List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+
       items.add(new AssistDtos.QuizQ(
           q.getId(),
           Optional.ofNullable(q.getStem()).orElse(""),
           choices,
-          q.getImageUrl()
+          q.getImageUrl(),
+          tags
       ));
     }
 
@@ -391,7 +398,10 @@ public class AssistWrittenService {
         .filter(q -> q.getMode() == ExamMode.WRITTEN && q.getType() == QuestionType.MCQ)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환 (MCQ 형식으로 변환)
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 6. 순서대로 문제 반환 (MCQ 형식으로 변환)
     List<AssistDtos.QuizQ> quizItems = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -417,18 +427,21 @@ public class AssistWrittenService {
               ))
               .toList();
 
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+
           return new AssistDtos.QuizQ(
               q.getId(),
               Optional.ofNullable(q.getStem()).orElse(""),
               choices,
-              q.getImageUrl()
+              q.getImageUrl(),
+              tags
           );
         })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(quizItems);
 
-    // 6. 단계 상태 확인
+    // 7. 단계 상태 확인
     String status = categoryStep.getStatus();
     boolean completed = "COMPLETE".equals(status);
     if ("READY".equals(status)) {
@@ -553,7 +566,10 @@ public class AssistWrittenService {
         .toList();
     sessionManager.allocateQuestions(studySession, questionIds);
 
-    // 7. 문제 반환 (MCQ 형식으로 변환)
+    // 7. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 8. 문제 반환 (MCQ 형식으로 변환)
     List<AssistDtos.QuizQ> items = new ArrayList<>();
     for (Question q : selectedQuestions) {
       List<QuestionChoice> raw = Optional.ofNullable(
@@ -573,11 +589,14 @@ public class AssistWrittenService {
           ))
           .toList();
 
+      List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+
       items.add(new AssistDtos.QuizQ(
           q.getId(),
           Optional.ofNullable(q.getStem()).orElse(""),
           choices,
-          q.getImageUrl()
+          q.getImageUrl(),
+          tags
       ));
     }
 
@@ -634,7 +653,10 @@ public class AssistWrittenService {
         .filter(q -> q.getMode() == ExamMode.WRITTEN && q.getType() == QuestionType.MCQ)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환 (MCQ 형식으로 변환)
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 6. 순서대로 문제 반환 (MCQ 형식으로 변환)
     List<AssistDtos.QuizQ> quizItems = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -660,18 +682,21 @@ public class AssistWrittenService {
               ))
               .toList();
 
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+
           return new AssistDtos.QuizQ(
               q.getId(),
               Optional.ofNullable(q.getStem()).orElse(""),
               choices,
-              q.getImageUrl()
+              q.getImageUrl(),
+              tags
           );
         })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(quizItems);
 
-    // 6. 단계 상태 확인
+    // 7. 단계 상태 확인
     String status = difficultyStep.getStatus();
     boolean completed = "COMPLETE".equals(status);
     if ("READY".equals(status)) {
@@ -838,7 +863,10 @@ public class AssistWrittenService {
         .toList();
     sessionManager.allocateQuestions(studySession, questionIds);
 
-    // 8. 문제 반환 (MCQ 형식으로 변환)
+    // 8. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 9. 문제 반환 (MCQ 형식으로 변환)
     List<AssistDtos.QuizQ> items = new ArrayList<>();
     for (Question q : selectedQuestions) {
       List<QuestionChoice> raw = Optional.ofNullable(
@@ -858,11 +886,14 @@ public class AssistWrittenService {
           ))
           .toList();
 
+      List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+
       items.add(new AssistDtos.QuizQ(
           q.getId(),
           Optional.ofNullable(q.getStem()).orElse(""),
           choices,
-          q.getImageUrl()
+          q.getImageUrl(),
+          tags
       ));
     }
 
@@ -919,7 +950,10 @@ public class AssistWrittenService {
         .filter(q -> q.getMode() == ExamMode.WRITTEN && q.getType() == QuestionType.MCQ)
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환 (MCQ 형식으로 변환)
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
+    // 6. 순서대로 문제 반환 (MCQ 형식으로 변환)
     List<AssistDtos.QuizQ> quizItems = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -945,18 +979,21 @@ public class AssistWrittenService {
               ))
               .toList();
 
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+
           return new AssistDtos.QuizQ(
               q.getId(),
               Optional.ofNullable(q.getStem()).orElse(""),
               choices,
-              q.getImageUrl()
+              q.getImageUrl(),
+              tags
           );
         })
         .toList();
 
     AssistDtos.QuizSet set = new AssistDtos.QuizSet(quizItems);
 
-    // 6. 단계 상태 확인
+    // 7. 단계 상태 확인
     String status = weaknessStep.getStatus();
     boolean completed = "COMPLETE".equals(status);
     if ("READY".equals(status)) {
@@ -1679,9 +1716,17 @@ public class AssistWrittenService {
     Collections.shuffle(copy);
 
     int lim = Math.min(copy.size(), Math.max(1, count));
+    List<Question> selectedQuestions = copy.subList(0, lim);
+    List<Long> questionIds = selectedQuestions.stream()
+        .map(Question::getId)
+        .toList();
+
+    // 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+
     List<AssistDtos.QuizQ> items = new ArrayList<>(lim);
 
-    for (Question q : copy.subList(0, lim)) {
+    for (Question q : selectedQuestions) {
       List<QuestionChoice> raw = Optional.ofNullable(
           choiceRepository.findByQuestionId(q.getId())
       ).orElse(List.of());
@@ -1700,11 +1745,14 @@ public class AssistWrittenService {
           ))
           .toList();
 
+      List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+
       items.add(new AssistDtos.QuizQ(
           q.getId(),
           Optional.ofNullable(q.getStem()).orElse(""),
           choices,
-          q.getImageUrl()
+          q.getImageUrl(),
+          tags
       ));
     }
 

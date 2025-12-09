@@ -48,6 +48,7 @@ public class WrittenService {
   private final ProgressXpClient progressXpClient;
   private final ObjectMapper objectMapper;
   private final CurriculumGateway curriculumGateway;
+  private final TagQueryService tagQueryService;
 
   /* ========================= 개념 ========================= */
 
@@ -133,7 +134,10 @@ public class WrittenService {
     Map<Long, Question> questionMap = questionRepository.findByIdIn(questionIds).stream()
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = getTagsByQuestionIds(questionIds);
+
+    // 6. 순서대로 문제 반환
     List<WrittenDtos.MiniQuestion> questions = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -141,7 +145,8 @@ public class WrittenService {
           if (q == null) {
             throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
           }
-          return new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse(""));
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
+          return new WrittenDtos.MiniQuestion(q.getId(), Optional.ofNullable(q.getStem()).orElse(""), tags);
         })
         .toList();
 
@@ -368,7 +373,10 @@ public class WrittenService {
     Map<Long, Question> questionMap = questionRepository.findByIdIn(questionIds).stream()
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = getTagsByQuestionIds(questionIds);
+
+    // 6. 순서대로 문제 반환
     List<WrittenDtos.McqQuestion> questions = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -376,11 +384,13 @@ public class WrittenService {
           if (q == null) {
             throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
           }
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
           return new WrittenDtos.McqQuestion(
               q.getId(),
               Optional.ofNullable(q.getStem()).orElse(""),
               loadChoices(q.getId()),
-              q.getImageUrl()
+              q.getImageUrl(),
+              tags
           );
         })
         .toList();
@@ -661,7 +671,10 @@ public class WrittenService {
     Map<Long, Question> questionMap = questionRepository.findByIdIn(questionIds).stream()
         .collect(Collectors.toMap(Question::getId, q -> q));
 
-    // 5. 순서대로 문제 반환
+    // 5. 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = getTagsByQuestionIds(questionIds);
+
+    // 6. 순서대로 문제 반환
     List<ReviewDtos.ReviewQuestion> questions = items.stream()
         .sorted(Comparator.comparing(StudySessionItem::getOrderNo))
         .map(item -> {
@@ -669,11 +682,13 @@ public class WrittenService {
           if (q == null) {
             throw new IllegalStateException("문제를 찾을 수 없습니다: " + item.getQuestionId());
           }
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(q.getId(), List.of());
           return new ReviewDtos.ReviewQuestion(
               q.getId(),
               Optional.ofNullable(q.getStem()).orElse(""),
               loadReviewChoices(q.getId()),
-              q.getImageUrl()
+              q.getImageUrl(),
+              tags
           );
         })
         .toList();
@@ -1934,13 +1949,18 @@ public class WrittenService {
       throw new IllegalArgumentException("Only OX and MCQ question types are supported. Question ID: " + questionId);
     }
 
+    // 태그 정보 조회
+    List<com.OhRyue.common.dto.TagViewDto> tags = getTagsByQuestionIds(List.of(questionId))
+        .getOrDefault(questionId, List.of());
+
     return new WrittenDtos.QuestionDetailResp(
         question.getId(),
         type,
         stem,
         choices,
         correctAnswer,
-        explanation
+        explanation,
+        tags
     );
   }
 
@@ -2015,6 +2035,9 @@ public class WrittenService {
       }
     }
 
+    // 태그 정보 조회
+    Map<Long, List<com.OhRyue.common.dto.TagViewDto>> tagsByQuestionId = getTagsByQuestionIds(uniqueIds);
+
     // 요청 순서 유지하면서 응답 생성
     Map<Long, Question> questionMap = writtenQuestions.stream()
         .collect(Collectors.toMap(Question::getId, q -> q));
@@ -2037,13 +2060,16 @@ public class WrittenService {
             correctAnswer = correctAnswerMap.getOrDefault(question.getId(), "");
           }
 
+          List<com.OhRyue.common.dto.TagViewDto> tags = tagsByQuestionId.getOrDefault(question.getId(), List.of());
+
           return new WrittenDtos.QuestionDetailResp(
               question.getId(),
               type,
               stem,
               choices,
               correctAnswer,
-              explanation
+              explanation,
+              tags
           );
         })
         .toList();
@@ -2052,6 +2078,13 @@ public class WrittenService {
   }
 
   /* ========================= 내부 유틸 ========================= */
+
+  /**
+   * 문제 ID 목록으로 태그 정보 조회 (TagViewDto 포함)
+   */
+  private Map<Long, List<com.OhRyue.common.dto.TagViewDto>> getTagsByQuestionIds(Collection<Long> questionIds) {
+    return tagQueryService.getTagsByQuestionIds(questionIds, questionTagRepository);
+  }
 
   private Map<Long, Question> fetchQuestions(List<Long> ids, QuestionType expectedType) {
     List<Question> questions = questionRepository.findByIdIn(ids);

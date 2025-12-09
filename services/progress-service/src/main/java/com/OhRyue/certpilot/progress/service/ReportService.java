@@ -28,6 +28,7 @@ public class ReportService {
   private final ReportDailyRepository dailyRepository;
   private final ReportTagSkillRepository tagSkillRepository;
   private final StudyReportClient studyReportClient;
+  private final com.OhRyue.certpilot.progress.feign.StudyTagClient studyTagClient;
   private final StreakService streakService;
   private final BattleRecordRepository battleRecordRepository;
   private final com.OhRyue.certpilot.progress.feign.AccountClient accountClient;
@@ -124,22 +125,88 @@ public class ReportService {
     List<ReportTagSkill> allSkills = tagSkillRepository.findByUserIdAndExamModeOrderByTotalDesc(userId, examMode);
     
     // 2. 약점 태그 추출: 정답률 70% 미만인 것들 중에서 정답률이 가장 낮은 상위 태그 선택
-    List<String> weaknessTags = allSkills.stream()
+    List<String> weaknessTagCodes = allSkills.stream()
         .filter(skill -> skill.getAccuracy().doubleValue() < 70.0)
         .sorted(Comparator.comparing(skill -> skill.getAccuracy().doubleValue())) // 정답률 낮은 순
         .limit(3) // 상위 3개만
         .map(ReportTagSkill::getTag)
         .toList();
     
-    // 3. items는 total 많은 순으로 limit 개수만큼 제한 (리포트 표시용)
+    // 3. 약점 태그 메타 정보 조회
+    final Map<String, com.OhRyue.common.dto.TagViewDto> tagMap = new HashMap<>();
+    if (!weaknessTagCodes.isEmpty()) {
+      try {
+        List<com.OhRyue.common.dto.TagViewDto> tagInfos = studyTagClient.getTagsByCodes(weaknessTagCodes);
+        if (tagInfos != null && !tagInfos.isEmpty()) {
+          tagMap.putAll(tagInfos.stream()
+              .collect(java.util.stream.Collectors.toMap(
+                  com.OhRyue.common.dto.TagViewDto::code,
+                  tag -> tag
+              )));
+        }
+      } catch (Exception e) {
+        // Feign 호출 실패 시 빈 맵 사용 (로그는 Fallback에서 남김)
+        // 태그 메타 정보가 없어도 기본값으로 동작하므로 계속 진행
+      }
+    }
+    
+    // 4. 약점 태그 라벨 생성 (태그 메타 정보가 있으면 labelKo 사용, 없으면 코드 사용)
+    List<String> weaknessTags = weaknessTagCodes.stream()
+        .map(code -> {
+          com.OhRyue.common.dto.TagViewDto tagInfo = tagMap.get(code);
+          return tagInfo != null && tagInfo.labelKo() != null 
+              ? tagInfo.labelKo() 
+              : code;
+        })
+        .toList();
+    
+    // 5. items는 total 많은 순으로 limit 개수만큼 제한 (리포트 표시용)
     List<ReportTagSkill> skillsForItems = allSkills.size() <= limit ? allSkills : allSkills.subList(0, limit);
+    
+    // 6. items에 사용할 태그 코드 수집
+    List<String> itemTagCodes = skillsForItems.stream()
+        .map(ReportTagSkill::getTag)
+        .distinct()
+        .toList();
+    
+    // 7. 태그 메타 정보 조회
+    final Map<String, com.OhRyue.common.dto.TagViewDto> itemTagMap = new HashMap<>();
+    if (!itemTagCodes.isEmpty()) {
+      try {
+        List<com.OhRyue.common.dto.TagViewDto> tagInfos = studyTagClient.getTagsByCodes(itemTagCodes);
+        if (tagInfos != null && !tagInfos.isEmpty()) {
+          itemTagMap.putAll(tagInfos.stream()
+              .collect(java.util.stream.Collectors.toMap(
+                  com.OhRyue.common.dto.TagViewDto::code,
+                  tag -> tag
+              )));
+        }
+      } catch (Exception e) {
+        // Feign 호출 실패 시 빈 맵 사용 (로그는 Fallback에서 남김)
+        // 태그 메타 정보가 없어도 기본값으로 동작하므로 계속 진행
+      }
+    }
+    
+    // 8. TagAbility 생성 (TagViewDto 포함)
     List<TagAbility> items = skillsForItems.stream()
-        .map(skill -> new TagAbility(
-            skill.getTag(),
-            skill.getCorrect(),
-            skill.getTotal(),
-            skill.getAccuracy().doubleValue()
-        ))
+        .map(skill -> {
+          String tagCode = skill.getTag();
+          com.OhRyue.common.dto.TagViewDto tagInfo = itemTagMap.get(tagCode);
+          
+          // 태그 메타 정보가 없으면 기본값 생성
+          if (tagInfo == null) {
+            tagInfo = new com.OhRyue.common.dto.TagViewDto(
+                tagCode, tagCode, null, null, examMode.name(), null
+            );
+          }
+          
+          return new TagAbility(
+              tagInfo,
+              skill.getCorrect(),
+              skill.getTotal(),
+              skill.getAccuracy().doubleValue()
+          );
+        })
         .toList();
     
     String message;
@@ -151,7 +218,7 @@ public class ReportService {
       String highlight = String.join(", ", weaknessTags);
       message = highlight + " 태그 정답률이 낮습니다. 약점 보완 세트를 추천해요.";
     }
-    return new TagAbilityResp(items, weaknessTags, message);
+    return new TagAbilityResp(items, weaknessTagCodes, message);
   }
 
   public RecentRecordsResp recentRecords(String userId, int limit) {

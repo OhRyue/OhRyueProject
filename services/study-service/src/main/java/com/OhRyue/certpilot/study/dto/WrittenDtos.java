@@ -50,7 +50,8 @@ public class WrittenDtos {
   @Schema(name = "MiniQuestion")
   public record MiniQuestion(
       Long questionId, // 문제 ID
-      String text      // 문제 본문
+      String text,     // 문제 본문
+      @Schema(description = "태그 목록") List<com.OhRyue.common.dto.TagViewDto> tags
   ) {}
 
   // OX 제출 요청(배치)
@@ -100,7 +101,8 @@ public class WrittenDtos {
       Long questionId,        // 문제 ID
       String text,            // 문제 본문
       List<McqChoice> choices,// 보기 목록
-      String imageUrl         // 문제 이미지(선택)
+      String imageUrl,        // 문제 이미지(선택)
+      @Schema(description = "태그 목록") List<com.OhRyue.common.dto.TagViewDto> tags
   ) {}
 
   // 보기 1개
@@ -211,7 +213,8 @@ public class WrittenDtos {
       String stem,            // 문제 본문
       List<McqChoice> choices,// 선택지 (MCQ만, OX는 빈 배열)
       String correctAnswer,   // 정답 (OX: "O"/"X", MCQ: "A"/"B"/"C"/"D")
-      String explanation      // 해설 (DB 기본 해설)
+      String explanation,     // 해설 (DB 기본 해설)
+      @Schema(description = "태그 목록") List<com.OhRyue.common.dto.TagViewDto> tags
   ) {}
 
   // 여러 필기 문제 상세 조회 응답

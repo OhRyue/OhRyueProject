@@ -12,6 +12,7 @@ import com.OhRyue.certpilot.study.repository.AnswerLogRepository;
 import com.OhRyue.certpilot.study.repository.QuestionChoiceRepository;
 import com.OhRyue.certpilot.study.repository.QuestionRepository;
 import com.OhRyue.certpilot.study.repository.QuestionTagRepository;
+import com.OhRyue.certpilot.study.service.TagQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class RecommendationService {
   private final QuestionRepository qRepo;
   private final QuestionTagRepository qtagRepo;
   private final QuestionChoiceRepository choiceRepo;
+  private final TagQueryService tagQueryService;
 
   /* ===================== 약점 태그 Top-N ===================== */
   public WeakTagsResp weakTags(int topN, int minTried) {
@@ -59,16 +61,45 @@ public class RecommendationService {
     }
 
     // 정렬 → 상위 N개
-    List<WeakTag> items = tagStat.entrySet().stream()
+    List<String> tagCodes = tagStat.entrySet().stream()
         .filter(e -> e.getValue()[1] >= Math.max(minTried, props.getMinTriedPerTag()))
-        .map(e -> {
-          int correct = e.getValue()[0];
-          int total   = e.getValue()[1];
-          double acc  = total == 0 ? 0.0 : (double) correct / total;
-          return new WeakTag(e.getKey(), correct, total, round2(acc), round2(1.0 - acc));
+        .sorted((e1, e2) -> {
+          int total1 = e1.getValue()[1];
+          int total2 = e2.getValue()[1];
+          int correct1 = e1.getValue()[0];
+          int correct2 = e2.getValue()[0];
+          double acc1 = total1 == 0 ? 0.0 : (double) correct1 / total1;
+          double acc2 = total2 == 0 ? 0.0 : (double) correct2 / total2;
+          double weakness1 = 1.0 - acc1;
+          double weakness2 = 1.0 - acc2;
+          return Double.compare(weakness2, weakness1); // 내림차순
         })
-        .sorted(Comparator.comparingDouble(WeakTag::weakness).reversed())
         .limit(topN)
+        .map(Map.Entry::getKey)
+        .toList();
+
+    // 태그 마스터 정보 조회
+    Map<String, com.OhRyue.common.dto.TagViewDto> tagMap = tagQueryService.getTagsByCodes(tagCodes);
+
+    // WeakTagStatDto 생성
+    List<WeakTagStatDto> items = tagCodes.stream()
+        .map(tagCode -> {
+          int[] stat = tagStat.get(tagCode);
+          int correct = stat[0];
+          int total = stat[1];
+          double acc = total == 0 ? 0.0 : (double) correct / total;
+          double scorePct = round2(acc * 100.0);
+          
+          com.OhRyue.common.dto.TagViewDto tagView = tagMap.getOrDefault(
+              tagCode,
+              // 태그 마스터에 없는 경우 기본값 생성
+              new com.OhRyue.common.dto.TagViewDto(
+                  tagCode, tagCode, null, null, null, null
+              )
+          );
+          
+          return new WeakTagStatDto(tagView, scorePct, total);
+        })
         .toList();
 
     return new WeakTagsResp(items);

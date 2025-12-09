@@ -38,8 +38,8 @@ public class ReportDtos {
 
   @Schema(name = "TagAbility", description = "태그별 능력치")
   public record TagAbility(
-      @Schema(description = "태그명", example = "데이터베이스")
-      String tag,
+      @Schema(description = "태그 정보")
+      com.OhRyue.common.dto.TagViewDto tag,
       @Schema(description = "정답 개수", example = "38")
       long correct,
       @Schema(description = "전체 개수", example = "45")

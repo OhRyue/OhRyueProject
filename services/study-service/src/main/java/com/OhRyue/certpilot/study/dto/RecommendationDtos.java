@@ -11,8 +11,19 @@ import java.util.List;
 public class RecommendationDtos {
 
   /* 약점 태그 응답 */
+  @Deprecated
   public record WeakTag(String tag, int correct, int total, double accuracy, double weakness) {}
-  public record WeakTagsResp(List<WeakTag> tags) {}
+  
+  /**
+   * 약점 태그 통계 (TagViewDto 포함)
+   */
+  public record WeakTagStatDto(
+      com.OhRyue.common.dto.TagViewDto tag,
+      double scorePct,
+      int questionCount
+  ) {}
+  
+  public record WeakTagsResp(List<WeakTagStatDto> tags) {}
 
   /* 태그 기반 퀴즈 요청
      - allowedDifficulties, recentWrongWeight 등은 null이면 서버 기본값 사용
