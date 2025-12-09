@@ -5,6 +5,7 @@ import com.OhRyue.certpilot.study.domain.StudySession;
 import com.OhRyue.certpilot.study.domain.StudySessionItem;
 import com.OhRyue.certpilot.study.dto.InternalDtos;
 import com.OhRyue.certpilot.study.repository.QuestionRepository;
+import com.OhRyue.certpilot.study.repository.LearningStepRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionItemRepository;
 import com.OhRyue.certpilot.study.repository.StudySessionRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -27,6 +28,7 @@ public class StudyInternalService {
     private final StudySessionRepository sessionRepository;
     private final StudySessionItemRepository itemRepository;
     private final QuestionRepository questionRepository;
+    private final LearningStepRepository learningStepRepository;
     private final ObjectMapper objectMapper;
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
@@ -44,9 +46,43 @@ public class StudyInternalService {
             throw new IllegalArgumentException("Session does not belong to user: " + userId);
         }
 
-        // 세션 아이템들 조회 (순서대로)
-        List<StudySessionItem> items = itemRepository.findBySessionIdOrderByOrderNoAsc(sessionId);
-        
+        // Micro는 MINI + MCQ 두 세션으로 나뉘므로 LearningSession 단위로 질문을 합산한다.
+        List<StudySessionItem> items;
+        Map<Long, String> sessionStepMap = new HashMap<>();
+
+        if ("MICRO".equals(session.getMode()) && session.getLearningStep() != null
+                && session.getLearningStep().getLearningSession() != null) {
+            var learningSession = session.getLearningStep().getLearningSession();
+            var steps = learningStepRepository.findByLearningSessionIdOrderByIdAsc(learningSession.getId());
+
+            var microSessions = steps.stream()
+                    .filter(step -> step.getStudySession() != null)
+                    .filter(step -> {
+                        String code = step.getStepCode();
+                        return "MINI".equals(code) || "MCQ".equals(code) || "MICRO_MINI".equals(code) || "MICRO_MCQ".equals(code);
+                    })
+                    .map(step -> {
+                        StudySession ss = step.getStudySession();
+                        sessionStepMap.put(ss.getId(), step.getStepCode());
+                        return ss;
+                    })
+                    .toList();
+
+            if (!microSessions.isEmpty()) {
+                items = microSessions.stream()
+                        .flatMap(s -> itemRepository.findBySessionIdOrderByOrderNoAsc(s.getId()).stream())
+                        .toList();
+            } else {
+                items = itemRepository.findBySessionIdOrderByOrderNoAsc(sessionId);
+                sessionStepMap.put(sessionId, session.getLearningStep().getStepCode());
+            }
+        } else {
+            items = itemRepository.findBySessionIdOrderByOrderNoAsc(sessionId);
+            if (session.getLearningStep() != null) {
+                sessionStepMap.put(sessionId, session.getLearningStep().getStepCode());
+            }
+        }
+
         // 문제 ID 목록 추출
         List<Long> questionIds = items.stream()
                 .map(StudySessionItem::getQuestionId)
@@ -56,44 +92,48 @@ public class StudyInternalService {
         Map<Long, Question> questionMap = questionRepository.findByIdIn(questionIds).stream()
                 .collect(Collectors.toMap(Question::getId, q -> q));
 
-        // 문제 상세 리스트 구성
+        // 문제 상세 리스트 구성 (MINI 먼저, 그 다음 MCQ 순서를 유지)
         List<InternalDtos.QuestionDetailDto> questionDetails = new ArrayList<>();
-        for (StudySessionItem item : items) {
-            Question question = questionMap.get(item.getQuestionId());
-            if (question == null) {
-                continue;
-            }
+        items.stream()
+                .sorted((a, b) -> {
+                    String stepA = sessionStepMap.getOrDefault(a.getSessionId(), "");
+                    String stepB = sessionStepMap.getOrDefault(b.getSessionId(), "");
+                    int stepOrderA = ("MINI".equals(stepA) || "MICRO_MINI".equals(stepA)) ? 0 : 1;
+                    int stepOrderB = ("MINI".equals(stepB) || "MICRO_MINI".equals(stepB)) ? 0 : 1;
+                    if (stepOrderA != stepOrderB) return Integer.compare(stepOrderA, stepOrderB);
+                    return Integer.compare(a.getOrderNo(), b.getOrderNo());
+                })
+                .forEachOrdered(item -> {
+                    Question question = questionMap.get(item.getQuestionId());
+                    if (question == null) {
+                        return;
+                    }
 
-            // userAnswerJson 파싱
-            String myAnswer = extractMyAnswer(item.getUserAnswerJson(), question.getType());
-            
-            // 정답 추출
-            String correctAnswer = extractCorrectAnswer(question);
-            
-            // 시간 계산 (answeredAt - createdAt)
-            Long timeTakenMs = null;
-            if (item.getAnsweredAt() != null && item.getCreatedAt() != null) {
-                timeTakenMs = item.getAnsweredAt().toEpochMilli() - item.getCreatedAt().toEpochMilli();
-            }
+                    String myAnswer = extractMyAnswer(item.getUserAnswerJson(), question.getType());
+                    String correctAnswer = extractCorrectAnswer(question);
+                    Long timeTakenMs = null;
+                    if (item.getAnsweredAt() != null && item.getCreatedAt() != null) {
+                        timeTakenMs = item.getAnsweredAt().toEpochMilli() - item.getCreatedAt().toEpochMilli();
+                    }
 
-            questionDetails.add(new InternalDtos.QuestionDetailDto(
-                    item.getOrderNo(),
-                    item.getQuestionId(),
-                    question.getType().name(),
-                    Optional.ofNullable(question.getStem()).orElse(""),
-                    myAnswer,
-                    correctAnswer,
-                    Boolean.TRUE.equals(item.getCorrect()),
-                    item.getAnsweredAt() != null 
-                            ? item.getAnsweredAt().atZone(ZoneId.of("Asia/Seoul")).toLocalDateTime()
-                            : null,
-                    timeTakenMs,
-                    item.getScore()
-            ));
-        }
+                    questionDetails.add(new InternalDtos.QuestionDetailDto(
+                            questionDetails.size() + 1, // 재정렬된 순번
+                            item.getQuestionId(),
+                            question.getType().name(),
+                            Optional.ofNullable(question.getStem()).orElse(""),
+                            myAnswer,
+                            correctAnswer,
+                            Boolean.TRUE.equals(item.getCorrect()),
+                            item.getAnsweredAt() != null
+                                    ? item.getAnsweredAt().atZone(ZoneId.of("Asia/Seoul")).toLocalDateTime()
+                                    : null,
+                            timeTakenMs,
+                            item.getScore()
+                    ));
+                });
 
         return new InternalDtos.StudySessionDetailDto(
-                sessionId,
+                session.getId(),
                 userId,
                 questionDetails
         );

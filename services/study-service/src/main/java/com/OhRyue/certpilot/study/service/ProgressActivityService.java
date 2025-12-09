@@ -3,7 +3,6 @@ package com.OhRyue.certpilot.study.service;
 import com.OhRyue.certpilot.study.client.CertCurriculumClient;
 import com.OhRyue.certpilot.study.client.ProgressActivityClient;
 import com.OhRyue.certpilot.study.domain.StudySession;
-import com.OhRyue.certpilot.study.domain.enums.ExamMode;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -11,11 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -67,31 +64,94 @@ public class ProgressActivityService {
             if (session.getTopicScopeJson() != null && !session.getTopicScopeJson().isBlank()) {
                 try {
                     Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
-                    Object topicIdObj = scope.get("topicId");
-                    if (topicIdObj != null) {
-                        topicId = ((Number) topicIdObj).longValue();
-                        // cert-service에서 topicName 가져오기
-                        try {
-                            CertCurriculumClient.TopicResponse topic = certCurriculumClient.getTopic(topicId);
-                            if (topic != null) {
-                                topicName = topic.title();
-                            }
-                        } catch (Exception e) {
-                            log.warn("Failed to get topic name from cert-service: topicId={}", topicId, e);
+                    
+                    // ASSIST 세션의 경우 특별 처리
+                    if (activityGroup.equals("ASSIST")) {
+                        // 약점 태그명 추출
+                        Object weaknessTagObj = scope.get("weaknessTagName");
+                        if (weaknessTagObj != null) {
+                            weaknessTagName = weaknessTagObj.toString();
                         }
-                    }
-                    // 약점 태그명 추출
-                    Object weaknessTagObj = scope.get("weaknessTagName");
-                    if (weaknessTagObj != null) {
-                        weaknessTagName = weaknessTagObj.toString();
-                    }
-                    // 난이도 추출
-                    Object difficultyObj = scope.get("difficulty");
-                    if (difficultyObj != null) {
-                        difficulty = difficultyObj.toString();
+                        // weaknessTags 배열에서 첫 번째 태그명 추출
+                        if (weaknessTagName == null) {
+                            Object weaknessTagsObj = scope.get("weaknessTags");
+                            if (weaknessTagsObj instanceof java.util.List && !((java.util.List<?>) weaknessTagsObj).isEmpty()) {
+                                Object firstTag = ((java.util.List<?>) weaknessTagsObj).get(0);
+                                if (firstTag != null) {
+                                    weaknessTagName = firstTag.toString();
+                                }
+                            }
+                        }
+                        
+                        // 난이도 추출
+                        Object difficultyObj = scope.get("difficulty");
+                        if (difficultyObj != null) {
+                            difficulty = difficultyObj.toString();
+                        }
+                        
+                        // topicIds 배열에서 첫 번째 topicId로 topicName 가져오기
+                        Object topicIdsObj = scope.get("topicIds");
+                        if (topicIdsObj instanceof java.util.List && !((java.util.List<?>) topicIdsObj).isEmpty()) {
+                            Object firstTopicIdObj = ((java.util.List<?>) topicIdsObj).get(0);
+                            if (firstTopicIdObj instanceof Number) {
+                                topicId = ((Number) firstTopicIdObj).longValue();
+                                try {
+                                    CertCurriculumClient.TopicResponse topic = certCurriculumClient.getTopic(topicId);
+                                    if (topic != null && topic.title() != null && !topic.title().isBlank()) {
+                                        topicName = topic.title();
+                                    }
+                                } catch (Exception e) {
+                                    log.debug("Failed to get topic name from cert-service: topicId={}", topicId, e);
+                                }
+                            }
+                        }
+                        
+                        // topicName이 없으면 assistType에 따라 기본값 설정
+                        if (topicName == null || topicName.isBlank()) {
+                            if ("DIFFICULTY".equals(assistType)) {
+                                topicName = "난이도 학습";
+                            } else if ("WEAKNESS".equals(assistType)) {
+                                topicName = "약점 보완";
+                            } else if ("CATEGORY".equals(assistType)) {
+                                topicName = "카테고리 학습";
+                            } else {
+                                topicName = "보조 학습";
+                            }
+                        }
+                    } else {
+                        // MAIN 세션의 경우 기존 로직 유지
+                        Object topicIdObj = scope.get("topicId");
+                        if (topicIdObj == null) {
+                            topicIdObj = scope.get("rootTopicId");
+                        }
+                        if (topicIdObj != null) {
+                            topicId = ((Number) topicIdObj).longValue();
+                            // cert-service에서 topicName 가져오기
+                            try {
+                                CertCurriculumClient.TopicResponse topic = certCurriculumClient.getTopic(topicId);
+                                if (topic != null) {
+                                    topicName = topic.title();
+                                }
+                            } catch (Exception e) {
+                                log.warn("Failed to get topic name from cert-service: topicId={}", topicId, e);
+                            }
+                        }
                     }
                 } catch (Exception e) {
                     log.warn("Failed to parse topicScopeJson: {}", session.getTopicScopeJson(), e);
+                }
+            }
+            
+            // ASSIST 세션인데 topicName이 여전히 없으면 기본값 설정
+            if (activityGroup.equals("ASSIST") && (topicName == null || topicName.isBlank())) {
+                if ("DIFFICULTY".equals(assistType)) {
+                    topicName = "난이도 학습";
+                } else if ("WEAKNESS".equals(assistType)) {
+                    topicName = "약점 보완";
+                } else if ("CATEGORY".equals(assistType)) {
+                    topicName = "카테고리 학습";
+                } else {
+                    topicName = "보조 학습";
                 }
             }
 

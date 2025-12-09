@@ -178,9 +178,20 @@ public class ActivityService {
 
     /**
      * 활동 생성 (내부 API용)
+     * 중복 방지: sourceService와 sourceSessionId가 동일한 Activity가 이미 존재하면 생성하지 않음
      */
     @Transactional
     public ProgressActivity createActivity(ProgressActivityCreateReq req) {
+        // 중복 체크: 동일한 sourceService와 sourceSessionId로 이미 Activity가 생성되었는지 확인
+        if (req.sourceService() != null && req.sourceSessionId() != null) {
+            List<ProgressActivity> existing = activityRepository.findBySource(
+                    req.userId(), req.sourceService(), req.sourceSessionId());
+            if (!existing.isEmpty()) {
+                log.debug("Activity already exists for source: userId={}, sourceService={}, sourceSessionId={}, skipping creation",
+                        req.userId(), req.sourceService(), req.sourceSessionId());
+                return existing.get(0); // 기존 Activity 반환
+            }
+        }
 
         BigDecimal accuracy = req.accuracyPct() != null
                 ? BigDecimal.valueOf(req.accuracyPct())

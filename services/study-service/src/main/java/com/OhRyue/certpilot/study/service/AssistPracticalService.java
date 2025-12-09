@@ -1213,9 +1213,13 @@ public class AssistPracticalService {
     difficultyStep.setUpdatedAt(Instant.now());
     learningStepRepository.save(difficultyStep);
 
-    // 8. StudySession 종료
-    if (!"SUBMITTED".equals(studySession.getStatus()) && !"CLOSED".equals(studySession.getStatus())) {
-      sessionManager.closeSession(studySession, scorePct, metadata);
+    // 8. StudySession 종료 및 finalize
+    // ASSIST 세션 완료 시 Activity 생성 보장: 세션이 완료되었으면 항상 finalizeStudySession 호출
+    // (이미 SUBMITTED 상태여도 Activity가 생성되지 않았을 수 있으므로 재호출 허용)
+    if (!"CLOSED".equals(studySession.getStatus())) {
+      // finalizeStudySession 호출 (Activity 생성 및 정확한 통계 계산)
+      // finalizeStudySession 내부에서 이미 SUBMITTED 상태인 경우도 처리 가능
+      StudySessionManager.FinalizeResult finalizeResult = sessionManager.finalizeStudySession(studySession);
     }
 
     // 9. 다음 단계 결정 (오답이 있으면 REVIEW_WRONG, 없으면 SUMMARY)
@@ -1614,9 +1618,11 @@ public class AssistPracticalService {
             learningStep.setUpdatedAt(Instant.now());
             learningStepRepository.save(learningStep);
             
-            // StudySession 종료
-            if (!"SUBMITTED".equals(studySession.getStatus()) && !"CLOSED".equals(studySession.getStatus())) {
-              sessionManager.closeSession(studySession, scorePct, metadata);
+            // StudySession 종료 및 finalize (Activity 생성 보장)
+            // ASSIST 세션 완료 시 Activity 생성 보장: 세션이 완료되었으면 항상 finalizeStudySession 호출
+            if (!"CLOSED".equals(studySession.getStatus())) {
+              // finalizeStudySession 호출 (Activity 생성 및 정확한 통계 계산)
+              StudySessionManager.FinalizeResult finalizeResult = sessionManager.finalizeStudySession(studySession);
             }
             
             // 다음 단계 결정 및 활성화

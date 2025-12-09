@@ -375,6 +375,44 @@ public class StudySessionManager {
                 .count();
         int correct = (int) correctCount;
         
+        // Micro 플로우는 MINI + MCQ가 같은 LearningSession 안에서 분리 세션으로 진행되므로
+        // Activity 집계 시 두 세션을 합산한다. (progress-service Activity header/정답률 일치용)
+        int activityTotal = total;
+        int activityCorrect = correct;
+        double activityScorePct =  total > 0 ? Math.round((correct * 100.0) / total * 100.0) / 100.0 : 0.0;
+
+        if ("MICRO".equals(session.getMode()) && session.getLearningStep() != null
+                && session.getLearningStep().getLearningSession() != null) {
+            var learningSession = session.getLearningStep().getLearningSession();
+            // 같은 LearningSession 내 MINI/MCQ 세션들을 모두 모아서 합산
+            var steps = learningStepRepository.findByLearningSessionIdOrderByIdAsc(learningSession.getId());
+            var microSessions = steps.stream()
+                    .filter(step -> step.getStudySession() != null)
+                    .filter(step -> {
+                        String code = step.getStepCode();
+                        return "MINI".equals(code) || "MCQ".equals(code) || "MICRO_MINI".equals(code) || "MICRO_MCQ".equals(code);
+                    })
+                    .map(com.OhRyue.certpilot.study.domain.LearningStep::getStudySession)
+                    .toList();
+
+            if (!microSessions.isEmpty()) {
+                List<StudySessionItem> combined = microSessions.stream()
+                        .flatMap(s -> items(s.getId()).stream())
+                        .toList();
+
+                int combinedTotal = combined.size();
+                int combinedCorrect = (int) combined.stream()
+                        .filter(item -> Boolean.TRUE.equals(item.getCorrect()))
+                        .count();
+
+                activityTotal = combinedTotal;
+                activityCorrect = combinedCorrect;
+                activityScorePct = combinedTotal > 0
+                        ? Math.round((combinedCorrect * 100.0) / combinedTotal * 100.0) / 100.0
+                        : 0.0;
+            }
+        }
+
         // 3. score_pct 계산 (반올림하여 소수점 2자리)
         double scorePct = total > 0 ? Math.round((correct * 100.0) / total * 100.0) / 100.0 : 0.0;
         
@@ -426,7 +464,12 @@ public class StudySessionManager {
         
         // 8. ProgressActivity 생성 (비동기)
         try {
-            progressActivityService.createActivityForSession(session, total, correct, scorePct);
+            // MINI 단계(초기 OX)만으로 Activity가 생성되지 않도록 보호
+            String stepCode = session.getLearningStep() != null ? session.getLearningStep().getStepCode() : null;
+            boolean isMiniStep = "MINI".equals(stepCode) || "MICRO_MINI".equals(stepCode);
+            if (!isMiniStep) {
+                progressActivityService.createActivityForSession(session, activityTotal, activityCorrect, activityScorePct);
+            }
         } catch (Exception e) {
             // Activity 생성 실패해도 세션 종료는 계속 진행
             // 로그는 ProgressActivityService에서 처리
