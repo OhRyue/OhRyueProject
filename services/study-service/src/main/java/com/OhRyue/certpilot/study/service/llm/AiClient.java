@@ -35,6 +35,7 @@ public interface AiClient {
   record GradeRequest(
       String question,
       String rubric,
+      String correctAnswer,
       String userAnswer,
       Map<String, Object> meta
   ) {}

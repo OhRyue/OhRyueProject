@@ -294,10 +294,7 @@ public class PracticalService {
     // 누적 로직
     int prevTotal = readInt(prevMiniMeta, "total");
     int prevCorrect = readInt(prevMiniMeta, "correct");
-    @SuppressWarnings("unchecked")
-    List<Long> prevWrongIds = prevMiniMeta.get("wrongQuestionIds") instanceof List<?>
-        ? (List<Long>) prevMiniMeta.get("wrongQuestionIds")
-        : new ArrayList<>();
+    List<Long> prevWrongIds = new ArrayList<>(readList(prevMiniMeta, "wrongQuestionIds"));
 
     int newTotal = prevTotal + req.answers().size();
     int newCorrect = prevCorrect + correctCount;
@@ -609,11 +606,14 @@ public class PracticalService {
         wrongIds.add(question.getId());
       }
 
+      String baseExplanation = Optional.ofNullable(question.getSolutionText()).orElse("");
+      String aiExplanation = correct ? "" : Optional.ofNullable(result.explain()).orElse("");
+
       items.add(new PracticalDtos.PracticalSubmitItem(
           question.getId(),
           correct,
-          Optional.ofNullable(question.getSolutionText()).orElse(""),
-          result.explain()
+          baseExplanation,
+          aiExplanation
       ));
 
       Map<String, Object> answerJson = new HashMap<>();
@@ -624,7 +624,7 @@ public class PracticalService {
       // 순서는 세션에 할당된 순서 사용
       int orderNo = questionOrderMap.get(question.getId());
       Map<String, Object> aiExplainMap = new HashMap<>();
-      aiExplainMap.put("explain", result.explain());
+      aiExplainMap.put("explain", aiExplanation);
       aiExplainMap.put("tips", result.tips());
       aiExplainMap.put("aiFailed", result.aiFailed());
       StudySessionItem item = sessionManager.upsertItem(
@@ -972,11 +972,14 @@ public class PracticalService {
         wrongIds.add(question.getId());
       }
 
+      String baseExplanation = Optional.ofNullable(question.getSolutionText()).orElse("");
+      String aiExplanation = correct ? "" : Optional.ofNullable(result.explain()).orElse("");
+
       items.add(new PracticalDtos.PracticalSubmitItem(
           question.getId(),
           correct,
-          Optional.ofNullable(question.getSolutionText()).orElse(""),
-          result.explain()
+          baseExplanation,
+          aiExplanation
       ));
 
       Map<String, Object> answerJson = new HashMap<>();
@@ -993,7 +996,7 @@ public class PracticalService {
           toJson(answerJson),
           correct,
           correct ? 100 : 0,  // 하위 호환성을 위해 점수도 저장
-          toJson(Map.of("explain", result.explain(), "tips", result.tips()))
+          toJson(Map.of("explain", aiExplanation, "tips", result.tips()))
       );
 
       persistUserAnswer(
@@ -1026,9 +1029,7 @@ public class PracticalService {
     // 누적 로직
     prevTotal = readInt(prevPracticalMeta, "total");
     prevCorrect = readInt(prevPracticalMeta, "correct");
-    prevWrongIds = prevPracticalMeta.get("wrongQuestionIds") instanceof List<?>
-        ? (List<Long>) prevPracticalMeta.get("wrongQuestionIds")
-        : new ArrayList<>();
+    prevWrongIds = new ArrayList<>(readList(prevPracticalMeta, "wrongQuestionIds"));
 
     int newTotal = prevTotal + req.answers().size();
     int newCorrect = prevCorrect + correctCount;
@@ -1757,6 +1758,8 @@ public class PracticalService {
     answerJson.put("correct", isCorrect);
     answerJson.put("tips", result.tips());
 
+    String aiExplanation = isCorrect ? "" : Optional.ofNullable(result.explain()).orElse("");
+
     StudySessionItem item = sessionManager.upsertItem(
         session,
         question.getId(),
@@ -1764,7 +1767,7 @@ public class PracticalService {
         toJson(answerJson),
         isCorrect,
         isCorrect ? 100 : 0,
-        toJson(Map.of("explain", result.explain(), "tips", result.tips()))
+        toJson(Map.of("explain", aiExplanation, "tips", result.tips()))
     );
 
     persistUserAnswer(userId, question, req.userText(), isCorrect, isCorrect ? 100 : 0, session, item, "PRACTICAL_REVIEW");
@@ -1777,10 +1780,7 @@ public class PracticalService {
 
     int prevTotal = readInt(prevPracticalMeta, "total");
     int prevCorrect = readInt(prevPracticalMeta, "correct");
-    @SuppressWarnings("unchecked")
-    List<Long> prevWrongIds = prevPracticalMeta.get("wrongQuestionIds") instanceof List<?>
-        ? (List<Long>) prevPracticalMeta.get("wrongQuestionIds")
-        : new ArrayList<>();
+    List<Long> prevWrongIds = new ArrayList<>(readList(prevPracticalMeta, "wrongQuestionIds"));
 
     int newTotal = prevTotal + 1;
     int newCorrect = prevCorrect + (isCorrect ? 1 : 0);
@@ -1819,7 +1819,6 @@ public class PracticalService {
     learningStepRepository.save(practicalStep);
 
     // 실기 Review 모드는 AI 해설을 제공함 (일반 실기 모드와 동일)
-    String aiExplanation = Optional.ofNullable(result.explain()).orElse("");
     Boolean aiExplanationFailed = Optional.ofNullable(result.aiFailed()).orElse(false);
 
     return new PracticalDtos.PracticalReviewGradeOneResp(

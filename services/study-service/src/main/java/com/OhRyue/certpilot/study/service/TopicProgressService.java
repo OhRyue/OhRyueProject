@@ -211,15 +211,53 @@ public class TopicProgressService {
         .count();
 
     // 7. review 완료 카운트: getBatchTopicReviewStatus와 동일한 로직 사용
-    // LearningSession의 status="DONE"이고 trulyCompleted=true인 것만 카운트 (TRULY_COMPLETED만 포함)
-    List<LearningSession> reviewSessions = reviewTopicIds.isEmpty() 
-        ? List.of()
-        : learningSessionRepository.findByUserIdAndTopicIdInAndMode(userId, reviewTopicIds, "REVIEW");
+    // StudySession의 completed=1 AND passed=1인 것만 카운트 (TRULY_COMPLETED만 포함)
+    List<StudySession> allReviewSessions = studySessionRepository
+        .findByUserIdAndModeAndExamMode(userId, "REVIEW", examMode);
 
-    long completedReviewCount = reviewSessions.stream()
-        .filter(session -> "DONE".equals(session.getStatus()) && Boolean.TRUE.equals(session.getTrulyCompleted()))
-        .map(LearningSession::getTopicId)
-        .distinct()
+    // reviewTopicIds에 해당하는 세션만 필터링 (topic_scope_json에서 rootTopicId 추출)
+    Map<Long, List<StudySession>> reviewSessionsByRootTopic = allReviewSessions.stream()
+        .filter(session -> {
+          try {
+            if (session.getTopicScopeJson() == null || session.getTopicScopeJson().isBlank()) {
+              return false;
+            }
+            Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
+            Object rootTopicIdObj = scope.get("rootTopicId");
+            return rootTopicIdObj != null && reviewTopicIds.contains(((Number) rootTopicIdObj).longValue());
+          } catch (Exception e) {
+            return false;
+          }
+        })
+        .collect(Collectors.groupingBy(session -> {
+          try {
+            Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
+            Object rootTopicIdObj = scope.get("rootTopicId");
+            return rootTopicIdObj != null ? ((Number) rootTopicIdObj).longValue() : 0L;
+          } catch (Exception e) {
+            return 0L;
+          }
+        }));
+
+    // 각 rootTopicId에 대해 TRULY_COMPLETED 상태인지 확인
+    long completedReviewCount = reviewTopicIds.stream()
+        .filter(rootTopicId -> {
+          List<StudySession> topicSessions = reviewSessionsByRootTopic.getOrDefault(rootTopicId, List.of());
+          
+          if (topicSessions.isEmpty()) {
+            return false;
+          }
+          
+          // 가장 최근 완료된 세션 찾기
+          StudySession latestCompletedSession = topicSessions.stream()
+              .filter(s -> Boolean.TRUE.equals(s.getCompleted()) && 
+                          ("SUBMITTED".equals(s.getStatus()) || "CLOSED".equals(s.getStatus())))
+              .max((s1, s2) -> s1.getStartedAt().compareTo(s2.getStartedAt()))
+              .orElse(null);
+          
+          // completed=1 AND passed=1 → TRULY_COMPLETED
+          return latestCompletedSession != null && Boolean.TRUE.equals(latestCompletedSession.getPassed());
+        })
         .count();
 
     long completedCount = completedMicroCount + completedReviewCount;
@@ -237,49 +275,78 @@ public class TopicProgressService {
     String userId = AuthUserUtil.getCurrentUserId();
     String modeStr = "REVIEW";  // Review 모드는 항상 "REVIEW" 문자열
 
-    // 여러 rootTopicId의 학습 세션을 한 번에 조회 (mode="REVIEW")
-    List<LearningSession> allSessions = learningSessionRepository
-        .findByUserIdAndTopicIdInAndMode(userId, rootTopicIds, modeStr);
+    // StudySession 조회: mode="REVIEW", examMode
+    List<StudySession> allReviewSessions = studySessionRepository
+        .findByUserIdAndModeAndExamMode(userId, modeStr, examMode);
 
-    // rootTopicId별로 세션 그룹화
-    Map<Long, List<LearningSession>> sessionsByRootTopic = allSessions.stream()
-        .collect(Collectors.groupingBy(LearningSession::getTopicId));
+    // rootTopicId별로 세션 그룹화 (topic_scope_json에서 rootTopicId 추출)
+    Map<Long, List<StudySession>> sessionsByRootTopic = allReviewSessions.stream()
+        .filter(session -> {
+          try {
+            if (session.getTopicScopeJson() == null || session.getTopicScopeJson().isBlank()) {
+              return false;
+            }
+            Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
+            Object rootTopicIdObj = scope.get("rootTopicId");
+            return rootTopicIdObj != null && rootTopicIds.contains(((Number) rootTopicIdObj).longValue());
+          } catch (Exception e) {
+            return false;
+          }
+        })
+        .collect(Collectors.groupingBy(session -> {
+          try {
+            Map<String, Object> scope = objectMapper.readValue(session.getTopicScopeJson(), MAP_TYPE);
+            Object rootTopicIdObj = scope.get("rootTopicId");
+            return rootTopicIdObj != null ? ((Number) rootTopicIdObj).longValue() : 0L;
+          } catch (Exception e) {
+            return 0L;
+          }
+        }));
 
     // 각 rootTopicId에 대한 상태 결정
     // 완료 상태(status)와 이어서 하기 가능 여부(resumable)는 독립적으로 결정
     List<TopicReviewStatus> statuses = rootTopicIds.stream()
         .map(rootTopicId -> {
-          List<LearningSession> topicSessions = sessionsByRootTopic.getOrDefault(rootTopicId, List.of());
+          List<StudySession> topicSessions = sessionsByRootTopic.getOrDefault(rootTopicId, List.of());
           
           if (topicSessions.isEmpty()) {
             // 시작 안함
             return new TopicReviewStatus(rootTopicId, "NOT_STARTED", false);
           }
           
-          // 완료 상태 결정: DONE 세션 중 가장 최근 것 찾기
-          LearningSession completedSession = topicSessions.stream()
-              .filter(s -> "DONE".equals(s.getStatus()))
-              .max((s1, s2) -> s1.getUpdatedAt().compareTo(s2.getUpdatedAt()))
+          // 가장 최근 세션 찾기 (완료된 세션 우선, 그 다음 진행 중 세션)
+          StudySession latestCompletedSession = topicSessions.stream()
+              .filter(s -> Boolean.TRUE.equals(s.getCompleted()) && 
+                          ("SUBMITTED".equals(s.getStatus()) || "CLOSED".equals(s.getStatus())))
+              .max((s1, s2) -> s1.getStartedAt().compareTo(s2.getStartedAt()))
               .orElse(null);
           
-          // 이어서 하기 가능 여부: IN_PROGRESS 세션 존재 여부
+          // 이어서 하기 가능 여부: 진행 중인 세션 존재 여부
+          // OPEN 상태이거나, SUBMITTED 상태이지만 completed=false인 경우
           boolean hasInProgress = topicSessions.stream()
-              .anyMatch(s -> "IN_PROGRESS".equals(s.getStatus()));
+              .anyMatch(s -> "OPEN".equals(s.getStatus()) || 
+                           ("SUBMITTED".equals(s.getStatus()) && !Boolean.TRUE.equals(s.getCompleted())));
           
-          // 완료 상태 결정 (DONE 세션의 완료 기록 기반)
+          // 완료 상태 결정 (completed와 passed 필드 기반)
           String status;
-          if (completedSession == null) {
-            // 완료된 세션이 없으면 시작 안함
-            status = "NOT_STARTED";
-          } else if (Boolean.TRUE.equals(completedSession.getTrulyCompleted())) {
-            // 진정한 완료 (모든 문제를 맞춤)
+          if (latestCompletedSession == null) {
+            // 완료된 세션이 없으면
+            if (hasInProgress) {
+              // 진행 중인 세션이 있으면
+              status = "IN_PROGRESS";
+            } else {
+              // 진행 중인 세션도 없으면 시작 안함
+              status = "NOT_STARTED";
+            }
+          } else if (Boolean.TRUE.equals(latestCompletedSession.getPassed())) {
+            // completed=1 AND passed=1 → TRULY_COMPLETED
             status = "TRULY_COMPLETED";
           } else {
-            // 일반 완료 (전체 과정 완료했지만 문제를 틀림)
+            // completed=1 AND passed=0 → COMPLETED
             status = "COMPLETED";
           }
           
-          // resumable은 IN_PROGRESS 세션 존재 여부로만 결정 (완료 상태와 독립적)
+          // resumable은 진행 중인 세션 존재 여부로만 결정 (완료 상태와 독립적)
           return new TopicReviewStatus(rootTopicId, status, hasInProgress);
         })
         .collect(Collectors.toList());

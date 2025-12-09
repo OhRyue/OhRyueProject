@@ -93,6 +93,7 @@ public class AIExplanationService {
     AiClient.GradeRequest request = new AiClient.GradeRequest(
         question.getStem(),
         question.getSolutionText(),
+        question.getAnswerKey(),
         userAnswerText,
         Map.of(
             "questionId", question.getId(),
@@ -131,6 +132,7 @@ public class AIExplanationService {
     AiClient.GradeRequest request = new AiClient.GradeRequest(
         question.getStem(),
         question.getSolutionText(),
+        question.getAnswerKey(),
         userAnswerText,
         Map.of(
             "questionId", question.getId(),

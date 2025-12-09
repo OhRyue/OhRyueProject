@@ -49,50 +49,65 @@ public class OpenAiClient implements AiClient {
                              Boolean.TRUE.equals(request.meta().get("skipExplanation"));
     
     String system = skipExplanation ? """
-        당신은 정보처리기사 실기 채점관입니다
+        당신은 정보처리기사 실기 채점관입니다.
 
+        당신에게는 다음 정보가 주어집니다:
+        - 문제(STEM)
+        - 공식 정답(OFFICIAL_ANSWER: DB에 저장된 answer_key)
+        - 수험자 답안(USER_ANSWER)
+        채점 규칙(매우 중요):
+        1) OFFICIAL_ANSWER와 USER_ANSWER를 먼저 비교합니다.
+           - 공백, 줄바꿈, 단순 쉼표/세미콜론 차이는 무시하고
+             의미가 같으면 정답으로 인정합니다.
+           - 두 답이 사실상 동일하면 반드시 correct=true 로 판단해야 합니다.
+        2) 두 문자열이 완전히 같지 않더라도,
+           - 의미가 동일하거나,
+           - 핵심 키워드와 값/순서가 모두 일치하면 correct=true 로 판단합니다.
+        3) 핵심 요소가 빠져 있거나,
+           - 다른 개념을 말하거나,
+           - 분명히 다른 경로/값/조건을 나타내면 correct=false 로 판단합니다.
         출력 형식 규칙:
-        - JSON 객체로만 답하세요
+        - JSON 객체로만 답하세요.
         - 속성:
           - correct: boolean  // 사용자 답안이 정답인지 여부 (true=맞음, false=틀림)
-
-        채점 기준:
-        - rubric과 정답을 기준으로 엄격하게 채점합니다
-        - 핵심 키워드가 모두 포함되고 의미가 같으면 correct=true
-        - 핵심 키워드가 빠졌거나 의미가 다르면 correct=false
-        - 표현만 달라지고 의미가 동일하면 정답으로 인정합니다
-
         주의:
+        - 모든 문자열은 한국어로 작성합니다.
         - JSON 이외의 텍스트는 절대 출력하지 마세요.
-        - correct 값만 반환하세요. 해설은 생략합니다.
+        - correct 값만 반환합니다. 해설은 포함하지 않습니다.
         """ : """
-        당신은 정보처리기사 실기 채점관입니다
+        당신은 정보처리기사 실기 채점관입니다.
 
+        당신에게는 다음 정보가 주어집니다:
+        - 문제(STEM)
+        - 공식 정답(OFFICIAL_ANSWER: DB에 저장된 answer_key)
+        - 수험자 답안(USER_ANSWER)
+        - (선택) 채점 기준 설명(RUBRIC)
+        채점 규칙(매우 중요):
+        1) OFFICIAL_ANSWER와 USER_ANSWER를 먼저 비교합니다.
+           - 공백, 줄바꿈, 단순 쉼표/세미콜론 차이는 무시하고
+             의미가 같으면 정답으로 인정합니다.
+           - 두 답이 사실상 동일하면 반드시 correct=true 로 판단해야 합니다.
+        2) 두 문자열이 완전히 같지 않더라도,
+           - 의미가 동일하거나,
+           - 핵심 키워드와 값/순서가 모두 일치하면 correct=true 로 판단합니다.
+        3) 핵심 요소가 빠져 있거나,
+           - 다른 개념을 말하거나,
+           - 분명히 다른 경로/값/조건을 나타내면 correct=false 로 판단합니다.
         출력 형식 규칙:
-        - JSON 객체로만 답하세요
+        - JSON 객체로만 답하세요.
         - 속성:
           - correct: boolean        // 사용자 답안이 정답인지 여부 (true=맞음, false=틀림)
-          - explainCorrect: string  // 정답 및 채점 기준이 왜 맞는지 (최대 150자)
-          - explainUser: string     // 사용자의 답안이 왜 맞거나 틀렸는지 (최대 150자)
+          - explainCorrect: string  // 공식 정답과 채점 기준이 왜 맞는지 (최대 150자)
+          - explainUser: string     // 수험자 답안이 왜 맞거나 틀렸는지 (최대 150자)
           - tips: string[]          // 최대 3개, 각 50자 이내, 다음에 맞추기 위한 팁
-
         설명 작성 규칙:
-        - 모든 문자열은 한국어로 작성합니다
-        - explainCorrect에는 모범답안 관점의 해설을 씁니다
-          - 핵심 개념, 키워드, 이유를 간단히 정리합니다
-        - explainUser에는 수험자 답안을 직접 언급하며 평가합니다
-          - 어떤 부분이 정확한지, 어떤 부분이 부족하거나 잘못되었는지 구체적으로 말합니다
-          - 오개념이 있다면 왜 틀렸는지 짧게 설명합니다
-
-        채점 기준:
-        - rubric과 정답을 기준으로 엄격하게 채점합니다
-        - 핵심 키워드가 모두 포함되고 의미가 같으면 correct=true
-        - 핵심 키워드가 빠졌거나 의미가 다르면 correct=false
-        - 표현만 달라지고 의미가 동일하면 정답으로 인정합니다
-
-        주의:
         - 모든 문자열은 한국어 존댓말로 작성합니다.
-        - JSON 이외의 텍스트는 절대 출력하지 마세요.
+        - explainCorrect에는 모범답안 관점의 해설을 작성합니다.
+        - explainUser에는 사용자 답안을 직접 언급하며,
+          어떤 부분이 정확하고 어떤 부분이 부족하거나 잘못되었는지 설명합니다.
+        - 오개념이 있으면 왜 틀렸는지도 짧게 설명합니다.
+        주의:
+        - JSON 이외의 텍스트(설명, 문장, 주석 등)는 절대 출력하지 마세요.
         """;
     String user = buildGradePrompt(request);
     Map<String, Object> json = invoke(system, user);
@@ -197,15 +212,24 @@ public class OpenAiClient implements AiClient {
 
   private static String buildGradePrompt(GradeRequest req) {
     StringBuilder sb = new StringBuilder();
-    sb.append("PRACTICAL QUESTION:\n").append(Optional.ofNullable(req.question()).orElse("")).append("\n\n");
+    sb.append("PRACTICAL QUESTION (STEM):\n")
+        .append(Optional.ofNullable(req.question()).orElse(""))
+        .append("\n\n");
     if (req.rubric() != null && !req.rubric().isBlank()) {
-      sb.append("RUBRIC:\n").append(req.rubric()).append("\n\n");
+      sb.append("RUBRIC:\n")
+          .append(req.rubric())
+          .append("\n\n");
     }
-    sb.append("USER ANSWER:\n").append(Optional.ofNullable(req.userAnswer()).orElse("")).append("\n\n");
+    sb.append("OFFICIAL_ANSWER (DB answer_key):\n")
+        .append(Optional.ofNullable(req.correctAnswer()).orElse(""))
+        .append("\n\n");
+    sb.append("USER_ANSWER:\n")
+        .append(Optional.ofNullable(req.userAnswer()).orElse(""))
+        .append("\n\n");
     if (req.meta() != null && !req.meta().isEmpty()) {
       sb.append("META: ").append(req.meta()).append("\n");
     }
-    sb.append("점수와 피드백을 JSON으로 작성하세요.");
+    sb.append("위 정보를 바탕으로 채점 결과를 JSON 객체로만 작성하세요.");
     return sb.toString();
   }
 
