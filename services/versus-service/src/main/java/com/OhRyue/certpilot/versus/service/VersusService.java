@@ -2266,41 +2266,22 @@ public class VersusService {
         for (int round = 1; round <= TOURNAMENT_ROUNDS; round++) {
             List<MatchQuestion> roundQuestions = byRound.getOrDefault(round, List.of());
 
-            if (practical && round == 3) {
-                // 실기 모드 라운드 3: SHORT 1개 + LONG 2개 (총 3문제)
-                if (roundQuestions.size() != TOURNAMENT_QUESTIONS_PER_ROUND) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "토너먼트 라운드 3(실기)는 3문제를 가져야 합니다. (현재: " + roundQuestions.size() + "개)");
-                }
-                long shortCount = roundQuestions.stream()
-                        .filter(q -> Objects.equals(q.getTimeLimitSec(), DUEL_PRACTICAL_SHORT_LIMIT_SEC))
-                        .count();
-                long longCount = roundQuestions.stream()
-                        .filter(q -> Objects.equals(q.getTimeLimitSec(), DUEL_PRACTICAL_LONG_LIMIT_SEC))
-                        .count();
-
-                if (shortCount != 1 || longCount != 2) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "토너먼트 라운드 3(실기)는 SHORT 1개(" + DUEL_PRACTICAL_SHORT_LIMIT_SEC + "초)와 LONG 2개("
-                                    + DUEL_PRACTICAL_LONG_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: SHORT " + shortCount + "개, LONG " + longCount + "개)");
-                }
-            } else {
-                // 필기 모드 또는 실기 모드 라운드 1, 2: 각 라운드 3문제
-                if (roundQuestions.size() != TOURNAMENT_QUESTIONS_PER_ROUND) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "토너먼트 라운드 " + round + "는 3문제를 가져야 합니다.");
-                }
-                int expectedLimitSec = switch (round) {
-                    case 1 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : TOURNAMENT_WRITTEN_OX_LIMIT_SEC;
-                    case 2 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : DUEL_WRITTEN_MCQ_LIMIT_SEC;
-                    default -> DUEL_WRITTEN_MCQ_LIMIT_SEC;
-                };
-                boolean invalidLimit = roundQuestions.stream()
-                        .anyMatch(q -> !Objects.equals(q.getTimeLimitSec(), expectedLimitSec));
-                if (invalidLimit) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "토너먼트 라운드 " + round + "의 시간 제한은 " + expectedLimitSec + "초로 통일되어야 합니다.");
-                }
+            // 모든 라운드: 각 라운드 3문제
+            if (roundQuestions.size() != TOURNAMENT_QUESTIONS_PER_ROUND) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "토너먼트 라운드 " + round + "는 3문제를 가져야 합니다.");
+            }
+            int expectedLimitSec = switch (round) {
+                case 1 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : TOURNAMENT_WRITTEN_OX_LIMIT_SEC;
+                case 2 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : DUEL_WRITTEN_MCQ_LIMIT_SEC;
+                case 3 -> practical ? DUEL_PRACTICAL_SHORT_LIMIT_SEC : DUEL_WRITTEN_MCQ_LIMIT_SEC;
+                default -> DUEL_WRITTEN_MCQ_LIMIT_SEC;
+            };
+            boolean invalidLimit = roundQuestions.stream()
+                    .anyMatch(q -> !Objects.equals(q.getTimeLimitSec(), expectedLimitSec));
+            if (invalidLimit) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "토너먼트 라운드 " + round + "의 시간 제한은 " + expectedLimitSec + "초로 통일되어야 합니다.");
             }
         }
     }
@@ -2552,31 +2533,18 @@ public class VersusService {
                 );
                 newQuestions = studyServiceClient.generateVersusQuestions(request);
             } else if (roundNo == 3) {
-                // 3라운드: 필기면 MCQ 3문제 (HARD), 실기면 SHORT 1 + LONG 2
+                // 3라운드: 필기면 MCQ 3문제 (HARD), 실기면 SHORT 3문제
                 if (isPractical) {
-                    // 실기 3라운드: SHORT 1 + LONG 2
-                    StudyServiceClient.VersusQuestionRequest requestShort = new StudyServiceClient.VersusQuestionRequest(
+                    // 실기 3라운드: SHORT 3문제
+                    StudyServiceClient.VersusQuestionRequest request = new StudyServiceClient.VersusQuestionRequest(
                             examMode,
                             topicId != null ? "SPECIFIC" : "ALL",
                             topicId,
                             "NORMAL",
-                            1,
-                            List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 1))
+                            3,
+                            List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
                     );
-                    StudyServiceClient.VersusQuestionRequest requestLong = new StudyServiceClient.VersusQuestionRequest(
-                            examMode,
-                            topicId != null ? "SPECIFIC" : "ALL",
-                            topicId,
-                            "NORMAL",
-                            2,
-                            List.of(new StudyServiceClient.QuestionTypeSpec("LONG", 2))
-                    );
-                    List<StudyServiceClient.QuestionDto> shortQuestions = studyServiceClient.generateVersusQuestions(requestShort);
-                    List<StudyServiceClient.QuestionDto> longQuestions = studyServiceClient.generateVersusQuestions(requestLong);
-
-                    newQuestions = new ArrayList<>();
-                    newQuestions.addAll(shortQuestions);
-                    newQuestions.addAll(longQuestions);
+                    newQuestions = studyServiceClient.generateVersusQuestions(request);
                 } else {
                     // 필기 3라운드: MCQ 3문제 (HARD)
                     StudyServiceClient.VersusQuestionRequest request = new StudyServiceClient.VersusQuestionRequest(
@@ -3380,7 +3348,7 @@ public class VersusService {
      * 실기 모드:
      * - 1R: SHORT 3문제
      * - 2R: SHORT 3문제
-     * - 3R: SHORT 1문제 + LONG 2문제
+     * - 3R: SHORT 3문제
      */
     private List<VersusDtos.QuestionInfo> convertToQuestionInfosForTournament(
             List<StudyServiceClient.QuestionDto> questions) {
@@ -3395,15 +3363,12 @@ public class VersusService {
         boolean isPractical = "PRACTICAL".equalsIgnoreCase(examMode);
 
         if (isPractical) {
-            // 실기 모드
+            // 실기 모드: SHORT만 사용
             List<StudyServiceClient.QuestionDto> shortQuestions = new ArrayList<>();
-            List<StudyServiceClient.QuestionDto> longQuestions = new ArrayList<>();
 
             for (StudyServiceClient.QuestionDto q : questions) {
                 if ("SHORT".equals(q.type())) {
                     shortQuestions.add(q);
-                } else if ("LONG".equals(q.type())) {
-                    longQuestions.add(q);
                 }
             }
 
@@ -3437,24 +3402,11 @@ public class VersusService {
                 ));
             }
 
-            // 3R: SHORT 1문제 + LONG 2문제
+            // 3R: SHORT 3문제
             roundNo = 3;
             orderNo = 1;
-            // SHORT 1문제
-            if (shortQuestions.size() >= 7) {
-                StudyServiceClient.QuestionDto q = shortQuestions.get(6);
-                int timeLimit = determineTimeLimit(q.type(), q.mode(), MatchMode.TOURNAMENT);
-                result.add(new VersusDtos.QuestionInfo(
-                        q.id(),
-                        roundNo,
-                        MatchPhase.MAIN,
-                        orderNo++,
-                        timeLimit
-                ));
-            }
-            // LONG 2문제
-            for (int i = 0; i < Math.min(2, longQuestions.size()); i++) {
-                StudyServiceClient.QuestionDto q = longQuestions.get(i);
+            for (int i = 6; i < Math.min(9, shortQuestions.size()); i++) {
+                StudyServiceClient.QuestionDto q = shortQuestions.get(i);
                 int timeLimit = determineTimeLimit(q.type(), q.mode(), MatchMode.TOURNAMENT);
                 result.add(new VersusDtos.QuestionInfo(
                         q.id(),
@@ -3707,7 +3659,7 @@ public class VersusService {
      * 실기 모드:
      * - 1R: SHORT 3문제 (NORMAL)
      * - 2R: SHORT 3문제 (NORMAL)
-     * - 3R: SHORT 1문제 + LONG 2문제 (NORMAL)
+     * - 3R: SHORT 3문제 (NORMAL)
      */
     private List<StudyServiceClient.QuestionDto> generateTournamentQuestions(String examMode, Long topicId) {
         List<StudyServiceClient.QuestionDto> allQuestions = new ArrayList<>();
@@ -3715,52 +3667,52 @@ public class VersusService {
 
         if (isPractical) {
             // 실기 모드
-            // 1R: SHORT 3문제 (NORMAL)
-            StudyServiceClient.VersusQuestionRequest request1R = new StudyServiceClient.VersusQuestionRequest(
-                    examMode,
-                    topicId != null ? "SPECIFIC" : "ALL",
-                    topicId,
-                    "NORMAL",
-                    3,
-                    List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
-            );
-            List<StudyServiceClient.QuestionDto> round1Questions = studyServiceClient.generateVersusQuestions(request1R);
-            allQuestions.addAll(round1Questions);
+            try {
+                // 1R: SHORT 3문제 (NORMAL)
+                StudyServiceClient.VersusQuestionRequest request1R = new StudyServiceClient.VersusQuestionRequest(
+                        examMode,
+                        topicId != null ? "SPECIFIC" : "ALL",
+                        topicId,
+                        "NORMAL",
+                        3,
+                        List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
+                );
+                List<StudyServiceClient.QuestionDto> round1Questions = studyServiceClient.generateVersusQuestions(request1R);
+                allQuestions.addAll(round1Questions);
+                log.info("토너먼트 실기 1R 문제 수신: {}개", round1Questions.size());
 
-            // 2R: SHORT 3문제 (NORMAL)
-            StudyServiceClient.VersusQuestionRequest request2R = new StudyServiceClient.VersusQuestionRequest(
-                    examMode,
-                    topicId != null ? "SPECIFIC" : "ALL",
-                    topicId,
-                    "NORMAL",
-                    3,
-                    List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
-            );
-            List<StudyServiceClient.QuestionDto> round2Questions = studyServiceClient.generateVersusQuestions(request2R);
-            allQuestions.addAll(round2Questions);
+                // 2R: SHORT 3문제 (NORMAL)
+                StudyServiceClient.VersusQuestionRequest request2R = new StudyServiceClient.VersusQuestionRequest(
+                        examMode,
+                        topicId != null ? "SPECIFIC" : "ALL",
+                        topicId,
+                        "NORMAL",
+                        3,
+                        List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
+                );
+                List<StudyServiceClient.QuestionDto> round2Questions = studyServiceClient.generateVersusQuestions(request2R);
+                allQuestions.addAll(round2Questions);
+                log.info("토너먼트 실기 2R 문제 수신: {}개", round2Questions.size());
 
-            // 3R: SHORT 1문제 + LONG 2문제 (NORMAL)
-            StudyServiceClient.VersusQuestionRequest request3RShort = new StudyServiceClient.VersusQuestionRequest(
-                    examMode,
-                    topicId != null ? "SPECIFIC" : "ALL",
-                    topicId,
-                    "NORMAL",
-                    1,
-                    List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 1))
-            );
-            List<StudyServiceClient.QuestionDto> round3ShortQuestions = studyServiceClient.generateVersusQuestions(request3RShort);
-            allQuestions.addAll(round3ShortQuestions);
-
-            StudyServiceClient.VersusQuestionRequest request3RLong = new StudyServiceClient.VersusQuestionRequest(
-                    examMode,
-                    topicId != null ? "SPECIFIC" : "ALL",
-                    topicId,
-                    "NORMAL",
-                    2,
-                    List.of(new StudyServiceClient.QuestionTypeSpec("LONG", 2))
-            );
-            List<StudyServiceClient.QuestionDto> round3LongQuestions = studyServiceClient.generateVersusQuestions(request3RLong);
-            allQuestions.addAll(round3LongQuestions);
+                // 3R: SHORT 3문제 (NORMAL)
+                StudyServiceClient.VersusQuestionRequest request3R = new StudyServiceClient.VersusQuestionRequest(
+                        examMode,
+                        topicId != null ? "SPECIFIC" : "ALL",
+                        topicId,
+                        "NORMAL",
+                        3,
+                        List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
+                );
+                List<StudyServiceClient.QuestionDto> round3Questions = studyServiceClient.generateVersusQuestions(request3R);
+                allQuestions.addAll(round3Questions);
+                log.info("토너먼트 실기 3R 문제 수신: {}개", round3Questions.size());
+            } catch (FeignException.NotFound | FeignException.BadRequest e) {
+                log.error("토너먼트 실기 문제 요청 실패: {}", e.getMessage(), e);
+                throw e;
+            } catch (Exception e) {
+                log.error("토너먼트 실기 문제 요청 중 오류: {}", e.getMessage(), e);
+                throw e;
+            }
         } else {
             // 필기 모드
             // 1R: OX 3문제 (NORMAL)

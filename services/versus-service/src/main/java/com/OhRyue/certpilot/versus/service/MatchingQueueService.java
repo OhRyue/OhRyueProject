@@ -127,13 +127,18 @@ public class MatchingQueueService {
                 }
                 
                 if (matched.size() == requiredCount) {
-                    log.info("즉시 매칭 성공: mode={}, players={}", request.mode(), 
-                        matched.stream().map(WaitingPlayer::userId).collect(Collectors.toList()));
+                    List<String> matchedPlayerIds = matched.stream()
+                        .map(WaitingPlayer::userId)
+                        .collect(Collectors.toList());
+                    log.info("즉시 매칭 성공: mode={}, players={}, queueSize={}", 
+                        request.mode(), matchedPlayerIds, queue.size());
                     
                     // 방 생성 및 시작 (동기 처리)
                     try {
                         roomId = createAndStartRoomSync(matched, request.mode());
                         if (roomId != null) {
+                            log.info("즉시 매칭 완료: roomId={}, mode={}, players={}", 
+                                roomId, request.mode(), matchedPlayerIds);
                             // 매칭 완료: roomId 반환
                             return new MatchingDtos.MatchStatusResp(
                                 false, // 매칭 완료
@@ -141,14 +146,23 @@ public class MatchingQueueService {
                                 0,
                                 player.joinedAt()
                             );
+                        } else {
+                            log.warn("방 생성 실패 (null 반환), 플레이어들을 다시 큐에 추가: mode={}, players={}", 
+                                request.mode(), matchedPlayerIds);
                         }
                     } catch (Exception e) {
-                        log.error("방 생성 실패, 플레이어들을 다시 큐에 추가: error={}", e.getMessage(), e);
-                        // 실패 시 플레이어들을 다시 큐에 넣기
+                        log.error("방 생성 실패 (예외 발생), 플레이어들을 다시 큐에 추가: mode={}, players={}, error={}, errorClass={}", 
+                            request.mode(), matchedPlayerIds, e.getMessage(), e.getClass().getName(), e);
+                    }
+                    
+                    // 방 생성 실패 시 플레이어들을 다시 큐에 넣기
+                    if (roomId == null) {
                         matched.forEach(queue::offer);
                         // 매칭 정보 복구
                         matched.forEach(p -> userMatchingInfo.put(p.userId(), 
                             new MatchingInfo(poolKey, matchingKey, request.mode())));
+                        log.info("플레이어 복구 완료 (동기): mode={}, players={}, 복구 후 큐 크기={}", 
+                            request.mode(), matchedPlayerIds, queue.size());
                     }
                 } else {
                     // 인원 부족: 다시 큐에 넣기
@@ -269,18 +283,24 @@ public class MatchingQueueService {
      * 방 생성 및 자동 시작 (동기)
      */
     private Long createAndStartRoomSync(List<WaitingPlayer> players, MatchMode mode) {
+        List<String> playerIds = players.stream().map(WaitingPlayer::userId).collect(Collectors.toList());
+        log.info("방 생성 시작 (동기): mode={}, players={}", mode, playerIds);
+        
         try {
             WaitingPlayer firstPlayer = players.get(0);
             MatchingDtos.MatchRequest request = firstPlayer.request();
             
             // scopeJson 생성
             String scopeJson = buildScopeJson(request);
+            log.debug("scopeJson 생성 완료: mode={}, scopeJson={}", mode, scopeJson);
             
             // participants 리스트 생성 (첫 번째 플레이어 제외)
             List<String> participants = players.stream()
                 .skip(1)
                 .map(WaitingPlayer::userId)
                 .collect(Collectors.toList());
+            
+            log.debug("참가자 리스트 생성: creator={}, participants={}", firstPlayer.userId(), participants);
             
             // 방 생성 요청
             VersusDtos.CreateRoomReq createReq = new VersusDtos.CreateRoomReq(
@@ -296,23 +316,27 @@ public class MatchingQueueService {
             );
             
             // 방 생성 (첫 번째 플레이어가 생성자)
+            log.info("방 생성 요청: mode={}, creator={}, participants={}", mode, firstPlayer.userId(), participants);
             VersusDtos.RoomDetailResp room = versusService.createRoom(
                 createReq, 
                 firstPlayer.userId()
             );
             
             Long roomId = room.room().roomId();
+            log.info("방 생성 성공: roomId={}, mode={}", roomId, mode);
             
             // 자동 시작
+            log.info("방 시작 요청: roomId={}, mode={}", roomId, mode);
             versusService.startRoom(roomId);
+            log.info("방 시작 성공: roomId={}, mode={}", roomId, mode);
             
             log.info("매칭 완료 및 방 시작: roomId={}, mode={}, players={}", 
-                roomId, mode, 
-                players.stream().map(WaitingPlayer::userId).collect(Collectors.toList()));
+                roomId, mode, playerIds);
             
             return roomId;
         } catch (Exception e) {
-            log.error("방 생성 및 시작 실패: mode={}, error={}", mode, e.getMessage(), e);
+            log.error("방 생성 및 시작 실패 (동기): mode={}, players={}, error={}, errorClass={}", 
+                mode, playerIds, e.getMessage(), e.getClass().getName(), e);
             return null;
         }
     }
@@ -359,12 +383,23 @@ public class MatchingQueueService {
             
             if (matched.size() < requiredCount) {
                 // 인원 부족: 다시 큐에 넣기
+                List<String> matchedPlayerIds = matched.stream()
+                    .map(WaitingPlayer::userId)
+                    .collect(Collectors.toList());
+                log.warn("인원 부족으로 매칭 취소: mode={}, required={}, matched={}, players={}", 
+                    mode, requiredCount, matched.size(), matchedPlayerIds);
                 matched.forEach(queue::offer);
+                // 매칭 정보 복구
+                matched.forEach(p -> userMatchingInfo.put(p.userId(), 
+                    new MatchingInfo(poolKey, matchingKey, mode)));
                 return;
             }
             
-            log.info("매칭 성공: mode={}, players={}", mode, 
-                matched.stream().map(WaitingPlayer::userId).collect(Collectors.toList()));
+            List<String> matchedPlayerIds = matched.stream()
+                .map(WaitingPlayer::userId)
+                .collect(Collectors.toList());
+            log.info("비동기 매칭 성공: mode={}, players={}, queueSize={}", 
+                mode, matchedPlayerIds, queue.size());
             
             // 방 생성 및 시작 (비동기)
             createAndStartRoomAsync(matched, mode);
@@ -378,18 +413,24 @@ public class MatchingQueueService {
      * 방 생성 및 자동 시작 (비동기)
      */
     private void createAndStartRoomAsync(List<WaitingPlayer> players, MatchMode mode) {
+        List<String> playerIds = players.stream().map(WaitingPlayer::userId).collect(Collectors.toList());
+        log.info("방 생성 시작 (비동기): mode={}, players={}", mode, playerIds);
+        
         try {
             WaitingPlayer firstPlayer = players.get(0);
             MatchingDtos.MatchRequest request = firstPlayer.request();
             
             // scopeJson 생성
             String scopeJson = buildScopeJson(request);
+            log.debug("scopeJson 생성 완료 (비동기): mode={}, scopeJson={}", mode, scopeJson);
             
             // participants 리스트 생성 (첫 번째 플레이어 제외)
             List<String> participants = players.stream()
                 .skip(1)
                 .map(WaitingPlayer::userId)
                 .collect(Collectors.toList());
+            
+            log.debug("참가자 리스트 생성 (비동기): creator={}, participants={}", firstPlayer.userId(), participants);
             
             // 방 생성 요청
             VersusDtos.CreateRoomReq createReq = new VersusDtos.CreateRoomReq(
@@ -405,24 +446,89 @@ public class MatchingQueueService {
             );
             
             // 방 생성 (첫 번째 플레이어가 생성자)
+            log.info("방 생성 요청 (비동기): mode={}, creator={}, participants={}", mode, firstPlayer.userId(), participants);
             VersusDtos.RoomDetailResp room = versusService.createRoom(
                 createReq, 
                 firstPlayer.userId()
             );
             
             Long roomId = room.room().roomId();
+            log.info("방 생성 성공 (비동기): roomId={}, mode={}", roomId, mode);
             
             // 자동 시작
+            log.info("방 시작 요청 (비동기): roomId={}, mode={}", roomId, mode);
             versusService.startRoom(roomId);
+            log.info("방 시작 성공 (비동기): roomId={}, mode={}", roomId, mode);
             
-            log.info("매칭 완료 및 방 시작: roomId={}, mode={}, players={}", 
-                roomId, mode, 
-                players.stream().map(WaitingPlayer::userId).collect(Collectors.toList()));
+            log.info("매칭 완료 및 방 시작 (비동기): roomId={}, mode={}, players={}", 
+                roomId, mode, playerIds);
             
         } catch (Exception e) {
-            log.error("방 생성 및 시작 실패: mode={}, error={}", mode, e.getMessage(), e);
-            // 실패 시 플레이어들을 다시 큐에 넣기
-            // (선택적: 재시도 로직)
+            log.error("방 생성 및 시작 실패 (비동기): mode={}, players={}, error={}, errorClass={}", 
+                mode, playerIds, e.getMessage(), e.getClass().getName(), e);
+            
+            // 실패 시 플레이어들을 다시 큐에 넣기 (복구 로직)
+            restorePlayersToQueue(players, mode);
+        }
+    }
+    
+    /**
+     * 플레이어들을 큐에 복구 (방 생성 실패 시)
+     */
+    private void restorePlayersToQueue(List<WaitingPlayer> players, MatchMode mode) {
+        if (players.isEmpty()) {
+            log.warn("복구할 플레이어가 없음: mode={}", mode);
+            return;
+        }
+        
+        WaitingPlayer firstPlayer = players.get(0);
+        MatchingDtos.MatchRequest request = firstPlayer.request();
+        String matchingKey = buildMatchingKey(request);
+        String poolKey = mode.name();
+        
+        Map<String, Queue<WaitingPlayer>> pool = matchingPools.get(poolKey);
+        if (pool == null) {
+            log.error("매칭 풀을 찾을 수 없음: poolKey={}, mode={}", poolKey, mode);
+            return;
+        }
+        
+        Queue<WaitingPlayer> queue = pool.get(matchingKey);
+        if (queue == null) {
+            log.error("매칭 큐를 찾을 수 없음: matchingKey={}, mode={}", matchingKey, mode);
+            return;
+        }
+        
+        ReentrantLock lock = poolLocks.get(poolKey + ":" + matchingKey);
+        if (lock == null) {
+            log.error("락을 찾을 수 없음: poolKey={}, matchingKey={}, mode={}", poolKey, matchingKey, mode);
+            return;
+        }
+        
+        lock.lock();
+        try {
+            List<String> playerIds = players.stream().map(WaitingPlayer::userId).collect(Collectors.toList());
+            log.info("플레이어 복구 시작: mode={}, matchingKey={}, players={}, 현재 큐 크기={}", 
+                mode, matchingKey, playerIds, queue.size());
+            
+            // 플레이어들을 다시 큐에 넣기
+            int restoredCount = 0;
+            for (WaitingPlayer player : players) {
+                queue.offer(player);
+                restoredCount++;
+                
+                // 매칭 정보 복구
+                userMatchingInfo.put(player.userId(), 
+                    new MatchingInfo(poolKey, matchingKey, mode));
+            }
+            
+            log.info("플레이어 복구 완료: mode={}, matchingKey={}, 복구된 인원={}, 복구 후 큐 크기={}, players={}", 
+                mode, matchingKey, restoredCount, queue.size(), playerIds);
+            
+        } catch (Exception e) {
+            log.error("플레이어 복구 중 오류 발생: mode={}, matchingKey={}, error={}", 
+                mode, matchingKey, e.getMessage(), e);
+        } finally {
+            lock.unlock();
         }
     }
 

@@ -753,7 +753,7 @@ public class BotPlayService {
         existing = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(room.getId());
         if (existing.isEmpty()) {
             log.warn("문제 생성 실패, 더미 문제로 대체: roomId={}", room.getId());
-            createDummyQuestionsForRoom(room.getId(), room.getMode());
+            createDummyQuestionsForRoom(room.getId(), room.getMode(), room.getScopeJson());
         }
     }
 
@@ -819,7 +819,7 @@ public class BotPlayService {
                     room.getId(), room.getScopeJson(), e.getStatusCode(), e.getReason());
             log.error("예외 상세 정보: ", e);
             log.warn("더미 문제 생성 시작: roomId={}, mode={} (study-service 연동 실패로 인한 fallback)", room.getId(), room.getMode());
-            createDummyQuestionsForRoom(room.getId(), room.getMode());
+            createDummyQuestionsForRoom(room.getId(), room.getMode(), room.getScopeJson());
         } catch (feign.RetryableException e) {
             // Feign RetryableException (네트워크 오류, 호스트를 찾을 수 없음 등)
             Throwable cause = e.getCause();
@@ -833,7 +833,7 @@ public class BotPlayService {
                     room.getId(), room.getScopeJson(), e.getMessage());
             log.error("예외 상세 정보: ", e);
             log.warn("더미 문제 생성 시작: roomId={}, mode={} (study-service 연동 실패로 인한 fallback)", room.getId(), room.getMode());
-            createDummyQuestionsForRoom(room.getId(), room.getMode());
+            createDummyQuestionsForRoom(room.getId(), room.getMode(), room.getScopeJson());
         } catch (feign.FeignException e) {
             // Feign Client 예외 (네트워크 오류, 서비스 미응답 등)
             log.error("study-service 연동 실패 (FeignException): roomId={}, scopeJson={}, status={}, message={}, content={}", 
@@ -841,7 +841,7 @@ public class BotPlayService {
                     e.contentUTF8() != null ? e.contentUTF8().substring(0, Math.min(500, e.contentUTF8().length())) : "null");
             log.error("예외 상세 정보: ", e);
             log.warn("더미 문제 생성 시작: roomId={}, mode={} (study-service 연동 실패로 인한 fallback)", room.getId(), room.getMode());
-            createDummyQuestionsForRoom(room.getId(), room.getMode());
+            createDummyQuestionsForRoom(room.getId(), room.getMode(), room.getScopeJson());
         } catch (Exception e) {
             // 기타 예외
             Throwable cause = e.getCause();
@@ -858,7 +858,7 @@ public class BotPlayService {
                 log.error("원인 예외: causeClass={}, causeMessage={}", cause.getClass().getName(), cause.getMessage());
             }
             log.warn("더미 문제 생성 시작: roomId={}, mode={} (study-service 연동 실패로 인한 fallback)", room.getId(), room.getMode());
-            createDummyQuestionsForRoom(room.getId(), room.getMode());
+            createDummyQuestionsForRoom(room.getId(), room.getMode(), room.getScopeJson());
         }
     }
 
@@ -867,98 +867,241 @@ public class BotPlayService {
      */
     @Transactional
     public void createDummyQuestionsForRoom(Long roomId, MatchMode mode) {
-        log.info("더미 문제 생성 시작: roomId={}, mode={}", roomId, mode);
+        createDummyQuestionsForRoom(roomId, mode, null);
+    }
+
+    /**
+     * 더미 문제 생성 (study-service 실패 시 fallback)
+     * @param scopeJson scopeJson에서 examMode를 읽어서 실기/필기 구분
+     */
+    @Transactional
+    public void createDummyQuestionsForRoom(Long roomId, MatchMode mode, String scopeJson) {
+        log.info("더미 문제 생성 시작: roomId={}, mode={}, scopeJson={}", roomId, mode, scopeJson);
+        
+        // scopeJson에서 examMode 읽기
+        String examMode = "WRITTEN"; // 기본값은 필기
+        if (scopeJson != null && !scopeJson.isBlank()) {
+            try {
+                Map<String, Object> scope = objectMapper.readValue(scopeJson, 
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                Object examModeObj = scope.get("examMode");
+                if (examModeObj instanceof String) {
+                    examMode = (String) examModeObj;
+                }
+            } catch (Exception e) {
+                log.warn("scopeJson 파싱 실패, 기본값 사용: roomId={}, error={}", roomId, e.getMessage());
+            }
+        }
+        
+        boolean isPractical = "PRACTICAL".equalsIgnoreCase(examMode);
+        log.info("더미 문제 생성: roomId={}, mode={}, examMode={}, isPractical={}", 
+                roomId, mode, examMode, isPractical);
         
         List<MatchQuestion> dummyQuestions = new ArrayList<>();
         
         if (mode == MatchMode.DUEL) {
-            // DUEL: 10문제 (라운드 1)
-            for (int i = 1; i <= 10; i++) {
-                dummyQuestions.add(MatchQuestion.builder()
-                        .roomId(roomId)
-                        .roundNo(1)
-                        .phase(MatchPhase.MAIN)
-                        .orderNo(i)
-                        .questionId(90000L + i)
-                        .timeLimitSec(10)
-                        .build());
-            }
-        } else if (mode == MatchMode.TOURNAMENT) {
-            // TOURNAMENT: 3라운드 × 3문제 = 9문제
-            for (int round = 1; round <= 3; round++) {
-                for (int order = 1; order <= 3; order++) {
+            if (isPractical) {
+                // 실기 DUEL: SHORT 10문제 (15초)
+                for (int i = 1; i <= 10; i++) {
                     dummyQuestions.add(MatchQuestion.builder()
                             .roomId(roomId)
-                            .roundNo(round)
+                            .roundNo(1)
                             .phase(MatchPhase.MAIN)
-                            .orderNo(order)
-                            .questionId(90000L + (round - 1) * 3 + order)
+                            .orderNo(i)
+                            .questionId(90000L + i)
+                            .timeLimitSec(15)
+                            .build());
+                }
+            } else {
+                // 필기 DUEL: 10문제 (라운드 1)
+                for (int i = 1; i <= 10; i++) {
+                    dummyQuestions.add(MatchQuestion.builder()
+                            .roomId(roomId)
+                            .roundNo(1)
+                            .phase(MatchPhase.MAIN)
+                            .orderNo(i)
+                            .questionId(90000L + i)
                             .timeLimitSec(10)
                             .build());
                 }
             }
+        } else if (mode == MatchMode.TOURNAMENT) {
+            if (isPractical) {
+                // 실기 토너먼트: 3라운드, 총 9문제
+                // 1R: SHORT 3문제 (15초)
+                for (int order = 1; order <= 3; order++) {
+                    dummyQuestions.add(MatchQuestion.builder()
+                            .roomId(roomId)
+                            .roundNo(1)
+                            .phase(MatchPhase.MAIN)
+                            .orderNo(order)
+                            .questionId(90000L + order)
+                            .timeLimitSec(15)
+                            .build());
+                }
+                // 2R: SHORT 3문제 (15초)
+                for (int order = 1; order <= 3; order++) {
+                    dummyQuestions.add(MatchQuestion.builder()
+                            .roomId(roomId)
+                            .roundNo(2)
+                            .phase(MatchPhase.MAIN)
+                            .orderNo(order)
+                            .questionId(90000L + 3 + order)
+                            .timeLimitSec(15)
+                            .build());
+                }
+                // 3R: SHORT 3문제 (15초)
+                for (int order = 1; order <= 3; order++) {
+                    dummyQuestions.add(MatchQuestion.builder()
+                            .roomId(roomId)
+                            .roundNo(3)
+                            .phase(MatchPhase.MAIN)
+                            .orderNo(order)
+                            .questionId(90000L + 6 + order)
+                            .timeLimitSec(15)
+                            .build());
+                }
+            } else {
+                // 필기 토너먼트: 3라운드 × 3문제 = 9문제
+                for (int round = 1; round <= 3; round++) {
+                    for (int order = 1; order <= 3; order++) {
+                        dummyQuestions.add(MatchQuestion.builder()
+                                .roomId(roomId)
+                                .roundNo(round)
+                                .phase(MatchPhase.MAIN)
+                                .orderNo(order)
+                                .questionId(90000L + (round - 1) * 3 + order)
+                                .timeLimitSec(10)
+                                .build());
+                    }
+                }
+            }
         } else if (mode == MatchMode.GOLDENBELL) {
-            // GOLDENBELL: 라운드 1(OX 2), 라운드 2(MCQ 2), 라운드 3(부활전 MCQ 1), 라운드 4(FINAL SHORT 1 + LONG 1)
-            // 라운드 1: OX 2문제 (order 1, 2)
-            dummyQuestions.add(MatchQuestion.builder()
-                    .roomId(roomId)
-                    .roundNo(1)
-                    .phase(MatchPhase.MAIN)
-                    .orderNo(1)
-                    .questionId(90001L)
-                    .timeLimitSec(10)
-                    .build());
-            dummyQuestions.add(MatchQuestion.builder()
-                    .roomId(roomId)
-                    .roundNo(1)
-                    .phase(MatchPhase.MAIN)
-                    .orderNo(2)
-                    .questionId(90002L)
-                    .timeLimitSec(10)
-                    .build());
-            // 라운드 2: MCQ 2문제 (order 1, 2)
-            dummyQuestions.add(MatchQuestion.builder()
-                    .roomId(roomId)
-                    .roundNo(2)
-                    .phase(MatchPhase.MAIN)
-                    .orderNo(1)
-                    .questionId(90003L)
-                    .timeLimitSec(10)
-                    .build());
-            dummyQuestions.add(MatchQuestion.builder()
-                    .roomId(roomId)
-                    .roundNo(2)
-                    .phase(MatchPhase.MAIN)
-                    .orderNo(2)
-                    .questionId(90004L)
-                    .timeLimitSec(10)
-                    .build());
-            // 라운드 3: MCQ 1문제 (REVIVAL) - 패자부활전 (15초)
-            dummyQuestions.add(MatchQuestion.builder()
-                    .roomId(roomId)
-                    .roundNo(3)
-                    .phase(MatchPhase.REVIVAL)
-                    .orderNo(1)
-                    .questionId(90005L)
-                    .timeLimitSec(15)
-                    .build());
-            // 라운드 4: SHORT 1문제 + LONG 1문제 (FINAL, order 1, 2) (30초)
-            dummyQuestions.add(MatchQuestion.builder()
-                    .roomId(roomId)
-                    .roundNo(4)
-                    .phase(MatchPhase.FINAL)
-                    .orderNo(1)
-                    .questionId(90006L)
-                    .timeLimitSec(30)
-                    .build());
-            dummyQuestions.add(MatchQuestion.builder()
-                    .roomId(roomId)
-                    .roundNo(4)
-                    .phase(MatchPhase.FINAL)
-                    .orderNo(2)
-                    .questionId(90007L)
-                    .timeLimitSec(30)
-                    .build());
+            if (isPractical) {
+                // 실기 골든벨: SHORT만 사용 (7문제)
+                // 라운드 1: SHORT 2개
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(1)
+                        .phase(MatchPhase.MAIN)
+                        .orderNo(1)
+                        .questionId(90001L)
+                        .timeLimitSec(15)
+                        .build());
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(1)
+                        .phase(MatchPhase.MAIN)
+                        .orderNo(2)
+                        .questionId(90002L)
+                        .timeLimitSec(15)
+                        .build());
+                // 라운드 2: SHORT 2개
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(2)
+                        .phase(MatchPhase.MAIN)
+                        .orderNo(1)
+                        .questionId(90003L)
+                        .timeLimitSec(15)
+                        .build());
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(2)
+                        .phase(MatchPhase.MAIN)
+                        .orderNo(2)
+                        .questionId(90004L)
+                        .timeLimitSec(15)
+                        .build());
+                // 라운드 3: SHORT 1개 (REVIVAL) - 패자부활전
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(3)
+                        .phase(MatchPhase.REVIVAL)
+                        .orderNo(1)
+                        .questionId(90005L)
+                        .timeLimitSec(15)
+                        .build());
+                // 라운드 4: SHORT 2개 (FINAL)
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(4)
+                        .phase(MatchPhase.FINAL)
+                        .orderNo(1)
+                        .questionId(90006L)
+                        .timeLimitSec(30)
+                        .build());
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(4)
+                        .phase(MatchPhase.FINAL)
+                        .orderNo(2)
+                        .questionId(90007L)
+                        .timeLimitSec(30)
+                        .build());
+            } else {
+                // 필기 골든벨: OX, MCQ 사용 (7문제)
+                // 라운드 1: OX 2문제 (order 1, 2)
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(1)
+                        .phase(MatchPhase.MAIN)
+                        .orderNo(1)
+                        .questionId(90001L)
+                        .timeLimitSec(10)
+                        .build());
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(1)
+                        .phase(MatchPhase.MAIN)
+                        .orderNo(2)
+                        .questionId(90002L)
+                        .timeLimitSec(10)
+                        .build());
+                // 라운드 2: MCQ 2문제 (order 1, 2)
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(2)
+                        .phase(MatchPhase.MAIN)
+                        .orderNo(1)
+                        .questionId(90003L)
+                        .timeLimitSec(10)
+                        .build());
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(2)
+                        .phase(MatchPhase.MAIN)
+                        .orderNo(2)
+                        .questionId(90004L)
+                        .timeLimitSec(10)
+                        .build());
+                // 라운드 3: MCQ 1문제 (REVIVAL) - 패자부활전 (15초)
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(3)
+                        .phase(MatchPhase.REVIVAL)
+                        .orderNo(1)
+                        .questionId(90005L)
+                        .timeLimitSec(15)
+                        .build());
+                // 라운드 4: SHORT 1문제 + LONG 1문제 (FINAL, order 1, 2) (30초)
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(4)
+                        .phase(MatchPhase.FINAL)
+                        .orderNo(1)
+                        .questionId(90006L)
+                        .timeLimitSec(30)
+                        .build());
+                dummyQuestions.add(MatchQuestion.builder()
+                        .roomId(roomId)
+                        .roundNo(4)
+                        .phase(MatchPhase.FINAL)
+                        .orderNo(2)
+                        .questionId(90007L)
+                        .timeLimitSec(30)
+                        .build());
+            }
         }
         
         if (!dummyQuestions.isEmpty()) {
@@ -966,10 +1109,11 @@ public class BotPlayService {
             
             saveEvent(roomId, "QUESTIONS_REGISTERED", Map.of(
                     "count", dummyQuestions.size(),
-                    "source", "DUMMY_FALLBACK"
+                    "source", "DUMMY_FALLBACK",
+                    "examMode", examMode
             ));
             
-            log.info("더미 문제 생성 완료: roomId={}, count={}", roomId, dummyQuestions.size());
+            log.info("더미 문제 생성 완료: roomId={}, count={}, examMode={}", roomId, dummyQuestions.size(), examMode);
         }
     }
 
