@@ -1,15 +1,18 @@
 USE certpilot_study;
 
-/* =========================================
+/* =======================================================
  * 91 ~ 100 : 정보시스템 구축 관리
  *  - cert_id = 1 (정보처리기사)
  *  - mode = 'WRITTEN'
  *  - type = 'MCQ'
- * ========================================= */
+ * ======================================================= */
 
-------------------------------------------------------------
--- Q91. 구조적 방법론 (SW_PROCESS)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q91. 구조적 방법론 (SW_PROCESS)
+ *  - topic: 5.1.1 소프트웨어 개발방법론 선정
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -39,9 +42,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q91, 'SW_PROCESS');
 
-------------------------------------------------------------
--- Q92. SDN (NW_ARCH)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q92. SDN (Software Defined Networking) (NW_ARCH)
+ *  - topic: 5.2.1 네트워크 구축관리
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -74,9 +80,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q92, 'NW_ARCH');
 
-------------------------------------------------------------
--- Q93. Secure 코딩 - 입력 데이터 보안 약점 (SEC_INPUT)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q93. Secure 코딩 - 입력 데이터 보안 약점 (SEC_INPUT)
+ *  - topic: 5.3.2 소프트웨어 개발 보안 구현
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -108,9 +117,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q93, 'SEC_INPUT');
 
-------------------------------------------------------------
--- Q94. DDoS 관련 도구 - Tribe Flood Network (SEC_DOS)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q94. DDoS 도구 - Tribe Flood Network (SEC_DOS)
+ *  - topic: 5.4.2 시스템 보안 구현
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -140,9 +152,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q94, 'SEC_DOS');
 
-------------------------------------------------------------
--- Q95. StackGuard / 스택 가드 (SEC_STACK)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q95. StackGuard / 스택 가드 (SEC_STACK)
+ *  - topic: 5.4.2 시스템 보안 구현
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -172,9 +187,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q95, 'SEC_STACK');
 
-------------------------------------------------------------
--- Q96. DPI(Deep Packet Inspection) (NW_PACKET)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q96. DPI(Deep Packet Inspection) (NW_PACKET)
+ *  - topic: 5.2.1 네트워크 구축관리
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -204,9 +222,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q96, 'NW_PACKET');
 
-------------------------------------------------------------
--- Q97. SAN(Storage Area Network) (NW_STORAGE)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q97. SAN(Storage Area Network) (NW_STORAGE)
+ *  - topic: 5.2.3 HW 구축관리
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -239,9 +260,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q97, 'NW_STORAGE');
 
-------------------------------------------------------------
--- Q98. 배열 반환과 정보 노출 / 캡슐화 위반 (SEC_API)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q98. 배열 반환과 정보 노출 / 캡슐화 위반 (SEC_API)
+ *  - topic: 5.3.2 소프트웨어 개발 보안 구현
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -270,9 +294,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q98, 'SEC_API');
 
-------------------------------------------------------------
--- Q99. SSH 기본 포트 (NW_SEC_PROTOCOL)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q99. SSH 기본 포트 / 특징 (NW_SEC_PROTOCOL)
+ *  - topic: 5.2.1 네트워크 구축관리
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -301,9 +328,12 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q99, 'NW_SEC_PROTOCOL');
 
-------------------------------------------------------------
--- Q100. 간트 차트(Gantt Chart) (PM_SCHEDULE)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q100. 간트 차트(Gantt Chart) (PM_SCHEDULE)
+ *  - topic: 5.2.2 SW 구축관리
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

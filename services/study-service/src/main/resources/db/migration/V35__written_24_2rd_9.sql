@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q81. 정보보안 3요소 – 휘발성은 해당 아님  [정답: D]
--- topic_id = 15101 (정보보안 기초)
-------------------------------------------------------------
+/* =======================================================
+ * Q81. 정보보안 3요소 – 휘발성은 해당 아님  [정답: D]
+ *  - topic_id = 15101 (정보보안 기초)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -30,10 +30,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q82. SSO (Single Sign-On)  [정답: D]
--- topic_id = 15102 (인증/접근 통제)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q82. SSO (Single Sign-On)  [정답: D]
+ *  - topic_id = 15102 (인증/접근 통제)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -61,10 +62,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q83. COCOMO 모형 설명 – 틀린 것은 C  [정답: C]
--- topic_id = 15103 (소프트웨어 비용 산정)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q83. COCOMO 모형 설명 – 틀린 것은 C  [정답: C]
+ *  - topic_id = 15103 (소프트웨어 비용 산정)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -91,10 +93,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_COST_PM');
 
-------------------------------------------------------------
--- Q84. 종료되지 않는 재귀 – 보안 약점  [정답: A]
--- topic_id = 15104 (SW 개발 보안/취약점)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q84. 종료되지 않는 재귀 – 보안 약점  [정답: A]
+ *  - topic_id = 15104 (SW 개발 보안/취약점)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -127,10 +130,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_ATTACK_DEFENSE');
 
-------------------------------------------------------------
--- Q85. SAN – 비용 관련 설명이 틀림  [정답: D]
--- topic_id = 15105 (인프라/스토리지)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q85. SAN – 비용 관련 설명이 틀림  [정답: D]
+ *  - topic_id = 15105 (인프라/스토리지)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -157,10 +161,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
-------------------------------------------------------------
--- Q86. 해시 설명 – 틀린 것은 B  [정답: B]
--- topic_id = 15106 (암호/해시/전자서명)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q86. 해시 설명 – 틀린 것은 B  [정답: B]
+ *  - topic_id = 15106 (암호/해시/전자서명)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -187,10 +192,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_ATTACK_DEFENSE');
 
-------------------------------------------------------------
--- Q87. 소유기반 인증이 아닌 것 – i-PIN  [정답: A]
--- topic_id = 15102 (인증 수단/요소)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q87. 소유기반 인증이 아닌 것 – i-PIN  [정답: A]
+ *  - topic_id = 15102 (인증 수단/요소)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -217,10 +223,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q88. Mesh Network  [정답: A]
--- topic_id = 15107 (신기술/네트워크 인프라)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q88. Mesh Network  [정답: A]
+ *  - topic_id = 15107 (신기술/네트워크 인프라)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -248,10 +255,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
-------------------------------------------------------------
--- Q89. 개인키(대칭키) 암호가 아닌 것 – RSA  [정답: D]
--- topic_id = 15106 (암호/키체계)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q89. 개인키(대칭키) 암호가 아닌 것 – RSA  [정답: D]
+ *  - topic_id = 15106 (암호/키체계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -278,10 +286,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_ATTACK_DEFENSE');
 
-------------------------------------------------------------
--- Q90. 스니핑(Sniffing)  [정답: B]
--- topic_id = 15101 (보안 위협 유형)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q90. 스니핑(Sniffing)  [정답: B]
+ *  - topic_id = 15101 (보안 위협 유형)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

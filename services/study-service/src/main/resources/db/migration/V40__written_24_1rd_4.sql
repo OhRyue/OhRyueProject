@@ -1,11 +1,13 @@
--- =========================================
--- 2024년 1회 – 소프트웨어 개발 (2과목)
--- Q31 ~ Q40
--- =========================================
+/* =========================================
+ * 2024년 1회 – 소프트웨어 개발 (2과목)
+ * Q31 ~ Q40
+ * ========================================= */
 
-------------------------------------------------------------
--- Q31. 최악의 경우 검색 효율이 가장 나쁜 트리 구조
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q31. 최악의 경우 검색 효율이 가장 나쁜 트리 구조
+ * topic_id = 14002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -32,9 +34,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q32. 선형 구조로만 묶인 것은?
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q32. 선형 구조로만 묶인 것은?
+ * topic_id = 14002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -61,9 +65,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q33. 화이트박스 검사 기법만으로 짝지어진 것은?
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q33. 화이트박스 검사 기법만으로 짝지어진 것은?
+ * topic_id = 12401
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -95,9 +101,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q34. 상향식 테스트에서 사용하는 가상 모듈
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q34. 상향식 테스트에서 사용하는 가상 모듈
+ * topic_id = 12401
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -116,17 +124,19 @@ INSERT INTO question (
 SET @q_id := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-  (@q_id, 'A', '테스트 스텁(Test Stub)',    0),
+  (@q_id, 'A', '테스트 스텁(Test Stub)',       0),
   (@q_id, 'B', '테스트 드라이버(Test Driver)', 1),
-  (@q_id, 'C', '테스트 슈트(Test Suites)',   0),
-  (@q_id, 'D', '테스트 케이스(Test Case)',  0);
+  (@q_id, 'C', '테스트 슈트(Test Suites)',     0),
+  (@q_id, 'D', '테스트 케이스(Test Case)',     0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q35. Attribute-Value Pairs를 위한 개방형 표준 포맷
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q35. Attribute-Value Pairs를 위한 개방형 표준 포맷
+ * topic_id = 12502
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -145,17 +155,19 @@ INSERT INTO question (
 SET @q_id := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-  (@q_id, 'A', 'JSON(JavaScript Object Notation)',      1),
-  (@q_id, 'B', 'HTML(HyperText Markup Language)',       0),
-  (@q_id, 'C', 'DOF(Data Object Format)',               0),
-  (@q_id, 'D', 'AVPN(Attribute-Value Protocol Notation)', 0);
+  (@q_id, 'A', 'JSON(JavaScript Object Notation)',         1),
+  (@q_id, 'B', 'HTML(HyperText Markup Language)',          0),
+  (@q_id, 'C', 'DOF(Data Object Format)',                  0),
+  (@q_id, 'D', 'AVPN(Attribute-Value Protocol Notation)',  0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q36. DRM 설명 중 틀린 것
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q36. DRM 설명 중 틀린 것
+ * topic_id = 15301
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -182,9 +194,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q37. 테스트 오라클 설명 중 옳지 않은 것
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q37. 테스트 오라클 설명 중 옳지 않은 것
+ * topic_id = 12401
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -211,9 +225,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q38. 인터페이스 구현 검증 도구가 아닌 것은
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q38. 인터페이스 구현 검증 도구가 아닌 것은
+ * topic_id = 12502
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -240,9 +256,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q39. 방향 그래프 최대 간선 수
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q39. 방향 그래프 최대 간선 수
+ * topic_id = 14002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -270,9 +288,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q40. 파티션 유형이 아닌 것
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q40. 파티션 유형이 아닌 것
+ * topic_id = 13402
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

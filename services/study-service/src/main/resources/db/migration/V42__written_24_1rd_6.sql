@@ -1,14 +1,15 @@
 USE certpilot_study;
 
--- =========================================
--- 2024년 1회 – 데이터베이스 구축 (3과목)
--- Q51 ~ Q60
--- =========================================
+/* =========================================
+ * 2024년 1회 – 데이터베이스 구축 (3과목)
+ * Q51 ~ Q60
+ * ========================================= */
 
-------------------------------------------------------------
--- 2024-1 Q51. 카디널리티와 차수  [정답: ②]
---  topic_id = 13003
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q51. 카디널리티와 차수
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -25,7 +26,7 @@ INSERT INTO question (
 | yuyu01   | 원유철 | 36   | 3    | 2000   | 2008     |
 | gykim10  | 김성일 | 29   | 2    | 3300   | 2014     |
 | kshan4   | 한경선 | 45   | 3    | 2800   | 2009     |
-| namsu52  | 이남수 | 33   | 5    | 1000   | 2016     |',
+| namsu52  | 이남수 | 33   | 5   | 1000   | 2016     |',
   'B',
   '릴레이션에서
 - 카디널리티(Cardinality)는 “행(튜플)의 개수”,
@@ -50,10 +51,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- 2024-1 Q52. 병행제어 기법 종류가 아닌 것  [정답: ①]
---  topic_id = 13001
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q52. 병행제어 기법 종류가 아닌 것
+ * topic_id = 13001
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -86,10 +88,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- 2024-1 Q53. 이상(Anomaly)이 아닌 것  [정답: ②]
---  topic_id = 13003
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q53. 이상(Anomaly)이 아닌 것
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -122,10 +125,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- 2024-1 Q54. 트랜잭션의 격리성(ACID)  [정답: ④]
---  topic_id = 13001
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q54. 트랜잭션의 격리성(ACID)
+ * topic_id = 13001
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -158,10 +162,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- 2024-1 Q55. 슈퍼키 정의  [정답: ④]
---  topic_id = 13003
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q55. 슈퍼키 정의
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -198,10 +203,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- 2024-1 Q56. 물리적 설계 설명 (거리가 먼 것)  [정답: ④]
---  topic_id = 13004
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q56. 물리적 설계 설명 (거리가 먼 것)
+ * topic_id = 13004
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -232,10 +238,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- 2024-1 Q57. 관계해석 논리기호 (∀)  [정답: ③]
---  topic_id = 13001
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q57. 관계해석 논리기호 (∀)
+ * topic_id = 13001
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -268,10 +275,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- 2024-1 Q58. 서브쿼리를 이용한 팀원 조회  [정답: ④]
---  topic_id = 13002
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q58. 서브쿼리를 이용한 팀원 조회
+ * topic_id = 13002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -324,10 +332,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- 2024-1 Q59. CRUD 매트릭스 분석  [정답: ④]
---  topic_id = 13003
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q59. CRUD 매트릭스 분석
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -361,10 +370,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_META_CRUD');
 
-------------------------------------------------------------
--- 2024-1 Q60. DB 유형 구분 기준  [정답: ②]
---  topic_id = 13003
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q60. DB 유형 구분 기준
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

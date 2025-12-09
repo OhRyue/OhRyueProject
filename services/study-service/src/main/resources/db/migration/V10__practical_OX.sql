@@ -15,7 +15,6 @@ SET @tp_31201  := 31201; -- 3.1.3 모델링 수준(개념/논리/물리)
  * ======================================================= */
 
 -- [31101] OX 3개
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31101, 'PRACTICAL', 'OX', 'NORMAL',
@@ -53,7 +52,6 @@ WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:req_scenario:
  * ======================================================= */
 
 -- [31102] OX 3개
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31102, 'PRACTICAL', 'OX', 'NORMAL',
@@ -91,7 +89,6 @@ WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:req_data:ox6'
  * ======================================================= */
 
 -- [31201] OX 3개
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31201, 'PRACTICAL', 'OX', 'NORMAL',
@@ -121,67 +118,5 @@ SELECT @cert_id, @tp_31201, 'PRACTICAL', 'OX', 'NORMAL',
        '물리 모델은 성능·운영까지 고려한 구체적인 DB 구조를 정의하는 단계입니다.',
        'seed:prac:model_levels:ox6'
 WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:model_levels:ox6');
-
-
-/* =========================================================
- * PRACTICAL question_tag 매핑 (31101~31201)
- *  - 31101: 업무시나리오
- *  - 31102: 데이터요구
- *  - 31201: 모델링
- *  규칙:
- *   1) 위에서 정의한 태그들만 사용
- *   2) 기존의 다른 태그는 제거
- *   3) 태그가 전혀 없는 문제는 대표 태그로 새로 매핑
- * ========================================================= */
-
--- 31101 – 업무 시나리오 해석 → 업무시나리오
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31101
-  AND qt.tag <> '업무시나리오';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '업무시나리오'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '업무시나리오'
-WHERE q.topic_id = @tp_31101
-  AND qt.question_id IS NULL;
-
-
--- 31102 – 업무/데이터 요구 도출 → 데이터요구
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31102
-  AND qt.tag <> '데이터요구';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '데이터요구'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '데이터요구'
-WHERE q.topic_id = @tp_31102
-  AND qt.question_id IS NULL;
-
-
--- 31201 – 개념/논리/물리 모델링 → 모델링
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31201
-  AND qt.tag <> '모델링';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '모델링'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '모델링'
-WHERE q.topic_id = @tp_31201
-  AND qt.question_id IS NULL;
 
 SET FOREIGN_KEY_CHECKS = 1;

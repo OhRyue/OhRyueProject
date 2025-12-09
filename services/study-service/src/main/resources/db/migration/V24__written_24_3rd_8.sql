@@ -1,13 +1,15 @@
-/* =========================================
+/* =======================================================
  * 71 ~ 80 : 프로그래밍 언어 / OS / 네트워크
  *  - cert_id = 1 (정보처리기사)
  *  - mode = 'WRITTEN'
  *  - type = 'MCQ'
- * ========================================= */
+ * ======================================================= */
 
-------------------------------------------------------------
--- Q71. IP 버전에 대한 설명 (NET_PROTO_IP)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q71. IP 버전에 대한 설명 (NET_PROTO_IP)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -29,7 +31,7 @@ WHERE NOT EXISTS (
 
 SET @q71 := (
   SELECT id FROM question
-   WHERE cert_id = 1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'IP 버전에 대한 설명 중 틀린 것은%'
    LIMIT 1
 );
@@ -37,31 +39,33 @@ SET @q71 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q71, 'A', 'IPv4는 32비트 주소를 사용하며 8비트씩 4개의 옥텟으로 표현한다.', 0
 WHERE @q71 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q71 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q71 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q71, 'B', 'IPv6 주소는 16비트 블록 8개를 콜론(:)으로 구분해 표기한다.', 0
 WHERE @q71 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q71 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q71 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q71, 'C', '클래스풀 IPv4 주소 체계에서는 A~E 클래스로 네트워크 구간 길이를 구분한다.', 0
 WHERE @q71 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q71 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q71 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q71, 'D', 'IPv6는 IPv4보다 주소 구조가 복잡하므로 항상 전송 속도가 더 느리다.', 1
 WHERE @q71 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q71 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q71 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q71, 'NET_PROTO_IP'
 WHERE @q71 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q71 AND tag='NET_PROTO_IP');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q71 AND tag = 'NET_PROTO_IP');
 
-------------------------------------------------------------
--- Q72. 서버 스크립트 언어 (PHP) (LANG_BASIC_SCRIPT)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q72. 서버 스크립트 언어 (PHP) (LANG_BASIC_SCRIPT)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -79,45 +83,46 @@ SELECT
   'seed:2024-3W:72'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode=''WRITTEN'' AND type=''MCQ''
-     AND stem LIKE ''다음 내용이 설명하는 스크립트 언어는%''
-);
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
+     AND stem LIKE '다음 내용이 설명하는 스크립트 언어는%');
 
 SET @q72 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode=''WRITTEN'' AND type=''MCQ''
-     AND stem LIKE ''다음 내용이 설명하는 스크립트 언어는%''
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
+     AND stem LIKE '다음 내용이 설명하는 스크립트 언어는%'
    LIMIT 1
 );
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT @q72, ''A'', ''PHP'', 1
+SELECT @q72, 'A', 'PHP', 1
 WHERE @q72 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q72 AND label=''A'');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q72 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT @q72, ''B'', ''JavaScript'', 0
+SELECT @q72, 'B', 'JavaScript', 0
 WHERE @q72 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q72 AND label=''B'');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q72 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT @q72, ''C'', ''Python'', 0
+SELECT @q72, 'C', 'Python', 0
 WHERE @q72 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q72 AND label=''C'');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q72 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
-SELECT @q72, ''D'', ''C#'', 0
+SELECT @q72, 'D', 'C#', 0
 WHERE @q72 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q72 AND label=''D'');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q72 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
-SELECT @q72, ''LANG_BASIC_SCRIPT''
+SELECT @q72, 'LANG_BASIC_SCRIPT'
 WHERE @q72 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q72 AND tag=''LANG_BASIC_SCRIPT'');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q72 AND tag = 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q73. 응집도의 단계 (SW_ARCH_DESIGN)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q73. 응집도의 단계 (SW_ARCH_DESIGN)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -132,12 +137,12 @@ SELECT
   'seed:2024-3W:73'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'Myers가 구분한 응집도의 단계 중 응집도가 가장 낮은 것은%');
 
 SET @q73 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'Myers가 구분한 응집도의 단계 중 응집도가 가장 낮은 것은%'
    LIMIT 1
 );
@@ -145,31 +150,33 @@ SET @q73 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q73, 'A', '순차적 응집(Sequential Cohesion)', 0
 WHERE @q73 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q73 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q73 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q73, 'B', '기능적 응집(Functional Cohesion)', 0
 WHERE @q73 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q73 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q73 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q73, 'C', '시간적 응집(Temporal Cohesion)', 0
 WHERE @q73 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q73 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q73 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q73, 'D', '우연적 응집(Coincidental Cohesion)', 1
 WHERE @q73 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q73 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q73 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q73, 'SW_ARCH_DESIGN'
 WHERE @q73 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q73 AND tag='SW_ARCH_DESIGN');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q73 AND tag = 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q74. Python 슬라이싱 (LANG_BASIC_SCRIPT)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q74. Python 슬라이싱 (LANG_BASIC_SCRIPT)
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -190,12 +197,12 @@ print(r)
   'seed:2024-3W:74'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE '다음 Python 코드 실행 결과로 옳은 것은%');
 
 SET @q74 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE '다음 Python 코드 실행 결과로 옳은 것은%'
    LIMIT 1
 );
@@ -203,31 +210,33 @@ SET @q74 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q74, 'A', 'hSlu', 1
 WHERE @q74 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q74 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q74 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q74, 'B', 'ShmC', 0
 WHERE @q74 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q74 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q74 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q74, 'C', 'penC', 0
 WHERE @q74 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q74 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q74 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q74, 'D', 'Concept', 0
 WHERE @q74 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q74 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q74 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q74, 'LANG_BASIC_SCRIPT'
 WHERE @q74 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q74 AND tag='LANG_BASIC_SCRIPT');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q74 AND tag = 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q75. 교착상태 필요조건 (OS_PROC_MEM)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q75. 교착상태 필요조건 (OS_PROC_MEM)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -248,12 +257,12 @@ SELECT
   'seed:2024-3W:75'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE '교착상태 발생의 필요·충분 조건에 해당하지 않는 것은%');
 
 SET @q75 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE '교착상태 발생의 필요·충분 조건에 해당하지 않는 것은%'
    LIMIT 1
 );
@@ -261,31 +270,33 @@ SET @q75 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q75, 'A', '상호 배제(Mutual Exclusion)', 0
 WHERE @q75 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q75 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q75 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q75, 'B', '점유와 대기(Hold and Wait)', 0
 WHERE @q75 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q75 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q75 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q75, 'C', '환형 대기(Circular Wait)', 0
 WHERE @q75 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q75 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q75 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q75, 'D', '선점(Preemption)', 1
 WHERE @q75 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q75 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q75 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q75, 'OS_PROC_MEM'
 WHERE @q75 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q75 AND tag='OS_PROC_MEM');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q75 AND tag = 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q76. 비선점 스케줄링 (OS_PROC_MEM)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q76. 비선점 스케줄링 (OS_PROC_MEM)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -300,12 +311,12 @@ SELECT
   'seed:2024-3W:76'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE '다음 중 비선점(Non-preemptive) 스케줄링 알고리즘이 아닌 것은%');
 
 SET @q76 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE '다음 중 비선점(Non-preemptive) 스케줄링 알고리즘이 아닌 것은%'
    LIMIT 1
 );
@@ -313,31 +324,33 @@ SET @q76 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q76, 'A', 'FCFS', 0
 WHERE @q76 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q76 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q76 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q76, 'B', 'SJF (비선점)', 0
 WHERE @q76 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q76 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q76 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q76, 'C', 'HRN', 0
 WHERE @q76 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q76 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q76 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q76, 'D', 'SRT', 1
 WHERE @q76 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q76 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q76 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q76, 'OS_PROC_MEM'
 WHERE @q76 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q76 AND tag='OS_PROC_MEM');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q76 AND tag = 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q77. C 변수 이름 (LANG_BASIC_SCRIPT)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q77. C 변수 이름 (LANG_BASIC_SCRIPT)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -352,12 +365,12 @@ SELECT
   'seed:2024-3W:77'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'C 언어에서 변수 이름으로 사용할 수 없는 것은%');
 
 SET @q77 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'C 언어에서 변수 이름으로 사용할 수 없는 것은%'
    LIMIT 1
 );
@@ -365,31 +378,33 @@ SET @q77 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q77, 'A', 'value1', 0
 WHERE @q77 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q77 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q77 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q77, 'B', '3num', 1
 WHERE @q77 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q77 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q77 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q77, 'C', '_total', 0
 WHERE @q77 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q77 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q77 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q77, 'D', 'student_2025', 0
 WHERE @q77 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q77 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q77 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q77, 'LANG_BASIC_SCRIPT'
 WHERE @q77 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q77 AND tag='LANG_BASIC_SCRIPT');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q77 AND tag = 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q78. ARP (NET_PROTO_IP)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q78. ARP (NET_PROTO_IP)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -404,12 +419,12 @@ SELECT
   'seed:2024-3W:78'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'TCP/IP에서 논리 주소(IP 주소)를 물리 주소(MAC 주소)로 변환해 주는 프로토콜은%');
 
 SET @q78 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'TCP/IP에서 논리 주소(IP 주소)를 물리 주소(MAC 주소)로 변환해 주는 프로토콜은%'
    LIMIT 1
 );
@@ -417,31 +432,33 @@ SET @q78 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q78, 'A', 'TCP', 0
 WHERE @q78 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q78 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q78 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q78, 'B', 'ARP', 1
 WHERE @q78 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q78 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q78 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q78, 'C', 'IP', 0
 WHERE @q78 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q78 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q78 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q78, 'D', 'FTP', 0
 WHERE @q78 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q78 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q78 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q78, 'NET_PROTO_IP'
 WHERE @q78 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q78 AND tag='NET_PROTO_IP');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q78 AND tag = 'NET_PROTO_IP');
 
-------------------------------------------------------------
--- Q79. 라이브러리 개념 (LANG_BASIC_SCRIPT)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q79. 라이브러리 개념 (LANG_BASIC_SCRIPT)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -456,12 +473,12 @@ SELECT
   'seed:2024-3W:79'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE '라이브러리의 개념과 구성에 대한 설명 중 틀린 것은%');
 
 SET @q79 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE '라이브러리의 개념과 구성에 대한 설명 중 틀린 것은%'
    LIMIT 1
 );
@@ -469,31 +486,33 @@ SET @q79 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q79, 'A', '라이브러리는 필요할 때 찾아서 쓸 수 있도록 모듈화되어 제공되는 프로그램/코드 모음이다.', 0
 WHERE @q79 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q79 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q79 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q79, 'B', '언어·플랫폼에 따라 도움말, 설치 파일, 샘플 코드 등을 함께 제공하는 경우가 많다.', 0
 WHERE @q79 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q79 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q79 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q79, 'C', '외부 라이브러리는 언어가 기본으로 포함한 표준 라이브러리를 의미하고, 표준 라이브러리는 별도 설치가 필요한 라이브러리를 의미한다.', 1
 WHERE @q79 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q79 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q79 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q79, 'D', '라이브러리는 모듈과 패키지를 총칭하며, 모듈은 개별 파일, 패키지는 파일들을 모아 둔 폴더(디렉터리)에 해당한다.', 0
 WHERE @q79 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q79 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q79 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q79, 'LANG_BASIC_SCRIPT'
 WHERE @q79 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q79 AND tag='LANG_BASIC_SCRIPT');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q79 AND tag = 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q80. C stdlib.h (LANG_BASIC_SCRIPT)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q80. C stdlib.h (LANG_BASIC_SCRIPT)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -508,12 +527,12 @@ SELECT
   'seed:2024-3W:80'
 WHERE NOT EXISTS (
   SELECT 1 FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'C 언어 표준 라이브러리 stdlib.h에 대한 설명으로 옳은 것은%');
 
 SET @q80 := (
   SELECT id FROM question
-   WHERE cert_id=1 AND mode='WRITTEN' AND type='MCQ'
+   WHERE cert_id = 1 AND mode = 'WRITTEN' AND type = 'MCQ'
      AND stem LIKE 'C 언어 표준 라이브러리 stdlib.h에 대한 설명으로 옳은 것은%'
    LIMIT 1
 );
@@ -521,24 +540,24 @@ SET @q80 := (
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q80, 'A', '문자열을 수치로 변환하는 함수와 난수 생성, 메모리 관리 등 범용 유틸리티 함수가 포함되어 있다.', 1
 WHERE @q80 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q80 AND label='A');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q80 AND label = 'A');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q80, 'B', '문자열 길이를 구하는 strlen() 등이 포함된 문자열 처리 전용 라이브러리이다.', 0
 WHERE @q80 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q80 AND label='B');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q80 AND label = 'B');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q80, 'C', '표준 입출력 함수들이 정의된 라이브러리이다.', 0
 WHERE @q80 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q80 AND label='C');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q80 AND label = 'C');
 
 INSERT INTO question_choice (question_id, label, content, is_correct)
 SELECT @q80, 'D', '삼각함수, 제곱근, 지수 함수 등이 정의된 수학 라이브러리이다.', 0
 WHERE @q80 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id=@q80 AND label='D');
+  AND NOT EXISTS (SELECT 1 FROM question_choice WHERE question_id = @q80 AND label = 'D');
 
 INSERT INTO question_tag (question_id, tag)
 SELECT @q80, 'LANG_BASIC_SCRIPT'
 WHERE @q80 IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q80 AND tag='LANG_BASIC_SCRIPT');
+  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id = @q80 AND tag = 'LANG_BASIC_SCRIPT');

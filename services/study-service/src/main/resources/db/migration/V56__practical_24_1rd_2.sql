@@ -1,11 +1,16 @@
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+USE certpilot_study;
+
+SET @cert_id    := 1;
+
 /* =======================================================
  * 2024년 1회 – 정보처리기사 실기
  * Q11 ~ Q20 (모두 PRACTICAL / SHORT)
  * ======================================================= */
 
-------------------------------------------------------------
 -- Q11. C 구조체/포인터 – 단리 이자 계산  [정답: 9981 and 2795.10]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -75,9 +80,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
 -- Q12. Python 리스트/문자열 결합  [정답: Seynaau]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -111,9 +114,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
 -- Q13. SQL 서브쿼리 + IN 결과 집합  [정답: a, b]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -163,9 +164,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SQL_SELECT_JOIN');
 
-------------------------------------------------------------
 -- Q14. 테스트 커버리지 – 변경 조건/결정(MC/DC)  [정답: 변경 조건/결정 커버리지]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -204,9 +203,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SW_TEST');
 
-------------------------------------------------------------
 -- Q15. 보안 악성 코드 – Rootkit  [정답: Rootkit]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -243,9 +240,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SECURITY');
 
-------------------------------------------------------------
 -- Q16. Java 상속/오버라이딩 – 동적 바인딩  [정답: 9]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -303,9 +298,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
 -- Q17. 보안 공격 – APT(지능형 지속 공격)  [정답: APT]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -332,9 +325,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SECURITY');
 
-------------------------------------------------------------
 -- Q18. SQL WHERE 절 AND/OR 우선순위  [정답: 1]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -384,9 +375,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SQL_SELECT_JOIN');
 
-------------------------------------------------------------
 -- Q19. C 시저 암호 변환  [정답: Nd sc 1]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -447,9 +436,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SECURITY');
 
-------------------------------------------------------------
 -- Q20. GoF 생성 패턴 – Abstract Factory  [정답: Abstract Factory]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source

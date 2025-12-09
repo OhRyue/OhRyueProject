@@ -1,6 +1,6 @@
 -- =========================================
 -- 2025년 1회 정보처리기사 실기
--- SHORT 문제 시드 (Q1 ~ Q10)
+-- PRACTICAL SHORT 문제 시드 (Q1 ~ Q10)
 -- =========================================
 
 SET NAMES utf8mb4;
@@ -22,9 +22,10 @@ SET @tp_31402 := 31402; -- P.4.2 동시성 제어/락 전략 설계
 SET @tp_31501 := 31501; -- P.5.1 백업/복구 전략 수립
 SET @tp_31502 := 31502; -- P.5.2 장애 분석 및 개선안 도출
 
-------------------------------------------------------------
--- Q1. 세션 하이재킹 (네트워크 보안)
-------------------------------------------------------------
+/* =======================================================
+ * Q1. 세션 하이재킹 (TCP 세션 탈취)
+ *  - Topic: P.1.1 업무 시나리오 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -53,9 +54,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q2. 무결성 제약조건 비교표 (도메인/개체/참조)
-------------------------------------------------------------
+/* =======================================================
+ * Q2. 무결성 제약조건 비교 (도메인/개체/참조)
+ *  - Topic: P.4.1 트랜잭션 특성/격리수준 (@tp_31401 / 31401)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -92,9 +94,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_TX_ISOLATION');
 
-------------------------------------------------------------
--- Q3. CRC 오류 검출 코드
-------------------------------------------------------------
+/* =======================================================
+ * Q3. CRC 오류 검출 코드
+ *  - Topic: P.1.1 업무 시나리오 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -123,9 +126,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q4. Scareware (스캐어웨어)
-------------------------------------------------------------
+/* =======================================================
+ * Q4. Scareware (스캐어웨어)
+ *  - Topic: P.5.2 장애 분석 및 보안 사고 대응 (@tp_31502 / 31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -158,9 +162,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q5. Java 예외 처리 흐름
-------------------------------------------------------------
+/* =======================================================
+ * Q5. Java 예외 처리 흐름
+ *  - Topic: P.5.2 장애 분석 및 개선안 도출 (@tp_31502 / 31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -209,9 +214,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q6. ARP / RARP
-------------------------------------------------------------
+/* =======================================================
+ * Q6. ARP / RARP
+ *  - Topic: P.5.2 장애 분석 및 개선안 도출 (@tp_31502 / 31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -239,9 +245,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q7. SQL JOIN 결과 (emp / sal)
-------------------------------------------------------------
+/* =======================================================
+ * Q7. SQL JOIN 결과 (emp / sal)
+ *  - Topic: P.3.1 SELECT/집계/조인 쿼리 작성 (@tp_31301 / 31301)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -293,9 +300,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SQL_SELECT_JOIN');
 
-------------------------------------------------------------
--- Q8. 릴레이션 용어 (degree / cardinality / foreign key / domain)
-------------------------------------------------------------
+/* =======================================================
+ * Q8. 릴레이션 용어 (degree / cardinality / foreign key / domain)
+ *  - Topic: P.2.1 개념/논리/물리 모델링 (@tp_31201 / 31201)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -331,9 +339,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_MODEL_ER_PHYSICAL');
 
-------------------------------------------------------------
--- Q9. 서브넷 브로드캐스트 수신 가능한 IP
-------------------------------------------------------------
+/* =======================================================
+ * Q9. 서브넷 브로드캐스트 수신 가능한 IP
+ *  - Topic: P.5.2 장애 분석 및 개선안 도출 (@tp_31502 / 31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -369,9 +378,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q10. C 언어 – 문자 삽입 후 정렬된 배열
-------------------------------------------------------------
+/* =======================================================
+ * Q10. C 언어 – 문자 삽입 후 정렬된 배열
+ *  - Topic: P.5.2 장애 분석 및 개선안 도출 (@tp_31502 / 31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

@@ -1,11 +1,13 @@
--- =========================================
--- 2024년 1회 – 데이터베이스 구축 (3과목)
--- Q41 ~ Q50
--- =========================================
+/* =========================================
+ * 2024년 1회 – 데이터베이스 구축 (3과목)
+ * Q41 ~ Q50
+ * ========================================= */
 
-------------------------------------------------------------
--- Q41. DROP 시 참조 무결성 유지 옵션
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q41. DROP 시 참조 무결성 유지 옵션
+ * topic_id = 13002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -38,9 +40,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q42. View에 대한 설명 중 옳지 않은 것
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q42. View에 대한 설명 중 옳지 않은 것
+ * topic_id = 13002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -66,17 +70,19 @@ INSERT INTO question (
 SET @q_id := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-  (@q_id, 'A', '뷰는 CREATE문을 사용하여 정의한다.',          0),
+  (@q_id, 'A', '뷰는 CREATE문을 사용하여 정의한다.',                  0),
   (@q_id, 'B', '뷰는 데이터의 논리적 독립성을 제공하는 데 도움을 준다.', 0),
-  (@q_id, 'C', '뷰를 제거할 때에는 DROP문을 사용한다.',         0),
+  (@q_id, 'C', '뷰를 제거할 때에는 DROP문을 사용한다.',                 0),
   (@q_id, 'D', '뷰는 저장장치 내에 항상 물리적으로 실제 데이터가 저장된다.', 1);
 
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q43. DML에 해당하는 SQL 명령어만 나열된 것은?
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q43. DML에 해당하는 SQL 명령어만 나열된 것은?
+ * topic_id = 13002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -110,9 +116,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q44. 관계대수의 순수 관계 연산자가 아닌 것은?
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q44. 관계대수의 순수 관계 연산자가 아닌 것은?
+ * topic_id = 13001
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -143,9 +151,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q45. 기본키의 널 불허 성질 (개체 무결성)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q45. 기본키의 널 불허 성질 (개체 무결성)
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -177,9 +187,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q46. 3NF에서 BCNF로 정규화
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q46. 3NF에서 BCNF로 정규화
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -212,9 +224,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q47. 로킹(Locking) 기법 중 틀린 설명
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q47. 로킹(Locking) 기법 중 틀린 설명
+ * topic_id = 13001
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -245,9 +259,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q48. UPDATE 문 빈칸
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q48. UPDATE 문 빈칸
+ * topic_id = 13002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -287,9 +303,10 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
 
-------------------------------------------------------------
--- Q49. 데이터베이스 전체를 정의한 스키마
-------------------------------------------------------------
+/* =======================================================
+ * 2024-1 Q49. 데이터베이스 전체를 정의한 스키마
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -325,9 +342,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q50. 시스템 카탈로그에 대한 설명 중 틀린 것
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q50. 시스템 카탈로그에 대한 설명 중 틀린 것
+ * topic_id = 13003
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

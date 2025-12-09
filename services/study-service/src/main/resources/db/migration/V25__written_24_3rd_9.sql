@@ -1,15 +1,17 @@
 USE certpilot_study;
 
-/* =========================================
+/* =======================================================
  * 81 ~ 90 : 정보시스템 구축 관리
  *  - cert_id = 1 (정보처리기사)
  *  - mode = 'WRITTEN'
  *  - type = 'MCQ'
- * ========================================= */
+ * ======================================================= */
 
-------------------------------------------------------------
--- Q81. 정보보안 3요소(CIA) (SEC_POLICY)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q81. 정보보안 3요소(CIA) (SEC_POLICY)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -40,9 +42,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q81, 'SEC_POLICY');
 
-------------------------------------------------------------
--- Q82. COCOMO - Organic 유형 (PM_ESTIMATION)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q82. COCOMO - Organic 유형 (PM_ESTIMATION)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -75,9 +79,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q82, 'PM_ESTIMATION');
 
-------------------------------------------------------------
--- Q83. 비용 산정 설명 (PM_ESTIMATION)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q83. 비용 산정 설명 (PM_ESTIMATION)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -106,9 +112,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q83, 'PM_ESTIMATION');
 
-------------------------------------------------------------
--- Q84. 취약점 관리 - 응용 프로그램 보안 설정 (SEC_OPERATION)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q84. 취약점 관리 - 응용 프로그램 보안 설정 (SEC_OPERATION)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -136,9 +144,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q84, 'SEC_OPERATION');
 
-------------------------------------------------------------
--- Q85. Django 프레임워크 (LANG_FRAMEWORK)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q85. Django 프레임워크 (LANG_FRAMEWORK)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -167,9 +177,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q85, 'LANG_FRAMEWORK');
 
-------------------------------------------------------------
--- Q86. LOC 기반 기간 산정 (PM_ESTIMATION)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q86. LOC 기반 기간 산정 (PM_ESTIMATION)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -201,9 +213,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q86, 'PM_ESTIMATION');
 
-------------------------------------------------------------
--- Q87. 무선 LAN - CSMA/CA (NW_WIRELESS)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q87. 무선 LAN - CSMA/CA (NW_WIRELESS)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -233,9 +247,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q87, 'NW_WIRELESS');
 
-------------------------------------------------------------
--- Q88. 물리적 위협 (SEC_OPERATION)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q88. 물리적 위협 (SEC_OPERATION)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -264,9 +280,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q88, 'SEC_OPERATION');
 
-------------------------------------------------------------
--- Q89. 나선형(Spiral) 모델 4단계 (SW_PROCESS)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q89. 나선형(Spiral) 모델 4단계 (SW_PROCESS)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -279,7 +297,7 @@ INSERT INTO question (
   '소프트웨어 개발 모델 중 나선형(Spiral) 모델의 네 가지 주요 활동을
 올바른 순서로 나열한 것은?
 
-> Ⓐ 계획 수립  Ⓑ 고객 평가  
+> Ⓐ 계획 수립  Ⓑ 고객 평가
 > Ⓒ 개발 및 검증  Ⓓ 위험 분석',
   'B',
   '나선형(Spiral) 모델의 한 사이클은 일반적으로 다음 순서로 진행됩니다.
@@ -302,9 +320,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q89, 'SW_PROCESS');
 
-------------------------------------------------------------
--- Q90. Docker 개념 (OPS_DEVOPS)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q90. Docker 개념 (OPS_DEVOPS)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

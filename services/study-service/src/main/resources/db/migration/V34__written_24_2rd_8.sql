@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q71. IEEE 802.3 MAC - CSMA/CD  [정답: B]
--- topic_id = 14302 (네트워크/이더넷·MAC)
-------------------------------------------------------------
+/* =======================================================
+ * Q71. IEEE 802.3 MAC - CSMA/CD  [정답: B]
+ *  - topic_id = 14302 (네트워크/이더넷·MAC)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -22,18 +22,19 @@ INSERT INTO question (
 SET @q_id := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-  (@q_id, 'A', 'Token Bus',   0),
-  (@q_id, 'B', 'CSMA/CD',     1),
-  (@q_id, 'C', 'Slotted Ring',0),
-  (@q_id, 'D', 'Token Ring',  0);
+  (@q_id, 'A', 'Token Bus',    0),
+  (@q_id, 'B', 'CSMA/CD',      1),
+  (@q_id, 'C', 'Slotted Ring', 0),
+  (@q_id, 'D', 'Token Ring',   0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'NET_PROTO_IP');
 
-------------------------------------------------------------
--- Q72. 오버레이(Overlay) 기법  [정답: B]
--- topic_id = 14301 (운영체제/메모리 관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q72. 오버레이(Overlay) 기법  [정답: B]
+ *  - topic_id = 14301 (운영체제/메모리 관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -54,18 +55,19 @@ INSERT INTO question (
 SET @q_id := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-  (@q_id, 'A', '스와핑(Swapping)',        0),
-  (@q_id, 'B', '오버레이(Overlay)',       1),
-  (@q_id, 'C', '세그먼테이션(Segmentation)', 0),
-  (@q_id, 'D', '페이징(Paging)',         0);
+  (@q_id, 'A', '스와핑(Swapping)',            0),
+  (@q_id, 'B', '오버레이(Overlay)',           1),
+  (@q_id, 'C', '세그먼테이션(Segmentation)',  0),
+  (@q_id, 'D', '페이징(Paging)',             0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q73. 배치 유형 – 이벤트성 배치  [정답: A]
--- topic_id = 14301 (운영·배치 개념)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q73. 배치 유형 – 이벤트성 배치  [정답: A]
+ *  - topic_id = 14301 (운영·배치 개념)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -93,10 +95,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q74. Fan-in, Fan-out  [정답: B]
--- topic_id = 11301 (모듈 구조/품질)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q74. Fan-in, Fan-out  [정답: B]
+ *  - topic_id = 11301 (모듈 구조/품질)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -124,10 +127,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q75. Java do-while 결과  [정답: B]
--- topic_id = 14202 (Java 제어문)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q75. Java do-while 결과  [정답: B]
+ *  - topic_id = 14202 (Java 제어문)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -146,29 +150,30 @@ do {
   sum += a;
 } while (a > 10);
 ```',
-'B',
-'do-while문은 조건과 상관없이 최소 1번은 실행됩니다.
+  'B',
+  'do-while문은 조건과 상관없이 최소 1번은 실행됩니다.
 초기 a=0, sum=0에서 do 블록 1회 실행 후 a=1, sum=1이 되고,
 그 다음 조건 검사에서 a>10은 false이므로 루프가 종료됩니다.
 따라서 최종 값은 a=1, sum=1입니다.',
-'past:2024-2:Q75'
+  'past:2024-2:Q75'
 );
 
 SET @q_id := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-(@q_id, 'A', 'a = 0, sum = 0', 0),
-(@q_id, 'B', 'a = 1, sum = 1', 1),
-(@q_id, 'C', 'a = 9, sum = 45',0),
-(@q_id, 'D', 'a = 10, sum = 55',0);
+  (@q_id, 'A', 'a = 0, sum = 0', 0),
+  (@q_id, 'B', 'a = 1, sum = 1', 1),
+  (@q_id, 'C', 'a = 9, sum = 45',0),
+  (@q_id, 'D', 'a = 10, sum = 55',0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q_id, 'LANG_BASIC_SCRIPT');
+  (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q76. 표준 출력이 아닌 것 (prn)  [정답: B]
--- topic_id = 14202 (Java 기본 I/O)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q76. 표준 출력이 아닌 것 (prn)  [정답: B]
+ *  - topic_id = 14202 (Java 기본 I/O)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -195,10 +200,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q77. 스크립트 언어가 아닌 것 – Fortran  [정답: A]
--- topic_id = 14201 (언어 분류/특징)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q77. 스크립트 언어가 아닌 것 – Fortran  [정답: A]
+ *  - topic_id = 14201 (언어 분류/특징)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -210,7 +216,7 @@ INSERT INTO question (
   'EASY',
   '다음 중 스크립트 언어가 아닌 것은?',
   'A',
-  'PHP와 Python은 대표적인 스크립트 언어이며, Basic 역시 인터프리터/스크립트 형태 구현들이 존재합니다. 
+  'PHP와 Python은 대표적인 스크립트 언어이며, Basic 역시 인터프리터/스크립트 형태 구현들이 존재합니다.
 반면 Fortran은 전통적인 컴파일 언어로 대규모 수치 계산 등에 사용되는 언어이므로 스크립트 언어라고 보지 않습니다. 따라서 정답은 Fortran입니다.',
   'past:2024-2:Q77'
 );
@@ -226,10 +232,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q78. 페이지 교체 알고리즘이 아닌 것 – SCF  [정답: C]
--- topic_id = 14301 (운영체제/메모리·교체)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q78. 페이지 교체 알고리즘이 아닌 것 – SCF  [정답: C]
+ *  - topic_id = 14301 (운영체제/메모리·교체)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -257,10 +264,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q79. Java 문자열에서 문자 개수 세기  [정답: D]
--- topic_id = 14202 (Java 문자열/배열)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q79. Java 문자열에서 문자 개수 세기  [정답: D]
+ *  - topic_id = 14202 (Java 문자열/배열)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -306,10 +314,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q80. 서로 다른 프로토콜 구조를 연결 – Gateway  [정답: C]
--- topic_id = 14302 (네트워크/장비)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q80. 서로 다른 프로토콜 구조를 연결 – Gateway  [정답: C]
+ *  - topic_id = 14302 (네트워크/장비)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -332,10 +341,10 @@ INSERT INTO question (
 SET @q_id := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-  (@q_id, 'A', '브리지(Bridge)',   0),
-  (@q_id, 'B', '리피터(Repeater)', 0),
-  (@q_id, 'C', '게이트웨이(Gateway)', 1),
-  (@q_id, 'D', '라우터(Router)',   0);
+  (@q_id, 'A', '브리지(Bridge)',       0),
+  (@q_id, 'B', '리피터(Repeater)',     0),
+  (@q_id, 'C', '게이트웨이(Gateway)',  1),
+  (@q_id, 'D', '라우터(Router)',       0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'NET_PROTO_IP');

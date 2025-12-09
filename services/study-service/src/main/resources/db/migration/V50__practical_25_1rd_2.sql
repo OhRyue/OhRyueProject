@@ -1,6 +1,6 @@
 -- =========================================
 -- 2025년 1회 정보처리기사 실기
--- SHORT 문제 시드 (Q11 ~ Q20)
+-- PRACTICAL SHORT 문제 시드 (Q11 ~ Q20)
 -- =========================================
 
 SET NAMES utf8mb4;
@@ -10,20 +10,22 @@ USE certpilot_study;
 
 SET @cert_id := 1;
 
-SET @tp_31101 := 31101;
-SET @tp_31102 := 31102;
-SET @tp_31201 := 31201;
-SET @tp_31202 := 31202;
-SET @tp_31301 := 31301;
-SET @tp_31302 := 31302;
-SET @tp_31401 := 31401;
-SET @tp_31402 := 31402;
-SET @tp_31501 := 31501;
-SET @tp_31502 := 31502;
+-- PRACTICAL 토픽 상수
+SET @tp_31101 := 31101; -- P.1.1 업무 시나리오/코드 해석
+SET @tp_31102 := 31102; -- P.1.2 업무/데이터 요구 도출
+SET @tp_31201 := 31201; -- P.2.1 개념/논리/물리 모델링
+SET @tp_31202 := 31202; -- P.2.2 정규화/반정규화 적용
+SET @tp_31301 := 31301; -- P.3.1 SELECT/집계/조인 쿼리 작성
+SET @tp_31302 := 31302; -- P.3.2 인덱스 설계 및 쿼리 튜닝
+SET @tp_31401 := 31401; -- P.4.1 트랜잭션 특성/격리수준
+SET @tp_31402 := 31402; -- P.4.2 동시성 제어/락 전략 설계
+SET @tp_31501 := 31501; -- P.5.1 백업/복구 전략 수립
+SET @tp_31502 := 31502; -- P.5.2 장애 분석 및 개선안 도출
 
-------------------------------------------------------------
--- Q11. C 언어 – 3x3 배열 동적 할당 (원문 코드 미확인, 정답만 반영)
-------------------------------------------------------------
+/* =======================================================
+ * Q11. C 언어 – 3×3 동적 배열과 인덱스 계산
+ *  - Topic: P.1.1 코드/포인터 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -33,16 +35,97 @@ INSERT INTO question (
   'PRACTICAL',
   'SHORT',
   'HARD',
-  '다음은 C 언어로 3×3 2차원 배열을 동적으로 할당하여 연산을 수행하고, 최종 결과를 출력하는 프로그램이다.
+  '다음은 C 언어에 대한 코드이다. 아래 프로그램을 실행했을 때 출력되는 값을 작성하시오.
 
-(주의: 이 문항은 실제 기출의 코드 전체가 아직 확보되지 않아, 현재는 "3×3 배열과 malloc을 사용하는 코드"라는 정도만 반영된 임시 설명이다.
-실제 서비스에 사용하기 전, 반드시 원문 기출의 코드를 확인하여 이 stem 내용을 교체해 주어야 한다.)
+```c
+#include <stdio.h>
+#include <stdlib.h>
 
-프로그램을 실행했을 때 출력되는 정수 값을 작성하시오.',
+void set(int** arr, int* data, int rows, int cols) {
+    for (int i = 0; i < rows * cols; ++i) {
+        arr[((i + 1) / rows) % rows][(i + 1) % cols] = data[i];
+    }
+}
+
+int main() {
+    int rows = 3, cols = 3, sum = 0;
+    int data[] = {5, 2, 7, 4, 1, 8, 3, 6, 9};
+    int** arr;
+
+    arr = (int**) malloc(sizeof(int*) * rows);
+    for (int i = 0; i < cols; ++i) {
+        arr[i] = (int*) malloc(sizeof(int) * cols);
+    }
+
+    set(arr, data, rows, cols);
+
+    for (int i = 0; i < rows * cols; ++i) {
+        sum += arr[i / rows][i % cols] * (i % 2 == 0 ? 1 : -1);
+    }
+
+    for (int i = 0; i < rows; ++i) {
+        free(arr[i]);
+    }
+    free(arr);
+
+    printf("%d", sum);
+}
+```',
   '13',
-  '문제 설명에 따르면 프로그램은 3×3 크기의 정수 배열을 동적으로 할당하고, 일부 연산을 수행한 뒤 정수 하나를 출력하며, 정답은 13이다.
-현재 원문 코드가 확보되지 않아 구체적인 연산 과정은 명시할 수 없으므로, 이 문항은 정답 값만 맞추도록 구성한 임시 문항이다.
-실제 기출 코드가 준비되면, 코드와 설명을 원문에 맞게 교체하는 것이 바람직하다.',
+  '코드의 핵심은 set 함수에서 1차원 배열 data의 값을 3×3 2차원 배열 arr에 특정 규칙으로 채우고,
+이후 arr의 원소들을 번갈아 가중치(+1, -1)를 곱해 합산한다는 점입니다.
+
+1) set 함수로 arr 채우기
+
+rows = 3, cols = 3 이므로 i는 0부터 8까지 순회합니다.
+각 i에 대해 저장 위치는 다음과 같습니다.
+
+- 행 인덱스: ((i + 1) / rows) % rows
+- 열 인덱스: (i + 1) % cols
+
+이를 i = 0 ~ 8에 대해 계산하면 다음과 같은 2차원 배열이 됩니다.
+
+- i = 0 → data[0] = 5  → arr[1][1]
+- i = 1 → data[1] = 2  → arr[0][2]
+- i = 2 → data[2] = 7  → arr[1][0]
+- i = 3 → data[3] = 4  → arr[1][1] (덮어씀)
+- i = 4 → data[4] = 1  → arr[2][2]
+- i = 5 → data[5] = 8  → arr[2][0]
+- i = 6 → data[6] = 3  → arr[0][1]
+- i = 7 → data[7] = 6  → arr[2][1]
+- i = 8 → data[8] = 9  → arr[0][0]
+
+최종적으로 arr는 다음과 같이 채워집니다.
+
+arr =
+[ [9, 5, 2],
+  [7, 4, 1],
+  [8, 3, 6] ]
+
+2) 합계 계산
+
+for (i = 0; i < rows * cols; ++i) 에서
+
+- 인덱스: arr[i / rows][i % cols]
+- 가중치: (i % 2 == 0 ? 1 : -1)  → 짝수 인덱스는 +, 홀수 인덱스는 -
+
+각 i에 대해 값을 나열하면:
+
+- i = 0 : + arr[0][0] = +9
+- i = 1 : - arr[0][1] = -5
+- i = 2 : + arr[0][2] = +2
+- i = 3 : - arr[1][0] = -7
+- i = 4 : + arr[1][1] = +4
+- i = 5 : - arr[1][2] = -1
+- i = 6 : + arr[2][0] = +8
+- i = 7 : - arr[2][1] = -3
+- i = 8 : + arr[2][2] = +6
+
+이를 모두 더하면
+
+9 - 5 + 2 - 7 + 4 - 1 + 8 - 3 + 6 = 13
+
+따라서 프로그램의 출력값은 13이다.',
   'prac:2025-1:Q11'
 );
 
@@ -51,9 +134,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q12. 결합도 유형
-------------------------------------------------------------
+/* =======================================================
+ * Q12. 결합도 유형 (내용/스탬프/공통)
+ *  - Topic: P.1.1 업무 시나리오 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -89,9 +173,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q13. Java – 상속과 동적 바인딩
-------------------------------------------------------------
+/* =======================================================
+ * Q13. Java – 상속과 동적 바인딩
+ *  - Topic: P.1.1 코드/객체 참조 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -158,9 +243,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q14. Adapter 패턴
-------------------------------------------------------------
+/* =======================================================
+ * Q14. Adapter 패턴
+ *  - Topic: P.1.1 설계/패턴 이해 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -198,9 +284,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q15. 문장(Statement) 커버리지
-------------------------------------------------------------
+/* =======================================================
+ * Q15. 문장(Statement) 커버리지
+ *  - Topic: P.1.1 테스트/제어 흐름 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -225,27 +312,30 @@ int Main(int b[], int m, int x) {
     }
     return 1;
 }
-```
-
 보기 – 제어 흐름도 상의 번호에 들어갈 코드 조각
 
-1. int a = 0;
-2. while (a < m || b[a] < x)
-3. if (b[a] < 0)
-4. b[a] = -b[a];
-5. a++;
-6. return 1;
+int a = 0;
+
+while (a < m || b[a] < x)
+
+if (b[a] < 0)
+
+b[a] = -b[a];
+
+a++;
+
+return 1;
 
 제어 흐름도에서 시작점 1과 2는 이미 고정되어 있고,
 문장 커버리지를 만족하는 순서는
 
-1 → 2 → (         )
+1 → 2 → ( )
 
 형태로 표현된다.
 
 빈칸에 들어갈 번호들의 나열을 공백 없이 작성하시오.',
-  '1234526',
-  '코드의 제어 흐름을 번호로 치환하면 다음과 같이 대응시킬 수 있다.
+'1234526',
+'코드의 제어 흐름을 번호로 치환하면 다음과 같이 대응시킬 수 있다.
 1: int a = 0;
 2: while (a < m || b[a] < x)
 3: if (b[a] < 0)
@@ -260,30 +350,30 @@ while이 참인 동안 if 분기 결과에 따라 4가 실행될 수도 있고 �
 
 이를 번호만 이어 쓰면 1234526이 된다.
 따라서 빈칸에는 1234526이 들어간다.',
-  'prac:2025-1:Q15',
-  'https://api.mycertpilot.com/static/images/questions/pq_2025_01_15.png'
+'prac:2025-1:Q15',
+'https://api.mycertpilot.com/static/images/questions/pq_2025_01_15.png
+'
 );
 
 SET @q_id := LAST_INSERT_ID();
 
 INSERT INTO question_tag (question_id, tag) VALUES
-  (@q_id, 'P_REQ_SCENARIO');
+(@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q16. Java – 분할 정복 + Math.max
-------------------------------------------------------------
+/* =======================================================
+ * Q16. Java – 분할 정복 + Math.max
+ *  - Topic: P.1.1 코드/재귀 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
-  cert_id, topic_id, mode, type, difficulty,
-  stem, answer_key, solution_text, source
+cert_id, topic_id, mode, type, difficulty,
+stem, answer_key, solution_text, source
 ) VALUES (
-  @cert_id,
-  @tp_31101,
-  'PRACTICAL',
-  'SHORT',
-  'HARD',
-  '다음 Java 프로그램을 실행했을 때 출력되는 결과를 작성하시오.
-
-```java
+@cert_id,
+@tp_31101,
+'PRACTICAL',
+'SHORT',
+'HARD',
+'다음 Java 프로그램을 실행했을 때 출력되는 결과를 작성하시오.
 public class Main {
 
     public static void main(String[] args) {
@@ -323,9 +413,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q17. Python – 트리 레벨 합
-------------------------------------------------------------
+/* =======================================================
+ * Q17. Python – 트리 레벨 합
+ *  - Topic: P.1.1 코드/자료구조 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -340,7 +431,7 @@ INSERT INTO question (
 ```python
 class Node:
     def __init__(self, value):
-        self.value = value
+        self.value = value;
         self.children = []
 
 def tree(li):
@@ -381,9 +472,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q18. C 언어 – 단일 연결 리스트 재연결
-------------------------------------------------------------
+/* =======================================================
+ * Q18. C 언어 – 단일 연결 리스트 재연결
+ *  - Topic: P.1.1 코드/포인터 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -467,9 +559,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q19. C 언어 – 비트 연산과 합계
-------------------------------------------------------------
+/* =======================================================
+ * Q19. C 언어 – 비트 연산과 합계
+ *  - Topic: P.1.1 코드/비트 연산 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -525,9 +618,10 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q20. Java – 재귀 오버로드
-------------------------------------------------------------
+/* =======================================================
+ * Q20. Java – 재귀 오버로드
+ *  - Topic: P.1.1 코드/재귀 해석 (@tp_31101 / 31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

@@ -1,10 +1,10 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q91. CBD 표준 산출물 중 분석 단계 산출물  [정답: ④]
---  분석/요구 산출물 → 사용자 요구사항 정의서
---  topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정)
-------------------------------------------------------------
+/* =======================================================
+ * Q91. CBD 표준 산출물 중 분석 단계 산출물  [정답: ④]
+ *  - 분석/요구 산출물 → 사용자 요구사항 정의서
+ *  - topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -30,10 +30,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- Q92. 구글 브레인 오픈소스 ML 라이브러리  [정답: ④ → TensorFlow]
---  topic_id = 15002 (5.2 IT 프로젝트·신기술 관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q92. 구글 브레인 오픈소스 ML 라이브러리  [정답: ④ → TensorFlow]
+ *  - topic_id = 15002 (5.2 IT 프로젝트·신기술 관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -59,10 +60,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
-------------------------------------------------------------
--- Q93. Secure 코딩 – 입력 데이터 보안 약점  [정답: ④(설명이 틀림)]
---  topic_id = 15302 (5.3.2 소프트웨어 개발 보안 구현)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q93. Secure 코딩 – 입력 데이터 보안 약점  [정답: ④(설명이 틀림)]
+ *  - topic_id = 15302 (5.3.2 소프트웨어 개발 보안 구현)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -88,10 +90,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_ATTACK_DEFENSE');
 
-------------------------------------------------------------
--- Q94. 월별(man-month) 생산성 계산  [정답: ②]
---  topic_id = 15002 (5.2 IT 프로젝트·비용/공학 관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q94. 월별(man-month) 생산성 계산  [정답: ②]
+ *  - topic_id = 15002 (5.2 IT 프로젝트·비용/공학 관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -117,10 +120,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_COST_PM');
 
-------------------------------------------------------------
--- Q95. 재공학 활동 – 다른 환경으로의 변환  [정답: ③ 이식]
---  topic_id = 15002 (5.2 IT 프로젝트·재공학/유지보수)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q95. 재공학 활동 – 다른 환경으로의 변환  [정답: ③ 이식]
+ *  - topic_id = 15002 (5.2 IT 프로젝트·재공학/유지보수)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -146,10 +150,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_COST_PM');
 
-------------------------------------------------------------
--- Q96. 재사용 방법 – 블록/모듈 끼워 맞추기 방식  [정답: ② 합성 중심]
---  topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정/재사용)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q96. 재사용 방법 – 블록/모듈 끼워 맞추기 방식  [정답: ② 합성 중심]
+ *  - topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정/재사용)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -175,10 +180,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q97. SAN(Storage Area Network) 설명  [정답: SAN]
---  topic_id = 15201 (5.2.1 네트워크 구축관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q97. SAN(Storage Area Network) 설명  [정답: SAN]
+ *  - topic_id = 15201 (5.2.1 네트워크 구축관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -188,19 +194,9 @@ INSERT INTO question (
   'WRITTEN',
   'MCQ',
   'NORMAL',
-  '다음 내용이 설명하는 시스템은 무엇인가?
-
-> · 네트워크 상에서 광채널 스위치의 고속 전송, 장거리 연결, 멀티 프로토콜 기능을 활용한다.  
-> · 서로 다른 OS를 가진 여러 기종이 네트워크 상에서 동일 저장장치의 데이터를 공유할 수 있다.  
-> · 여러 개의 저장장치나 백업 장비를 단일화하여 관리할 수 있는 저장시스템이다.',
+  '다음 내용이 설명하는 시스템은 무엇인가?\n\n> · 네트워크 상에서 광채널 스위치의 고속 전송, 장거리 연결, 멀티 프로토콜 기능을 활용한다.  \n> · 서로 다른 OS를 가진 여러 기종이 네트워크 상에서 동일 저장장치의 데이터를 공유할 수 있다.  \n> · 여러 개의 저장장치나 백업 장비를 단일화하여 관리할 수 있는 저장시스템이다.',
   'B',
-  '문제에서 설명하는 것은 **SAN(Storage Area Network)** 입니다.
-
-- SAN은 스토리지 전용 네트워크를 구성하여, 서버와 디스크 스토리지를 분리하고 여러 서버가 저장장치를 공유하도록 하는 구조입니다.
-- 광 채널(FC, Fibre Channel) 스위치 등을 활용하여 고속·장거리·멀티 프로토콜 전송을 지원합니다.
-- 여러 서버가 동일한 저장장치 풀을 공유할 수 있어, 백업·복제·이중화 구성 등에 유리합니다.
-
-따라서 정답은 SAN입니다.',
+  '문제에서 설명하는 것은 **SAN(Storage Area Network)** 입니다.\n\n- SAN은 스토리지 전용 네트워크를 구성하여, 서버와 디스크 스토리지를 분리하고 여러 서버가 저장장치를 공유하도록 하는 구조입니다.\n- 광 채널(FC, Fibre Channel) 스위치 등을 활용하여 고속·장거리·멀티 프로토콜 전송을 지원합니다.\n- 여러 서버가 동일한 저장장치 풀을 공유할 수 있어, 백업·복제·이중화 구성 등에 유리합니다.\n\n따라서 정답은 SAN입니다.',
   'past:2024-1:Q97'
 );
 
@@ -215,10 +211,10 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
 
-------------------------------------------------------------
--- Q98. 백도어/설정 변경 분석 도구  [정답: tripwire]
---  topic_id = 15402 (5.4.2 시스템 보안 구현)
-------------------------------------------------------------
+/* =======================================================
+ * Q98. 백도어/설정 변경 분석 도구  [정답: tripwire]
+ *  - topic_id = 15402 (5.4.2 시스템 보안 구현)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -244,10 +240,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_ATTACK_DEFENSE');
 
-------------------------------------------------------------
--- Q99. 개발보안 SDLC 방법론 – Seven Touchpoints  [정답: ③]
---  topic_id = 15301 (5.3.1 소프트웨어 개발 보안 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q99. 개발보안 SDLC 방법론 – Seven Touchpoints  [정답: ③]
+ *  - topic_id = 15301 (5.3.1 소프트웨어 개발 보안 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -273,10 +270,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q100. 소프트웨어 프로세스 개선 국제 표준  [정답: ③ SPICE]
---  topic_id = 15002 (5.2 IT 프로젝트·공학/프로세스 관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q100. 소프트웨어 프로세스 개선 국제 표준  [정답: ③ SPICE]
+ *  - topic_id = 15002 (5.2 IT 프로젝트·공학/프로세스 관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

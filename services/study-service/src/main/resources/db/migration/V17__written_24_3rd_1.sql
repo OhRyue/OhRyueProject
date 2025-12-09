@@ -1,6 +1,7 @@
-------------------------------------------------------------
--- Q1. 텍스트 기반 UI (CLI)
-------------------------------------------------------------
+/* =======================================================
+ * Q1. 텍스트 기반 UI (CLI)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -16,7 +17,14 @@ INSERT INTO question (
   'past:2024-3:Q01'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q01'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', 'GUI (Graphical User Interface)', 0),
@@ -27,9 +35,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- Q2. XP(eXtreme Programming) 설명 (틀린 것)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q2. XP(eXtreme Programming) 설명 (틀린 것)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -45,7 +55,14 @@ INSERT INTO question (
   'past:2024-3:Q02'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q02'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', '짧은 릴리즈 주기를 반복하여 요구 변화에 빠르게 대응한다.', 0),
@@ -56,9 +73,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- Q3. 자료 흐름도(DFD) 구성요소
-------------------------------------------------------------
+
+/* =======================================================
+ * Q3. 자료 흐름도(DFD) 구성요소
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -74,7 +93,14 @@ INSERT INTO question (
   'past:2024-3:Q03'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q03'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', 'process, data flow, data store, comment', 0),
@@ -85,9 +111,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- Q4. 미들웨어(Middleware) 설명 (틀린 것)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q4. 미들웨어(Middleware) 설명 (틀린 것)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -103,7 +131,14 @@ INSERT INTO question (
   'past:2024-3:Q04'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q04'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', '분산 시스템에서 다양한 부분을 관리·통신·데이터 교환하게 해주는 소프트웨어이다.', 0),
@@ -114,9 +149,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q5. 디자인 패턴 장·단점 (거리가 먼 것)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q5. 디자인 패턴 장·단점 (거리가 먼 것)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -132,7 +169,14 @@ INSERT INTO question (
   'past:2024-3:Q05'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q05'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', '소프트웨어 구조를 이해하기 쉽게 만들어 구조 파악이 용이하다.', 0),
@@ -143,9 +187,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q6. UML 스테레오타입 표기 기호
-------------------------------------------------------------
+
+/* =======================================================
+ * Q6. UML 스테레오타입 표기 기호
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -161,7 +207,14 @@ INSERT INTO question (
   'past:2024-3:Q06'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q06'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', '<< >>', 1),
@@ -172,9 +225,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q7. 플랫폼 성능 특성 분석 측정 항목이 아닌 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q7. 플랫폼 성능 특성 분석 측정 항목이 아닌 것
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -190,7 +245,14 @@ INSERT INTO question (
   'past:2024-3:Q07'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q07'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', '응답 시간(Response Time)', 0),
@@ -201,9 +263,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q8. 프로토타입 모형
-------------------------------------------------------------
+
+/* =======================================================
+ * Q8. 프로토타입 모형
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -219,7 +283,14 @@ INSERT INTO question (
   'past:2024-3:Q08'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q08'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', '애자일(Agile) 모형',   0),
@@ -230,9 +301,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- Q9. Coad-Yourdon 객체지향 분석 방법론
-------------------------------------------------------------
+
+/* =======================================================
+ * Q9. Coad-Yourdon 객체지향 분석 방법론
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -244,11 +317,18 @@ INSERT INTO question (
   'HARD',
   '다음 중 Coad-Yourdon 객체지향 분석 방법론에 대한 설명으로 옳은 것은?',
   'A',
-  'Coad-Yourdon 객체지향 분석 방법론은 객체, 클래스, 속성, 구조 등을 중심으로 모델링하며, ERD 개념을 응용해 객체의 행위와 데이터를 함께 모델링하는 데 초점을 둔 방법론으로 자주 소개됩니다. 객체의 동적·기능 모델로만 나누어 수행한다거나, 미시/거시 개발 프로세스의 구분을 핵심으로 삼는 방법, 또는 Use Case를 가장 핵심으로 강조하는 방법론은 다른 분석·설계 방법론의 특징과 섞인 설명입니다. 따라서 ER 다이어그램을 활용하여 객체의 행위까지 포함해 데이터 모델링에 중점을 둔다는 설명이 Coad-Yourdon 방법론에 가장 가깝습니다.',
+  'Coad-Yourdon 객체지향 분석 방법론은 객체, 클래스, 속성, 구조 등을 중심으로 모델링하며, ERD 개념을 응용해 객체의 행위와 데이터를 함께 모델링하는 데 초점을 둔 방법론으로 자주 소개됩니다. 객체의 동적·기능 모델로만 나누어 수행한다거나, 미시/거시 개발 프로세스를의 구분을 핵심으로 삼는 방법, 또는 Use Case를 가장 핵심으로 강조하는 방법론은 다른 분석·설계 방법론의 특징과 섞인 설명입니다. 따라서 ER 다이어그램을 활용하여 객체의 행위까지 포함해 데이터 모델링에 중점을 둔다는 설명이 Coad-Yourdon 방법론에 가장 가깝습니다.',
   'past:2024-3:Q09'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q09'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', 'E-R 다이어그램을 활용해 객체의 행위까지 포함하여 데이터 모델링에 초점을 둔 방법이다.', 1),
@@ -259,9 +339,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q10. 객체지향 분류/일반화 관계
-------------------------------------------------------------
+
+/* =======================================================
+ * Q10. 객체지향 분류/일반화 관계
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -277,7 +359,14 @@ INSERT INTO question (
   'past:2024-3:Q10'
 );
 
-SET @q_id := LAST_INSERT_ID();
+SET @q_id := (
+  SELECT id
+  FROM question
+  WHERE cert_id = 1
+    AND source = 'past:2024-3:Q10'
+  ORDER BY id DESC
+  LIMIT 1
+);
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
   (@q_id, 'A', '분류화(Classification)', 0),

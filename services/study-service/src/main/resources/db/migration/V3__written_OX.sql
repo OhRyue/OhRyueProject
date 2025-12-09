@@ -35,19 +35,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '분석 모델링에서는 기능, 정적 구조, 동작과 같은 여러 관점에서 시스템을 표현한다.%'
 );
 
-SET @q_ox_model_viewpoints := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_model AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '분석 모델링에서는 기능, 정적 구조, 동작과 같은 여러 관점에서 시스템을 표현한다.%'
-   LIMIT 1
-);
-
--- 태그 변경: 모델링_관점 -> 모델링
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_model_viewpoints, '모델링'
-WHERE @q_ox_model_viewpoints IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_model_viewpoints AND tag='모델링');
-
 -- DFD는 동작이 아니라 정적 구조? (오답)
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_model, 'WRITTEN', 'OX', 'NORMAL',
@@ -61,19 +48,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '데이터 흐름도(DFD)는 정적 구조를 표현하는 다이어그램으로, 데이터 간 관계만 나타낸다.%'
 );
 
-SET @q_ox_model_dfd := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_model AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '데이터 흐름도(DFD)는 정적 구조를 표현하는 다이어그램으로, 데이터 간 관계만 나타낸다.%'
-   LIMIT 1
-);
-
--- 태그 변경: DFD -> 모델링
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_model_dfd, '모델링'
-WHERE @q_ox_model_dfd IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_model_dfd AND tag='모델링');
-
 -- ERD의 역할
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_model, 'WRITTEN', 'OX', 'EASY',
@@ -86,19 +60,6 @@ WHERE NOT EXISTS (
    WHERE topic_id=@topic_model AND mode='WRITTEN' AND type='OX'
      AND stem LIKE 'ERD(Entity-Relationship Diagram)는 엔터티와 관계를 통해 데이터 구조를 표현하는 모델이다.%'
 );
-
-SET @q_ox_model_erd := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_model AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE 'ERD(Entity-Relationship Diagram)는 엔터티와 관계를 통해 데이터 구조를 표현하는 모델이다.%'
-   LIMIT 1
-);
-
--- 태그 변경: ERD -> 데이터요구 (엔터티/속성 도출 관점)
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_model_erd, '데이터요구'
-WHERE @q_ox_model_erd IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_model_erd AND tag='데이터요구');
 
 -- =========================================================
 -- 2) WRITTEN OX – 1.2.1 UI 요구사항 확인
@@ -117,19 +78,6 @@ WHERE NOT EXISTS (
      AND stem LIKE 'UI 요구사항 확인 단계에서는 최종 사용자의 작업 맥락과 사용 환경을 파악하는 것이 중요하다.%'
 );
 
-SET @q_ox_ui_context := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_ui AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE 'UI 요구사항 확인 단계에서는 최종 사용자의 작업 맥락과 사용 환경을 파악하는 것이 중요하다.%'
-   LIMIT 1
-);
-
--- 태그 변경: UI_사용자맥락 -> UI
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_ui_context, 'UI'
-WHERE @q_ox_ui_context IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_ui_context AND tag='UI');
-
 -- 일관성의 중요성 축소? (오답)
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_ui, 'WRITTEN', 'OX', 'NORMAL',
@@ -142,19 +90,6 @@ WHERE NOT EXISTS (
    WHERE topic_id=@topic_ui AND mode='WRITTEN' AND type='OX'
      AND stem LIKE '화면 설계에서 일관성은 사용자 경험에 큰 영향을 주지 않으므로, 화면마다 자유롭게 구성해도 무방하다.%'
 );
-
-SET @q_ox_ui_consistency := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_ui AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '화면 설계에서 일관성은 사용자 경험에 큰 영향을 주지 않으므로, 화면마다 자유롭게 구성해도 무방하다.%'
-   LIMIT 1
-);
-
--- 태그 변경: UI_일관성 -> UI
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_ui_consistency, 'UI'
-WHERE @q_ox_ui_consistency IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_ui_consistency AND tag='UI');
 
 -- =========================================================
 -- 3) WRITTEN OX – 1.3.1 공통 모듈 설계 / 1.3.2 객체지향 설계
@@ -173,19 +108,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '공통 모듈은 여러 서브시스템에서 반복적으로 사용되는 기능을 캡슐화하여 재사용성을 높이는 것을 목표로 한다.%'
 );
 
-SET @q_ox_common_reuse := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_common AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '공통 모듈은 여러 서브시스템에서 반복적으로 사용되는 기능을 캡슐화하여 재사용성을 높이는 것을 목표로 한다.%'
-   LIMIT 1
-);
-
--- 태그 변경: 공통모듈_재사용성 -> 공통모듈
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_common_reuse, '공통모듈'
-WHERE @q_ox_common_reuse IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_common_reuse AND tag='공통모듈');
-
 -- 결합도/응집도 방향
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_ood, 'WRITTEN', 'OX', 'NORMAL',
@@ -199,19 +121,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '객체지향 설계에서 모듈 간 결합도는 높게, 모듈 내부 응집도는 낮게 만드는 것이 바람직하다.%'
 );
 
-SET @q_ox_ood_coupling := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_ood AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '객체지향 설계에서 모듈 간 결합도는 높게, 모듈 내부 응집도는 낮게 만드는 것이 바람직하다.%'
-   LIMIT 1
-);
-
--- 태그 변경: 결합도응집도 -> 설계원칙
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_ood_coupling, '설계원칙'
-WHERE @q_ox_ood_coupling IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_ood_coupling AND tag='설계원칙');
-
 -- 캡슐화/정보은닉
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_ood, 'WRITTEN', 'OX', 'EASY',
@@ -224,19 +133,6 @@ WHERE NOT EXISTS (
    WHERE topic_id=@topic_ood AND mode='WRITTEN' AND type='OX'
      AND stem LIKE '캡슐화는 객체의 내부 구현을 감추고 공용 인터페이스만 노출하여 변경 영향을 최소화하는 것을 의미한다.%'
 );
-
-SET @q_ox_ood_encapsulation := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_ood AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '캡슐화는 객체의 내부 구현을 감추고 공용 인터페이스만 노출하여 변경 영향을 최소화하는 것을 의미한다.%'
-   LIMIT 1
-);
-
--- 태그 변경: 캡슐화 -> OOP
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_ood_encapsulation, 'OOP'
-WHERE @q_ox_ood_encapsulation IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_ood_encapsulation AND tag='OOP');
 
 -- =========================================================
 -- 4) WRITTEN OX – 1.4.x 인터페이스 설계(요구/대상/상세)
@@ -255,19 +151,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '인터페이스 요구사항에는 단순히 데이터 포맷만 정의하면 되며, 가용성이나 성능 목표는 포함하지 않는다.%'
 );
 
-SET @q_ox_if_req_nfr := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_if_req AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '인터페이스 요구사항에는 단순히 데이터 포맷만 정의하면 되며, 가용성이나 성능 목표는 포함하지 않는다.%'
-   LIMIT 1
-);
-
--- 태그 변경: 인터페이스_NFR -> 인터페이스요구
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_if_req_nfr, '인터페이스요구'
-WHERE @q_ox_if_req_nfr IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_if_req_nfr AND tag='인터페이스요구');
-
 -- 인터페이스 대상 식별: 내부/외부 모두
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_if_target, 'WRITTEN', 'OX', 'EASY',
@@ -281,19 +164,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '인터페이스 대상 식별 단계에서는 내부 서브시스템 간 연동뿐 아니라 외부 시스템과의 연동 대상도 함께 파악해야 한다.%'
 );
 
-SET @q_ox_if_targets := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_if_target AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '인터페이스 대상 식별 단계에서는 내부 서브시스템 간 연동뿐 아니라 외부 시스템과의 연동 대상도 함께 파악해야 한다.%'
-   LIMIT 1
-);
-
--- 태그 변경: 인터페이스대상 -> 연계대상
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_if_targets, '연계대상'
-WHERE @q_ox_if_targets IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_if_targets AND tag='연계대상');
-
 -- 인터페이스 상세 설계: 타임아웃/재시도
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_if_detail, 'WRITTEN', 'OX', 'NORMAL',
@@ -306,18 +176,5 @@ WHERE NOT EXISTS (
    WHERE topic_id=@topic_if_detail AND mode='WRITTEN' AND type='OX'
      AND stem LIKE '인터페이스 상세 설계에서는 요청/응답 포맷만 정의하면 되며, 타임아웃이나 재시도 정책은 구현 단계에서 개발자가 임의로 결정한다.%'
 );
-
-SET @q_ox_if_timeout_retry := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_if_detail AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '인터페이스 상세 설계에서는 요청/응답 포맷만 정의하면 되며, 타임아웃이나 재시도 정책은 구현 단계에서 개발자가 임의로 결정한다.%'
-   LIMIT 1
-);
-
--- 태그 변경: 인터페이스_타임아웃재시도 -> 인터페이스설계
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_if_timeout_retry, '인터페이스설계'
-WHERE @q_ox_if_timeout_retry IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_if_timeout_retry AND tag='인터페이스설계');
 
 SET FOREIGN_KEY_CHECKS = 1;

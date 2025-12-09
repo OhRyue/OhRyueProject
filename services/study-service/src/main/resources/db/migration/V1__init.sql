@@ -51,6 +51,21 @@ CREATE TABLE IF NOT EXISTS question_tag (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =========================================================
+-- 태그 마스터 (필기/실기 공통 태그 정의)
+-- =========================================================
+CREATE TABLE IF NOT EXISTS tag_master (
+  code        VARCHAR(100)                            NOT NULL, -- 영어 태그 코드 (PK, 예: DB_SQL_TX, P_SQL_SELECT_JOIN)
+  domain      ENUM('WRITTEN','PRACTICAL')             NOT NULL, -- 필기/실기 구분
+  label_ko    VARCHAR(255)                            NOT NULL, -- 화면에 표시할 한글 라벨
+  label_en    VARCHAR(255)                            NULL,     -- 필요 시 영문 라벨
+  description TEXT                                    NULL,     -- 태그 설명 (선택)
+  order_no    INT                                     NULL,     -- 태그 정렬용 (선택)
+  created_at  TIMESTAMP                               NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (code),
+  INDEX ix_tag_domain (domain, code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =========================================================
 -- LearningSession / LearningStep (계층적 학습 세션)
 -- =========================================================
 

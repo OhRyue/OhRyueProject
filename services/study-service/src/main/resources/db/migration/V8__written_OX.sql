@@ -209,39 +209,4 @@ SELECT @cert_id, @tp_11302, 'WRITTEN', 'OX', 'NORMAL',
        'seed:v5:11302:ox:cohesion-coupling'
 WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11302:ox:cohesion-coupling');
 
-
-/* ===========================================
- * TAG 매핑 – topic별 1개 태그
- * 11201 → 'UI'
- * 11301 → '공통모듈'
- * 11302 → 'OOP'
- * =========================================== */
-
--- 11201 – UI 요구사항 / 화면흐름
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, 'UI'
-FROM question q
-LEFT JOIN question_tag qt ON qt.question_id = q.id
-WHERE q.cert_id = @cert_id
-  AND q.topic_id = @tp_11201
-  AND qt.id IS NULL;
-
--- 11301 – 공통 모듈 설계
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '공통모듈'
-FROM question q
-LEFT JOIN question_tag qt ON qt.question_id = q.id
-WHERE q.cert_id = @cert_id
-  AND q.topic_id = @tp_11301
-  AND qt.id IS NULL;
-
--- 11302 – 객체지향 설계 원칙
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, 'OOP'
-FROM question q
-LEFT JOIN question_tag qt ON qt.question_id = q.id
-WHERE q.cert_id = @cert_id
-  AND q.topic_id = @tp_11302
-  AND qt.id IS NULL;
-
 SET FOREIGN_KEY_CHECKS = 1;

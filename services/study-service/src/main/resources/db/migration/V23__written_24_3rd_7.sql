@@ -3,18 +3,20 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 USE certpilot_study;
 
--- =========================================
--- 토픽 ID 매핑 (프로그래밍 언어 활용 / OS / 네트워크)
--- =========================================
+/* =======================================================
+ * 토픽 ID 매핑 (프로그래밍 언어 활용 / OS / 네트워크)
+ * ======================================================= */
 SET @topic_lang_basic   := 14201; -- 4.2.1 기본문법 활용
 SET @topic_lang_feature := 14202; -- 4.2.2 언어특성 활용
 SET @topic_lang_lib     := 14203; -- 4.2.3 라이브러리 활용
 SET @topic_os_basic     := 14301; -- 4.3.1 운영체제 기초 활용
-SET @topic_net_basic    := 14302; -- 4.3.2 네트워크 기초 활용;
+SET @topic_net_basic    := 14302; -- 4.3.2 네트워크 기초 활용
 
--- =========================================================
--- 61. Java 자료형 / 크기 매핑 (LANG_BASIC_SCRIPT, EASY)
--- =========================================================
+
+/* =======================================================
+ * Q61. Java 자료형 / 크기 매핑 (LANG_BASIC_SCRIPT, EASY)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -27,7 +29,7 @@ INSERT INTO question (
   'Java 언어에서 기본 자료형과 크기의 연결로 옳은 것을 고르시오.',
   'C',
   'Java의 기본 자료형 중 정수형 int는 4바이트(32비트), 실수형 double은 8바이트(64비트)를 사용한다. '
-  'byte는 1바이트, short는 2바イト, long은 8바이트, float는 4바이트이다. '
+  'byte는 1바이트, short는 2바이트, long은 8바이트, float는 4바이트이다. '
   '문자형 char는 2바이트(UTF-16 코드 유닛)로 표현된다. 따라서 int-4바이트, double-8바이트 조합이 옳다.',
   'past:2024-3:W4:Q61'
 );
@@ -35,17 +37,19 @@ INSERT INTO question (
 SET @q61 := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-(@q61, 'A', 'char: 1바이트, byte: 1바이트', 0),
-(@q61, 'B', 'int: 2바이트, double: 4바이트', 0),
-(@q61, 'C', 'int: 4바이트, double: 8바이트', 1),
-(@q61, 'D', 'int: 8바이트, double: 4바이트', 0);
+  (@q61, 'A', 'char: 1바이트, byte: 1바이트', 0),
+  (@q61, 'B', 'int: 2바이트, double: 4바이트', 0),
+  (@q61, 'C', 'int: 4바이트, double: 8바이트', 1),
+  (@q61, 'D', 'int: 8바이트, double: 4바이트', 0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q61, 'LANG_BASIC_SCRIPT');
+  (@q61, 'LANG_BASIC_SCRIPT');
 
--- =========================================================
--- 62. UNIX 개요 (OS_PROC_MEM, NORMAL)
--- =========================================================
+
+/* =======================================================
+ * Q62. UNIX 개요 (OS_PROC_MEM, NORMAL)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -67,17 +71,19 @@ INSERT INTO question (
 SET @q62 := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-(@q62, 'A', 'C 언어로 작성되어 이식성이 우수하다.', 0),
-(@q62, 'B', '여러 사용자가 동시에 시스템을 사용할 수 있다.', 0),
-(@q62, 'C', '쉘이 프로세스·메모리·입출력 관리를 직접 수행한다.', 1),
-(@q62, 'D', '하나의 사용자가 여러 작업을 병행 처리할 수 있다.', 0);
+  (@q62, 'A', 'C 언어로 작성되어 이식성이 우수하다.', 0),
+  (@q62, 'B', '여러 사용자가 동시에 시스템을 사용할 수 있다.', 0),
+  (@q62, 'C', '쉘이 프로세스·메모리·입출력 관리를 직접 수행한다.', 1),
+  (@q62, 'D', '하나의 사용자가 여러 작업을 병행 처리할 수 있다.', 0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q62, 'OS_PROC_MEM');
+  (@q62, 'OS_PROC_MEM');
 
--- =========================================================
--- 63. IPv6 특징 (NET_PROTO_IP, NORMAL)
--- =========================================================
+
+/* =======================================================
+ * Q63. IPv6 특징 (NET_PROTO_IP, NORMAL)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -99,17 +105,19 @@ INSERT INTO question (
 SET @q63 := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-(@q63, 'A', '128비트 주소 공간을 제공한다.', 0),
-(@q63, 'B', '확장 헤더를 통해 기능 확장이 용이하다.', 0),
-(@q63, 'C', '패킷 크기가 64Kbyte로 고정되어 있다.', 1),
-(@q63, 'D', '보안을 위한 인증·암호화 기능을 포함할 수 있다.', 0);
+  (@q63, 'A', '128비트 주소 공간을 제공한다.', 0),
+  (@q63, 'B', '확장 헤더를 통해 기능 확장이 용이하다.', 0),
+  (@q63, 'C', '패킷 크기가 64Kbyte로 고정되어 있다.', 1),
+  (@q63, 'D', '보안을 위한 인증·암호화 기능을 포함할 수 있다.', 0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q63, 'NET_PROTO_IP');
+  (@q63, 'NET_PROTO_IP');
 
--- =========================================================
--- 64. 스크립트 언어 분류 (LANG_BASIC_SCRIPT, EASY)
--- =========================================================
+
+/* =======================================================
+ * Q64. 스크립트 언어 분류 (LANG_BASIC_SCRIPT, EASY)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -130,17 +138,19 @@ INSERT INTO question (
 SET @q64 := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-(@q64, 'A', 'PHP', 0),
-(@q64, 'B', 'COBOL', 1),
-(@q64, 'C', 'Python', 0),
-(@q64, 'D', 'JavaScript', 0);
+  (@q64, 'A', 'PHP', 0),
+  (@q64, 'B', 'COBOL', 1),
+  (@q64, 'C', 'Python', 0),
+  (@q64, 'D', 'JavaScript', 0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q64, 'LANG_BASIC_SCRIPT');
+  (@q64, 'LANG_BASIC_SCRIPT');
 
--- =========================================================
--- 65. OSI 7계층 - 네트워크 계층 (NET_PROTO_IP, NORMAL)
--- =========================================================
+
+/* =======================================================
+ * Q65. OSI 7계층 - 네트워크 계층 (NET_PROTO_IP, NORMAL)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -161,17 +171,19 @@ INSERT INTO question (
 SET @q65 := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-(@q65, 'A', '발신지에서 목적지까지 패킷을 전달하는 책임을 진다.', 0),
-(@q65, 'B', '한 노드에서 다른 노드로 프레임을 전송하는 책임을 진다.', 1),
-(@q65, 'C', '패킷에 발신지와 목적지의 논리적 주소를 추가한다.', 0),
-(@q65, 'D', '라우터가 경로를 지정하여 패킷 전달을 수행한다.', 0);
+  (@q65, 'A', '발신지에서 목적지까지 패킷을 전달하는 책임을 진다.', 0),
+  (@q65, 'B', '한 노드에서 다른 노드로 프레임을 전송하는 책임을 진다.', 1),
+  (@q65, 'C', '패킷에 발신지와 목적지의 논리적 주소를 추가한다.', 0),
+  (@q65, 'D', '라우터가 경로를 지정하여 패킷 전달을 수행한다.', 0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q65, 'NET_PROTO_IP');
+  (@q65, 'NET_PROTO_IP');
 
--- =========================================================
--- 66. C for 루프 합계 (LANG_BASIC_SCRIPT, NORMAL)
--- =========================================================
+
+/* =======================================================
+ * Q66. C for 루프 합계 (LANG_BASIC_SCRIPT, NORMAL)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -204,17 +216,19 @@ int main() {
 SET @q66 := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-(@q66, 'A', '16', 0),
-(@q66, 'B', '20', 0),
-(@q66, 'C', '32', 0),
-(@q66, 'D', '31', 1);
+  (@q66, 'A', '16', 0),
+  (@q66, 'B', '20', 0),
+  (@q66, 'C', '32', 0),
+  (@q66, 'D', '31', 1);
 
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q66, 'LANG_BASIC_SCRIPT');
+  (@q66, 'LANG_BASIC_SCRIPT');
 
--- =========================================================
--- 67. HRN 스케줄링 (OS_PROC_MEM, HARD)
--- =========================================================
+
+/* =======================================================
+ * Q67. HRN 스케줄링 (OS_PROC_MEM, HARD)
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -257,9 +271,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q67, 'OS_PROC_MEM');
 
--- =========================================================
--- 68. continue 키워드 (LANG_BASIC_SCRIPT, EASY)
--- =========================================================
+
+/* =======================================================
+ * Q68. continue 키워드 (LANG_BASIC_SCRIPT, EASY)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -288,9 +304,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q68, 'LANG_BASIC_SCRIPT');
 
--- =========================================================
--- 69. FIFO 페이지 교체 (OS_PROC_MEM, HARD)
--- =========================================================
+
+/* =======================================================
+ * Q69. FIFO 페이지 교체 (OS_PROC_MEM, HARD)
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -326,9 +344,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q69, 'OS_PROC_MEM');
 
--- =========================================================
--- 70. ASP 설명 (LANG_BASIC_SCRIPT, EASY)
--- =========================================================
+
+/* =======================================================
+ * Q70. ASP 설명 (LANG_BASIC_SCRIPT, EASY)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -340,7 +360,7 @@ INSERT INTO question (
   'EASY',
   '다음 설명에 해당하는 기술은 무엇인가?
 
-> - 서버 측에서 동적으로 수행되는 웹 페이지를 만들기 위한 기술이다.  
+> - 서버 측에서 동적으로 수행되는 웹 페이지를 만들기 위한 기술이다.
 > - Microsoft에서 개발하였으며, 주로 Windows 계열 웹 서버에서 사용된다.',
   'B',
   'ASP(Active Server Pages)는 Microsoft에서 개발한 서버 사이드 스크립트 기술로, '
@@ -353,12 +373,12 @@ INSERT INTO question (
 SET @q70 := LAST_INSERT_ID();
 
 INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
-(@q70, 'A', 'JavaScript', 0),
-(@q70, 'B', 'ASP(Active Server Pages)', 1),
-(@q70, 'C', 'JSP(Java Server Pages)', 0),
-(@q70, 'D', 'Python', 0);
+  (@q70, 'A', 'JavaScript', 0),
+  (@q70, 'B', 'ASP(Active Server Pages)', 1),
+  (@q70, 'C', 'JSP(Java Server Pages)', 0),
+  (@q70, 'D', 'Python', 0);
 
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q70, 'LANG_BASIC_SCRIPT');
+  (@q70, 'LANG_BASIC_SCRIPT');
 
 SET FOREIGN_KEY_CHECKS = 1;

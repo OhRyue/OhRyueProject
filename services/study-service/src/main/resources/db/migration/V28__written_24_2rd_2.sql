@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q11. 코드 설계 – 표의 숫자 코드  [정답: ④]
---  topic_id = 11201 (1.2.1 UI 요구사항/코드·화면 설계 인근 영역)
-------------------------------------------------------------
+/* =======================================================
+ * Q11. 코드 설계 – 표의 숫자 코드  [정답: ④]
+ *  - topic_id = 11201 (1.2.1 UI 요구사항/코드·화면 설계 인근 영역)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -31,10 +31,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q12. 애자일(Agile) 가치  [정답: ②]
---  topic_id = 15101 (5.1.1 소프트웨어 개발방법론/애자일)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q12. 애자일(Agile) 가치  [정답: ②]
+ *  - topic_id = 15101 (5.1.1 소프트웨어 개발방법론/애자일)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -66,10 +67,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- Q13. 비용 산정 – Putnam 모형  [정답: ①]
---  topic_id = 15202 로 이동 (프로젝트/관리·도구 쪽으로 정리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q13. 비용 산정 – Putnam 모형  [정답: ①]
+ *  - topic_id = 15202 (프로젝트/관리·도구 쪽으로 정리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -97,10 +99,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_COST_PM');
 
-------------------------------------------------------------
--- Q14. 객체지향 기본 개념 – 캡슐화 정의  [정답: ③]
---  topic_id = 11302 로 조정 (OOP/UML 쪽이 더 자연스러움)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q14. 객체지향 기본 개념 – 캡슐화 정의  [정답: ③]
+ *  - topic_id = 11302 (OOP/UML 쪽이 더 자연스러움)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -128,10 +131,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q15. 웹 애플리케이션 서버(WAS)  [정답: ①]
---  topic_id = 15201 로 조정 (네트워크/시스템·미들웨어 인프라 영역)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q15. 웹 애플리케이션 서버(WAS)  [정답: ①]
+ *  - topic_id = 15201 (네트워크/시스템·미들웨어 인프라 영역)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -159,10 +163,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
-------------------------------------------------------------
--- Q16. 유스케이스 다이어그램 구성 요소  [정답: ③]
---  topic_id = 11302 (UML 기초/Use Case)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q16. 유스케이스 다이어그램 구성 요소  [정답: ③]
+ *  - topic_id = 11302 (UML 기초/Use Case)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -190,10 +195,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q17. 폭포수(Waterfall) 모형 특징  [정답: ②]
---  topic_id = 15101 로 정리 (생명주기 모형/방법론)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q17. 폭포수(Waterfall) 모형 특징  [정답: ②]
+ *  - topic_id = 15101 (생명주기 모형/방법론)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -221,10 +227,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- Q18. 송수신 데이터 처리 방식 – 배치  [정답: ④]
---  topic_id = 15201 (시스템/데이터 처리 방식 인근)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q18. 송수신 데이터 처리 방식 – 배치  [정답: ④]
+ *  - topic_id = 15201 (시스템/데이터 처리 방식 인근)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -252,10 +259,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q19. 결합도 정의 – 데이터 결합도 설명 오류  [정답: ①]
---  topic_id = 11303 (모듈화/결합도·응집도 영역)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q19. 결합도 정의 – 데이터 결합도 설명 오류  [정답: ①]
+ *  - topic_id = 11303 (모듈화/결합도·응집도 영역)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -284,10 +292,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q20. CASE 도구 주요 기능  [정답: ④]
---  topic_id = 15202 (CASE/도구)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q20. CASE 도구 주요 기능  [정답: ④]
+ *  - topic_id = 15202 (CASE/도구)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

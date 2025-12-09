@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q1. Requirements Engineering (요구공학)  [정답: ③]
---  topic_id = 11102 (1.1.2 요구사항 확인)
-------------------------------------------------------------
+/* =======================================================
+ * Q1. Requirements Engineering (요구공학)  [정답: ③]
+ *  - topic_id = 11102 (1.1.2 요구사항 확인)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -31,10 +31,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- Q2. XP (eXtreme Programming)  [정답: ④]
---  topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q2. XP (eXtreme Programming)  [정답: ④]
+ *  - topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -63,10 +64,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- Q3. UML 다이어그램 매칭  [정답: ①]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q3. UML 다이어그램 매칭  [정답: ①]
+ *  - topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -94,10 +96,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q4. HIPO 관련 도표 설명  [정답: ④]
---  topic_id = 15202 (5.2.2 SW 구축관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q4. HIPO 관련 도표 설명  [정답: ④]
+ *  - topic_id = 15202 (5.2.2 SW 구축관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -109,9 +112,9 @@ INSERT INTO question (
   'EASY',
   '다음 설명에 해당하는 도표는 무엇인가?
 
-> "시스템 기능을 여러 고유 모듈로 분할하고,  
-> 이들 간 인터페이스를 계층 구조로 표현하는 문서화 도구로,  
-> 가시적 도표(Visual Table of Contents), 총체적 도표(Overview Diagram),  
+> "시스템 기능을 여러 고유 모듈로 분할하고,
+> 이들 간 인터페이스를 계층 구조로 표현하는 문서화 도구로,
+> 가시적 도표(Visual Table of Contents), 총체적 도표(Overview Diagram),
 > 세부적 도표(Detail Diagram)로 구성된다."',
   'D',
   '이 설명은 HIPO(Hierarchy Input Process Output) 차트의 특징을 말합니다. HIPO는 상위 기능에서 하위 기능으로 점진적으로 세분화하면서, 각 모듈의 입력(Input)·처리(Process)·출력(Output)을 계층 구조로 문서화하는 도구입니다.
@@ -130,10 +133,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- Q5. 싱글톤 패턴  [정답: ①]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q5. 싱글톤 패턴  [정답: ①]
+ *  - topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -162,10 +166,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q6. 객체가 수행할 구체적 연산 (메소드)  [정답: ②]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q6. 객체가 수행할 구체적 연산 (메소드)  [정답: ②]
+ *  - topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -193,10 +198,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q7. 바람직한 설계 지침이 아닌 것  [정답: ④]
---  topic_id = 11301 (1.3.1 공통 모듈 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q7. 바람직한 설계 지침이 아닌 것  [정답: ④]
+ *  - topic_id = 11301 (1.3.1 공통 모듈 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -224,10 +230,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q8. 객체지향 설계 원칙 (SOLID)  [정답: ④]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q8. 객체지향 설계 원칙 (SOLID)  [정답: ④]
+ *  - topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -258,10 +265,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q9. Coad-Yourdon 객체지향 분석 방법  [정답: ②]
---  topic_id = 11302 (1.3.2 객체 지향 설계 / 분석 방법론)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q9. Coad-Yourdon 객체지향 분석 방법  [정답: ②]
+ *  - topic_id = 11302 (1.3.2 객체 지향 설계 / 분석 방법론)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -292,10 +300,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q10. HIPO Chart 설명 중 틀린 것  [정답: ②]
---  topic_id = 15202 (5.2.2 SW 구축관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q10. HIPO Chart 설명 중 틀린 것  [정답: ②]
+ *  - topic_id = 15202 (5.2.2 SW 구축관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

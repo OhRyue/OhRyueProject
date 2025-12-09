@@ -1,8 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q21. 반정규화 유형 – 중복 테이블 추가가 아닌 것
-------------------------------------------------------------
+/* =======================================================
+ * Q21. 반정규화 유형 – 중복 테이블 추가가 아닌 것
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -29,9 +30,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q22. Alien Code(외계인 코드) 정의
-------------------------------------------------------------
+
+/* =======================================================
+ * Q22. Alien Code(외계인 코드) 정의
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -58,9 +61,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q23. DRM(디지털 저작권 관리) 기술 요소가 아닌 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q23. DRM(디지털 저작권 관리) 기술 요소가 아닌 것
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -87,9 +92,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q24. 트리의 차수와 단말 노드 수
-------------------------------------------------------------
+
+/* =======================================================
+ * Q24. 트리의 차수와 단말 노드 수
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -118,9 +125,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q25. 파티션 유형 – 존재하지 않는 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q25. 파티션 유형 – 존재하지 않는 것
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -147,9 +156,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q26. 형상 관리 도구의 주요 기능이 아닌 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q26. 형상 관리 도구의 주요 기능이 아닌 것
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -176,9 +187,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'CONFIG_CM');
 
-------------------------------------------------------------
--- Q27. 패키지 소프트웨어 품질 요구사항·테스트 국제 표준
-------------------------------------------------------------
+
+/* =======================================================
+ * Q27. 패키지 소프트웨어 품질 요구사항·테스트 국제 표준
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -205,9 +218,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q28. 블랙박스 테스트 기법이 아닌 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q28. 블랙박스 테스트 기법이 아닌 것
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -234,9 +249,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q29. 인터페이스 구현 검증 도구가 아닌 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q29. 인터페이스 구현 검증 도구가 아닌 것
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -263,9 +280,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q30. Postfix 수식 연산 결과
-------------------------------------------------------------
+
+/* =======================================================
+ * Q30. Postfix 수식 연산 결과
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

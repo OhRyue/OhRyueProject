@@ -15,7 +15,6 @@ SET @tp_31502  := 31502; -- 장애분석/포스트모템
  * ======================================================= */
 
 -- [31401] OX 추가 3개
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31401, 'PRACTICAL', 'OX', 'NORMAL',
@@ -52,7 +51,6 @@ WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:tx_isolation:
  * ======================================================= */
 
 -- [31402] OX 추가 3개
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31402, 'PRACTICAL', 'OX', 'NORMAL',
@@ -89,7 +87,6 @@ WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:concurrency:o
  * ======================================================= */
 
 -- [31501] OX 추가 3개
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31501, 'PRACTICAL', 'OX', 'NORMAL',
@@ -126,7 +123,6 @@ WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:backup:ox6');
  * ======================================================= */
 
 -- [31502] OX 추가 3개
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT
@@ -159,81 +155,5 @@ SELECT
   'Blameless Postmortem은 개인 탓이 아닌 시스템/프로세스 개선을 지향합니다.',
   'seed:prac:incident:ox5'
 WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:incident:ox5');
-
-
-/* =========================================================
- * QUESTION_TAG 매핑 (31401 ~ 31502)
- * - 허용되지 않은 태그 제거
- * - 토픽별 대표 태그로 재매핑
- *   31401 → 트랜잭션
- *   31402 → 동시성
- *   31501 → 백업복구
- *   31502 → 장애분석
- * ========================================================= */
-
--- 31401 트랜잭션/격리수준 → '트랜잭션'
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31401
-  AND qt.tag <> '트랜잭션';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '트랜잭션'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '트랜잭션'
-WHERE q.topic_id = @tp_31401
-  AND qt.question_id IS NULL;
-
--- 31402 동시성/락 → '동시성'
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31402
-  AND qt.tag <> '동시성';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '동시성'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '동시성'
-WHERE q.topic_id = @tp_31402
-  AND qt.question_id IS NULL;
-
--- 31501 백업/복구/RPO/RTO → '백업복구'
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31501
-  AND qt.tag <> '백업복구';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '백업복구'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '백업복구'
-WHERE q.topic_id = @tp_31501
-  AND qt.question_id IS NULL;
-
--- 31502 장애 분석/포스트모템 → '장애분석'
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31502
-  AND qt.tag <> '장애분석';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '장애분석'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '장애분석'
-WHERE q.topic_id = @tp_31502
-  AND qt.question_id IS NULL;
-
 
 SET FOREIGN_KEY_CHECKS = 1;

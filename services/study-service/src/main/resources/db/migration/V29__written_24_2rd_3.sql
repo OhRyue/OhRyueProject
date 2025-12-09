@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q21. Test Harness 구성 요소  [정답: ④]
---  topic_id = 22101 (소프트웨어 테스트 도구/환경)
-------------------------------------------------------------
+/* =======================================================
+ * Q21. Test Harness 구성 요소  [정답: ④]
+ *  - topic_id = 22101 (소프트웨어 테스트 도구/환경)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -33,10 +33,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q22. IDE(통합 개발 환경)  [정답: ④]
---  topic_id = 22102 (개발 도구/IDE)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q22. IDE(통합 개발 환경)  [정답: ④]
+ *  - topic_id = 22102 (개발 도구/IDE)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -66,10 +67,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q23. DRM 개념  [정답: ②]
---  topic_id = 23101 (DRM/보안)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q23. DRM 개념  [정답: ②]
+ *  - topic_id = 23101 (DRM/보안)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -102,10 +104,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q24. 스택 연산(push/pop) 결과  [정답: ②]
---  topic_id = 22201 (자료구조/스택)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q24. 스택 연산(push/pop) 결과  [정답: ②]
+ *  - topic_id = 22201 (자료구조/스택)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -136,10 +139,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q25. EAI 구축 유형  [정답: ④]
---  topic_id = 23102 (EAI/통합)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q25. EAI 구축 유형  [정답: ④]
+ *  - topic_id = 23102 (EAI/통합)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -171,10 +175,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
-------------------------------------------------------------
--- Q26. DRM 구성요소  [정답: ②]
---  topic_id = 23101 (DRM/보안)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q26. DRM 구성요소  [정답: ②]
+ *  - topic_id = 23101 (DRM/보안)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -207,10 +212,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q27. 테스트 오라클(Test Oracle)  [정답: ①]
---  topic_id = 22103 (테스트 오라클)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q27. 테스트 오라클(Test Oracle)  [정답: ①]
+ *  - topic_id = 22103 (테스트 오라클)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -243,10 +249,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q28. 버블 정렬 – 2회전 결과  [정답: ③]
---  topic_id = 22202 (정렬 알고리즘)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q28. 버블 정렬 – 2회전 결과  [정답: ③]
+ *  - topic_id = 22202 (정렬 알고리즘)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -256,7 +263,7 @@ INSERT INTO question (
   'WRITTEN',
   'MCQ',
   'NORMAL',
-  '버블 정렬을 이용한 오름차순 정렬 시  
+  '버블 정렬을 이용한 오름차순 정렬 시
 다음 자료에 대한 **2회전 후 결과**는 무엇인가?
 
 > 9, 6, 7, 3, 5',
@@ -287,10 +294,10 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
 
-------------------------------------------------------------
--- Q29. 형상 관리 도구 기능  [정답: ③]
---  topic_id = 23103 (형상 관리/버전관리)
-------------------------------------------------------------
+/* =======================================================
+ * Q29. 형상 관리 도구 기능  [정답: ③]
+ *  - topic_id = 23103 (형상 관리/버전관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -323,10 +330,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'CONFIG_CM');
 
-------------------------------------------------------------
--- Q30. 강도 테스트(Stress Test)  [정답: ②]
---  topic_id = 22104 (소프트웨어 테스트 유형)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q30. 강도 테스트(Stress Test)  [정답: ②]
+ *  - topic_id = 22104 (소프트웨어 테스트 유형)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

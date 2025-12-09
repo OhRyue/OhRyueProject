@@ -1,8 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q11. UML 의존 관계 (Dependency)
-------------------------------------------------------------
+/* =======================================================
+ * Q11. UML 의존 관계 (Dependency)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -29,9 +30,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q12. Rayleigh-Norden 곡선 / Putnam 모형
-------------------------------------------------------------
+
+/* =======================================================
+ * Q12. Rayleigh-Norden 곡선 / Putnam 모형
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -58,9 +61,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_COST_PM');
 
-------------------------------------------------------------
--- Q13. 애자일 프로세스 모델 특징 (틀린 것)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q13. 애자일 프로세스 모델 특징 (틀린 것)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -87,9 +92,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- Q14. 디자인 패턴 구성 요소 (가장 거리가 먼 것)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q14. 디자인 패턴 구성 요소 (가장 거리가 먼 것)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -116,9 +123,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q15. 아키텍처 설계 과정 순서
-------------------------------------------------------------
+
+/* =======================================================
+ * Q15. 아키텍처 설계 과정 순서
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -130,10 +139,10 @@ INSERT INTO question (
   'HARD',
   '다음은 소프트웨어 아키텍처 설계 과정의 주요 활동들이다. 올바른 수행 순서를 나열한 것은?
 
-> ㉮ 설계 목표 설정  
-> ㉯ 시스템 타입 결정  
-> ㉰ 스타일 적용 및 커스터마이즈  
-> ㉱ 서브시스템의 기능·인터페이스·동작 작성  
+> ㉮ 설계 목표 설정
+> ㉯ 시스템 타입 결정
+> ㉰ 스타일 적용 및 커스터마이즈
+> ㉱ 서브시스템의 기능·인터페이스·동작 작성
 > ㉲ 아키텍처 설계 검토',
   'A',
   '아키텍처 설계에서는 먼저 품질 속성, 제약사항 등을 반영하여 설계 목표를 설정하고(㉮), 그 목표에 적합한 시스템 타입이나 구조 스타일을 결정합니다(㉯). 이후 선택한 스타일을 구체적인 시스템에 맞게 적용·커스터마이즈하고(㉰), 서브시스템별로 기능, 인터페이스, 동작을 설계합니다(㉱). 마지막으로 이해관계자와 함께 설계를 검토하여 품질 속성과 제약을 만족하는지 확인합니다(㉲). 따라서 ㉮ → ㉯ → ㉰ → ㉱ → ㉲ 순서가 올바릅니다.',
@@ -151,9 +160,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q16. 클래스 구성 요소: 속성 / 오퍼레이션
-------------------------------------------------------------
+
+/* =======================================================
+ * Q16. 클래스 구성 요소: 속성 / 오퍼레이션
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -165,8 +176,8 @@ INSERT INTO question (
   'EASY',
   '다음은 클래스에 대한 설명이다. 괄호 ㉠, ㉡에 들어갈 알맞은 용어의 조합은?
 
-> 클래스는 각각의 객체들이 갖는 ( ㉠ )과(와) ( ㉡ )을 표현한다.  
-> ( ㉠ )은(는) 클래스의 상태나 정보를 표현한다.  
+> 클래스는 각각의 객체들이 갖는 ( ㉠ )과(와) ( ㉡ )을 표현한다.
+> ( ㉠ )은(는) 클래스의 상태나 정보를 표현한다.
 > ( ㉡ )은(는) 클래스가 수행할 수 있는 동작으로, 함수이며 메소드라고도 한다.',
   'B',
   '객체지향에서 클래스는 객체들이 공통으로 가지는 속성과 오퍼레이션(연산)을 정의한 설계 틀입니다. 속성(Attribute)은 상태나 데이터를 표현하고, 오퍼레이션(Operation)은 그 클래스가 수행할 수 있는 동작이나 기능을 의미하며 메소드(Method)라고도 부릅니다. 제약조건은 값 범위를 제한하는 규칙이고, 관계는 클래스 간 연결 구조를 설명할 때 사용하는 용어입니다. 따라서 ㉠ 속성, ㉡ 오퍼레이션 조합이 정답입니다.',
@@ -184,9 +195,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- Q17. 폭포수 모형 특징 (거리가 먼 것)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q17. 폭포수 모형 특징 (거리가 먼 것)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -213,9 +226,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- Q18. CASE 원천 기술 (아닌 것)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q18. CASE 원천 기술 (아닌 것)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -242,9 +257,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- Q19. fan-in / fan-out 개념 (정답값: 3, 2)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q19. fan-in / fan-out 개념 (정답값: 3, 2)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -255,7 +272,7 @@ INSERT INTO question (
   'MCQ',
   'NORMAL',
   '다음 프로그램 구조에서 모듈 F의 fan-in과 fan-out의 수를 올바르게 나타낸 것은?
-(도식 예: 여러 상위 모듈이 F를 호출하고, F가 몇 개의 하위 모듈을 호출하는 구조를 가정)',
+(도식 예: 여러 상위 모듈이 F를 호출하고, F가 두 개의 하위 모듈을 호출하는 구조를 가정)',
   'B',
   'fan-in은 특정 모듈을 호출하거나 참조하는 상위 모듈의 개수를 의미하고, fan-out은 특정 모듈이 직접 호출하는 하위 모듈의 개수를 의미합니다. 제시된 구조에서는 세 개의 상위 모듈이 F를 호출하고, F가 두 개의 하위 모듈을 호출하므로 fan-in은 3, fan-out은 2가 됩니다. fan-in과 fan-out은 모듈의 응집도, 결합도 분석이나 유지보수성 평가에 활용되는 대표적인 구조적 설계 지표입니다.',
   'past:2024-3:Q19',
@@ -273,9 +290,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q20. HIPO(Hierarchy Input Process Output) 특징 (거리가 먼 것)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q20. HIPO(Hierarchy Input Process Output) 특징 (거리가 먼 것)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

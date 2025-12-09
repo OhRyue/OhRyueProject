@@ -1,8 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q31. 테스트 케이스에 일반적으로 포함되지 않는 항목
-------------------------------------------------------------
+/* =======================================================
+ * Q31. 테스트 케이스에 일반적으로 포함되지 않는 항목
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -33,9 +34,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q32. 이진 검색 알고리즘 설명 – 틀린 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q32. 이진 검색 알고리즘 설명 – 틀린 것
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -66,9 +69,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q33. 하나만 선택 가능한 UI 요소 (라디오 버튼)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q33. 하나만 선택 가능한 UI 요소 (라디오 버튼)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -96,9 +101,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- Q34. 스택을 이용한 연산과 거리가 먼 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q34. 스택을 이용한 연산과 거리가 먼 것
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -134,9 +141,11 @@ WHERE question_id = @q_id;
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q35. 소프트웨어 테스트 설명 – 틀린 것
-------------------------------------------------------------
+
+/* =======================================================
+ * Q35. 소프트웨어 테스트 설명 – 틀린 것
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -164,9 +173,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q36. 성능 테스트 자동화 도구
-------------------------------------------------------------
+
+/* =======================================================
+ * Q36. 성능 테스트 자동화 도구
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -196,9 +207,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q37. 소스 코드 정적 분석(Static Analysis) – 틀린 설명
-------------------------------------------------------------
+
+/* =======================================================
+ * Q37. 소스 코드 정적 분석(Static Analysis) – 틀린 설명
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -226,9 +239,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q38. 형상 관리 개념·절차 – 틀린 설명
-------------------------------------------------------------
+
+/* =======================================================
+ * Q38. 형상 관리 개념·절차 – 틀린 설명
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -259,9 +274,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'CONFIG_CM');
 
-------------------------------------------------------------
--- Q39. 그래프 DFS(깊이 우선 탐색) 결과
-------------------------------------------------------------
+
+/* =======================================================
+ * Q39. 그래프 DFS(깊이 우선 탐색) 결과
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -291,9 +308,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q40. Divide and Conquer + Pivot + 최악 n(n-1)/2 비교 정렬
-------------------------------------------------------------
+
+/* =======================================================
+ * Q40. Divide and Conquer + Pivot + 최악 n(n-1)/2 비교 정렬
+ *  - WRITTEN / MCQ / HARD
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

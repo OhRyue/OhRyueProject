@@ -1,9 +1,8 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q71. Best Fit 내부 단편화  [정답: ①]
---  topic_id = 14301 (4.3.1 운영체제 기초 활용)
-------------------------------------------------------------
+/* =======================================================
+ * Q71. Best Fit 내부 단편화
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -38,10 +37,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q72. FIFO 페이지 교체(Page Fault 수)  [정답: ②]
---  topic_id = 14301 (4.3.1 운영체제 기초 활용)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q72. FIFO 페이지 교체(Page Fault 수)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -53,36 +52,36 @@ INSERT INTO question (
   'HARD',
   '다음의 페이지 참조 열(Page reference)에 대해 페이지 교체 기법으로
 선입선출(FIFO) 알고리즘을 사용할 경우 페이지 부재(Page Fault) 횟수는
-얼마인가요?  
+얼마인가요?
 (단, 할당된 페이지 프레임 수는 3이고 처음에는 모든 프레임이 비어 있다.)
 
-> **페이지 참조열**  
+> **페이지 참조열**
 > 7, 0, 1, 2, 0, 3, 0, 4, 2, 3, 0, 3, 2, 1, 2, 0, 1, 7, 0',
   'B',
-  'FIFO(First-In First-Out) 페이지 교체는 “가장 먼저 들어온 페이지를 가장 먼저 내보내는” 방식입니다.  
+  'FIFO(First-In First-Out) 페이지 교체는 “가장 먼저 들어온 페이지를 가장 먼저 내보내는” 방식입니다.
 프레임 수가 3개일 때 참조열을 순서대로 따라가며 페이지 부재(Page Fault)를 계산하면 다음과 같습니다.
 
 초기: [ - , - , - ]  (비어 있음)
 
-1) 7 → Fault 1 → [ 7, -, - ]  
-2) 0 → Fault 2 → [ 7, 0, - ]  
-3) 1 → Fault 3 → [ 7, 0, 1 ]  
-4) 2 → Fault 4 → [ 2, 0, 1 ]  
-5) 0 → O  
-6) 3 → Fault 5 → [ 2, 3, 1 ]  
-7) 0 → Fault 6 → [ 2, 3, 0 ]  
-8) 4 → Fault 7 → [ 4, 3, 0 ]  
-9) 2 → Fault 8 → [ 4, 2, 0 ]  
-10) 3 → Fault 9 → [ 4, 2, 3 ]  
-11) 0 → Fault 10 → [ 0, 2, 3 ]  
-12) 3 → O  
-13) 2 → O  
-14) 1 → Fault 11 → [ 1, 2, 3 ]  
-15) 2 → O  
-16) 0 → Fault 12 → [ 1, 0, 3 ]  
-17) 1 → O  
-18) 7 → Fault 13 → [ 1, 0, 7 ]  
-19) 0 → O  
+1) 7 → Fault 1 → [ 7, -, - ]
+2) 0 → Fault 2 → [ 7, 0, - ]
+3) 1 → Fault 3 → [ 7, 0, 1 ]
+4) 2 → Fault 4 → [ 2, 0, 1 ]
+5) 0 → O
+6) 3 → Fault 5 → [ 2, 3, 1 ]
+7) 0 → Fault 6 → [ 2, 3, 0 ]
+8) 4 → Fault 7 → [ 4, 3, 0 ]
+9) 2 → Fault 8 → [ 4, 2, 0 ]
+10) 3 → Fault 9 → [ 4, 2, 3 ]
+11) 0 → Fault 10 → [ 0, 2, 3 ]
+12) 3 → O
+13) 2 → O
+14) 1 → Fault 11 → [ 1, 2, 3 ]
+15) 2 → O
+16) 0 → Fault 12 → [ 1, 0, 3 ]
+17) 1 → O
+18) 7 → Fault 13 → [ 1, 0, 7 ]
+19) 0 → O
 
 따라서 **총 페이지 부재(Page Fault)는 13회**입니다.',
   'past:2024-1:Q72'
@@ -100,10 +99,9 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
 
-------------------------------------------------------------
--- Q73. UNIX에서 새로운 프로세스 생성 명령  [정답: ③]
---  topic_id = 14301 (4.3.1 운영체제 기초 활용)
-------------------------------------------------------------
+/* =======================================================
+ * Q73. UNIX에서 새로운 프로세스 생성 명령
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -134,10 +132,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q74. 페이지 크기가 작아질수록 나타나는 현상  [정답: ④]
---  topic_id = 14301 (4.3.1 운영체제 기초 활용)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q74. 페이지 크기가 작아질수록 나타나는 현상
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -171,10 +169,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q75. C 언어 논리 연산자 (논리합)  [정답: ①]
---  topic_id = 14201 (4.2.1 기본문법 활용)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q75. C 언어 논리 연산자 (논리합)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -208,10 +206,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q76. IPv6 주소체계  [정답: ③]
---  topic_id = 14302 (4.3.2 네트워크 기초 활용)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q76. IPv6 주소체계
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -244,10 +242,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'NET_PROTO_IP');
 
-------------------------------------------------------------
--- Q77. 결합도(Control Coupling)  [정답: ③]
---  topic_id = 11302 (1.3.2 객체 지향 설계 - 설계/모듈 구조 관점)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q77. 결합도(Control Coupling)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -281,10 +279,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q78. TCP/IP에서 논리 주소 → 물리 주소 변환 프로토콜  [정답: ②]
---  topic_id = 14302 (4.3.2 네트워크 기초 활용)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q78. TCP/IP에서 논리 주소 → 물리 주소 변환 프로토콜
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -319,13 +317,13 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'NET_PROTO_IP');
 
-------------------------------------------------------------
--- Q79. Working Set과 Thrashing  [정답: ④]
---  topic_id = 14301 (4.3.1 운영체제 기초 활용)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q79. Working Set과 Thrashing
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
-  stem, answer_key, solution_text, solution_text, source
+  stem, answer_key, solution_text, source
 ) VALUES (
   1,
   14301,
@@ -355,10 +353,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q80. 무선 LAN에서 사용하는 CSMA 방식  [정답: ③]
---  topic_id = 14302 (4.3.2 네트워크 기초 활용)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q80. 무선 LAN에서 사용하는 CSMA 방식
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

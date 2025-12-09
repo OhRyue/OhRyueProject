@@ -2,10 +2,10 @@ USE certpilot_study;
 
 SET @cert_id := 1;
 
--- =========================================
--- 2024년 3회 – 실기 (11~20)
--- mode: PRACTICAL, type: SHORT
--- =========================================
+/* =======================================================
+ * 2024년 3회 – 실기 (11~20)
+ *  - mode: PRACTICAL, type: SHORT
+ * ======================================================= */
 
 
 /* Q11. URL 구성 요소 – 번호 매칭 */
@@ -26,25 +26,26 @@ INSERT INTO question (
 4. 호스트와 포트 번호를 나타내는 부분으로, 서버 주소와 포트 번호를 포함한다. ( )
 
 5. 특정 페이지 내의 위치를 가리키며, 문서 내 특정 섹션으로 이동하는 데 사용된다. ( )',
-NULL,
-'43125',
-'그림에서 query는 ④, path는 ③, scheme은 ①, authority는 ②, fragment는 ⑤이므로 순서대로 4 3 1 2 5가 된다.',
-'practical:2024-3:Q11',
-'https://api.mycertpilot.com/static/images/questions/pq_2024_03_11.png'
+  NULL,
+  '43125',
+  '그림에서 query는 ④, path는 ③, scheme은 ①, authority는 ②, fragment는 ⑤이므로 순서대로 4 3 1 2 5가 된다.',
+  'practical:2024-3:Q11',
+  'https://api.mycertpilot.com/static/images/questions/pq_2024_03_11.png'
 );
 
 SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
-(@q_id, 'P_DB_OPERATION_MONITOR');
+  (@q_id, 'P_DB_OPERATION_MONITOR');
+
 
 /* Q12. C 구조체 / 단일 연결 리스트 값 교환 */
 INSERT INTO question (
-cert_id, topic_id, mode, type, difficulty,
-stem, payload_json, answer_key, solution_text, source
+  cert_id, topic_id, mode, type, difficulty,
+  stem, payload_json, answer_key, solution_text, source
 ) VALUES (
-@cert_id, 31101,
-'PRACTICAL', 'SHORT', 'NORMAL',
-'다음 C 프로그램을 실행했을 때 출력되는 값을 쓰시오.
+  @cert_id, 31101,
+  'PRACTICAL', 'SHORT', 'NORMAL',
+  '다음 C 프로그램을 실행했을 때 출력되는 값을 쓰시오.
 
 ```c
 #include <stdio.h>
@@ -118,7 +119,7 @@ INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
 ) VALUES (
-@cert_id, 31101,
+  @cert_id, 31101,
   'PRACTICAL', 'SHORT', 'EASY',
   '다음 Python 코드를 실행했을 때 출력되는 값을 쓰시오.
 
@@ -152,7 +153,7 @@ INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source, image_url
 ) VALUES (
-@cert_id, 31101,
+  @cert_id, 31101,
   'PRACTICAL', 'SHORT', 'EASY',
   '다음 UML 다이어그램에서 1, 2, 3에 들어갈 관계를 보기에서 골라 기호로 쓰시오.
 
@@ -186,7 +187,7 @@ INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
 ) VALUES (
-@cert_id, 31101,
+  @cert_id, 31101,
   'PRACTICAL', 'SHORT', 'EASY',
   '다음 Java 코드를 실행했을 때 출력되는 값을 쓰시오.
 
@@ -227,7 +228,7 @@ INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
 ) VALUES (
-@cert_id, 31101,
+  @cert_id, 31101,
   'PRACTICAL', 'SHORT', 'NORMAL',
   '다음 Java 코드를 실행했을 때 출력되는 값을 쓰시오.
 

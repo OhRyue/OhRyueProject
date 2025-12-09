@@ -4,14 +4,13 @@ SET FOREIGN_KEY_CHECKS = 0;
 USE certpilot_study;
 
 SET @cert_id    := 1;
-SET @tp_p_misc  := 39901;  -- TODO: 실제 실기 토픽 ID로 교체
 
 /* =======================================================
  * 2024년 2회 – 정보처리기사 실기
  * Q11 ~ Q20  (PRACTICAL / SHORT / NORMAL)
  * ======================================================= */
 
--- Q11. C 문자열 복사 + 인덱스 합 (답: 10)
+-- Q11. C 문자열 복사 + 인덱스 합  [정답: 10]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -60,7 +59,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q12. 홀짝 합 인터페이스 구현 (답: 25, 20)
+-- Q12. 홀짝 합 인터페이스 구현  [정답: 25, 20]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -107,7 +106,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q13. RIP 경로 (답: ADCF)
+-- Q13. RIP 경로  [정답: ADCF]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source, image_url
@@ -144,7 +143,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
 
--- Q14. AES 대칭키 알고리즘 (답: AES)
+-- Q14. AES 대칭키 알고리즘  [정답: AES]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -169,7 +168,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
 
--- Q15. 2차원 배열 + 포인터 배열 (답: 21)
+-- Q15. 2차원 배열 + 포인터 배열  [정답: 21]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -203,7 +202,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q16. SRT 스케줄링 평균 대기시간 (답: 6.5)
+-- Q16. SRT 스케줄링 평균 대기시간  [정답: 6.5]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -236,7 +235,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
 
--- Q17. 재귀 + 중복 제거 역순 문자열 (답: dcba)
+-- Q17. 재귀 + 중복 제거 역순 문자열  [정답: dcba]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -279,7 +278,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q18. 제어 결합도 (Control Coupling)
+-- Q18. 제어 결합도 (Control Coupling)  [정답: 제어]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -307,7 +306,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q19. 구조체 단일 링크드 리스트 (답: 20)
+-- Q19. 구조체 단일 링크드 리스트  [정답: 20]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -351,7 +350,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q20. Java split – 부분 문자열 선택 (답: S)
+-- Q20. Java split – 부분 문자열 선택  [정답: S]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source

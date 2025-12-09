@@ -27,19 +27,6 @@ WHERE NOT EXISTS (
   SELECT 1 FROM question WHERE source = 'seed:v5:11101:ox:monitoring-capacity'
 );
 
--- [11101] question_tag 매핑 (토픽 공통 태그)
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '현행분석'
-FROM question q
-WHERE q.topic_id = @tp_11101
-  AND q.mode = 'WRITTEN'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM question_tag qt
-    WHERE qt.question_id = q.id
-      AND qt.tag = '현행분석'
-  );
-
 
 /* ================================================
  * 11102 – 요구사항 확인 / UML / 애자일
@@ -70,19 +57,6 @@ SELECT @cert_id, @tp_11102, 'WRITTEN', 'OX', 'NORMAL',
 WHERE NOT EXISTS (
   SELECT 1 FROM question WHERE source = 'seed:v5:11102:ox:conflict'
 );
-
--- [11102] question_tag 매핑 (토픽 공통 태그)
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '요구도출'
-FROM question q
-WHERE q.topic_id = @tp_11102
-  AND q.mode = 'WRITTEN'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM question_tag qt
-    WHERE qt.question_id = q.id
-      AND qt.tag = '요구도출'
-  );
 
 
 /* ================================================
@@ -126,18 +100,5 @@ SELECT @cert_id, @tp_11103, 'WRITTEN', 'OX', 'NORMAL',
 WHERE NOT EXISTS (
   SELECT 1 FROM question WHERE source = 'seed:v5:11103:ox:model-sync'
 );
-
--- [11103] question_tag 매핑 (토픽 공통 태그)
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '모델링'
-FROM question q
-WHERE q.topic_id = @tp_11103
-  AND q.mode = 'WRITTEN'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM question_tag qt
-    WHERE qt.question_id = q.id
-      AND qt.tag = '모델링'
-  );
 
 SET FOREIGN_KEY_CHECKS = 1;

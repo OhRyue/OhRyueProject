@@ -5,10 +5,10 @@ USE certpilot_study;
 
 SET @cert_id := 1;
 
-------------------------------------------------------------
--- Q11. 분기(Branch) 커버리지를 만족하는 테스트 경로
---  - Topic: P.1.1 업무 시나리오 해석 (31101)
-------------------------------------------------------------
+/* =======================================================
+ * Q11. 분기(Branch) 커버리지를 만족하는 테스트 경로
+ *  - Topic: P.1.1 업무 시나리오 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -18,8 +18,7 @@ INSERT INTO question (
   'PRACTICAL',
   'SHORT',
   'HARD',
-  '다음 아래 제어 흐름 그래프가 분기 커버리지를 만족하기 위한 테스팅 순서를 쓰시오.
-,
+  '다음 아래 제어 흐름 그래프가 분기 커버리지를 만족하기 위한 테스팅 순서를 쓰시오.',
   '1234567, 124561',
   '분기(Branch) 커버리지는 프로그램 내의 모든 분기(조건문의 YES/NO)를
 최소 한 번 이상 수행하는 것을 목표로 합니다.
@@ -47,7 +46,7 @@ INSERT INTO question (
 이 두 경로를 합치면
 - ②의 YES/NO,
 - ⑥의 YES/NO
-모든 분기를 최소 한 번씩 통과하게 되어 분기 커버리지를 만족합니다.,
+모든 분기를 최소 한 번씩 통과하게 되어 분기 커버리지를 만족합니다.',
   'past:2025-2:Q11',
   'https://api.mycertpilot.com/static/images/questions/pq_2025_02_11.png'
 );
@@ -57,10 +56,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q12. C 언어 원형 큐(Circular Queue) 동작
---  - Topic: P.1.1 업무 시나리오/코드 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q12. C 언어 원형 큐(Circular Queue) 동작
+ *  - Topic: P.1.1 업무 시나리오/코드 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -145,10 +145,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q13. RR(Round Robin) 스케줄링 평균 대기시간
---  - Topic: P.5.2 운영/스케줄링 분석 (31502)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q13. RR(Round Robin) 스케줄링 평균 대기시간
+ *  - Topic: P.5.2 운영/스케줄링 분석 (31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -211,10 +212,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q14. C 구조체 배열 및 포인터
---  - Topic: P.1.1 코드/자료구조 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q14. C 구조체 배열 및 포인터
+ *  - Topic: P.1.1 코드/자료구조 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -279,10 +281,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q15. Java 참조 타입과 배열 요소 변경
---  - Topic: P.1.1 코드/객체 참조 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q15. Java 참조 타입과 배열 요소 변경
+ *  - Topic: P.1.1 코드/객체 참조 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -356,10 +359,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q16. C 단순 연결 리스트 구조
---  - Topic: P.1.1 코드/자료구조 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q16. C 단순 연결 리스트 구조
+ *  - Topic: P.1.1 코드/자료구조 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -424,10 +428,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q17. Python 딕셔너리/집합 연산
---  - Topic: P.1.1 코드/파이썬 집합 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q17. Python 딕셔너리/집합 연산
+ *  - Topic: P.1.1 코드/파이썬 집합 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -493,10 +498,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q18. C 단순 연결 리스트를 이용한 문자열 역순 출력
---  - Topic: P.1.1 코드/포인터 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q18. C 단순 연결 리스트를 이용한 문자열 역순 출력
+ *  - Topic: P.1.1 코드/포인터 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -585,10 +591,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q19. TCP 3-way 핸드셰이크 취약점을 이용한 공격
---  - Topic: P.5.2 장애 분석 및 보안 사고 대응 (31502)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q19. TCP 3-way 핸드셰이크 취약점을 이용한 공격
+ *  - Topic: P.5.2 장애 분석 및 보안 사고 대응 (31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -638,10 +645,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q20. 관계 대수 πTTL(employee) 연산 결과
---  - Topic: P.2.1 개념/논리/물리 모델링 (31201)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q20. 관계 대수 πTTL(employee) 연산 결과
+ *  - Topic: P.2.1 개념/논리/물리 모델링 (31201)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

@@ -5,10 +5,10 @@ USE certpilot_study;
 
 SET @cert_id := 1;
 
-------------------------------------------------------------
--- Q1. 레코드 접근 방법 - 색인(index) 접근
---  - Topic: P.2.1 개념/논리/물리 모델링 (31201)
-------------------------------------------------------------
+/* =======================================================
+ * Q1. 레코드 접근 방법 - 색인(index) 접근
+ *  - Topic: P.2.1 개념/논리/물리 모델링 (31201)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -52,10 +52,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_MODEL_ER_PHYSICAL');
 
-------------------------------------------------------------
--- Q2. 릴레이션에서 열(Column, 필드)에 해당하는 개념
---  - Topic: P.2.1 개념/논리/물리 모델링 (31201)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q2. 릴레이션에서 열(Column, 필드)에 해당하는 개념
+ *  - Topic: P.2.1 개념/논리/물리 모델링 (31201)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -113,10 +114,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_MODEL_ER_PHYSICAL');
 
-------------------------------------------------------------
--- Q3. SSH 보안 접속 프로토콜
---  - Topic: P.5.2 장애 분석 및 운영 보안 (31502)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q3. SSH 보안 접속 프로토콜
+ *  - Topic: P.5.2 장애 분석 및 운영 보안 (31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -156,10 +158,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q4. 스케줄링 알고리즘 SJF / SRT
---  - Topic: P.5.2 장애 분석 및 운영(스케줄링) (31502)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q4. 스케줄링 알고리즘 SJF / SRT
+ *  - Topic: P.5.2 장애 분석 및 운영(스케줄링) (31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -208,10 +211,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q5. Java - 참조 타입과 매개변수 전달
---  - Topic: P.1.1 업무 시나리오/코드 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q5. Java - 참조 타입과 매개변수 전달
+ *  - Topic: P.1.1 업무 시나리오/코드 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -277,10 +281,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q6. IPv4 주소와 서브넷 마스크 - 네트워크 주소와 호스트 수
---  - Topic: P.5.2 운영/네트워크 분석 (31502)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q6. IPv4 주소와 서브넷 마스크 - 네트워크 주소와 호스트 수
+ *  - Topic: P.5.2 운영/네트워크 분석 (31502)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -333,10 +338,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
--- Q7. 디자인 패턴 - Proxy 패턴
---  - Topic: P.1.1 시나리오/설계 개념 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q7. 디자인 패턴 - Proxy 패턴
+ *  - Topic: P.1.1 시나리오/설계 개념 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -380,10 +386,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q8. 웹 비동기 통신 기법 - AJAX
---  - Topic: P.1.1 시나리오/웹 동작 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q8. 웹 비동기 통신 기법 - AJAX
+ *  - Topic: P.1.1 시나리오/웹 동작 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -426,10 +433,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q9. Java 람다, 예외 처리 - run(f) + run((n) -> n+9)
---  - Topic: P.1.1 코드/예외 흐름 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q9. Java 람다, 예외 처리 - run(f) + run((n) -> n+9)
+ *  - Topic: P.1.1 코드/예외 흐름 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -500,10 +508,11 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
--- Q10. Java - 정적 메서드 숨기기 vs 인스턴스 메서드 오버라이딩
---  - Topic: P.1.1 코드/다형성 해석 (31101)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q10. Java - 정적 메서드 숨기기 vs 인스턴스 메서드 오버라이딩
+ *  - Topic: P.1.1 코드/다형성 해석 (31101)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

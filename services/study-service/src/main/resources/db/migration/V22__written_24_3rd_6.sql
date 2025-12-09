@@ -1,8 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q50. 시그마(σ) – Select 연산 (관계대수)
-------------------------------------------------------------
+/* =======================================================
+ * Q50. 시그마(σ) – Select 연산 (관계대수)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -32,9 +33,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q51. DB 설계 단계 – 물리적 설계
-------------------------------------------------------------
+
+/* =======================================================
+ * Q51. DB 설계 단계 – 물리적 설계
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -64,9 +67,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q52. 릴레이션의 성질 – 속성 사이에는 "논리적" 순서 없음
-------------------------------------------------------------
+
+/* =======================================================
+ * Q52. 릴레이션의 성질 – 속성 사이에는 "논리적" 순서 없음
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -98,9 +103,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q53. 트랜잭션 실패 시 결과 복구 – ROLLBACK
-------------------------------------------------------------
+
+/* =======================================================
+ * Q53. 트랜잭션 실패 시 결과 복구 – ROLLBACK
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -130,9 +137,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q54. 카티션 프로덕트 – 차수/카디널리티 계산
-------------------------------------------------------------
+
+/* =======================================================
+ * Q54. 카티션 프로덕트 – 차수/카디널리티 계산
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -162,9 +171,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q55. 정규화의 시점 – 개념적 설계 "이후"
-------------------------------------------------------------
+
+/* =======================================================
+ * Q55. 정규화의 시점 – 개념적 설계 "이후"
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -196,9 +207,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q56. 트랜잭션의 정의
-------------------------------------------------------------
+
+/* =======================================================
+ * Q56. 트랜잭션의 정의
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -228,9 +241,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q57. DROP VIEW ... CASCADE – 의존 뷰까지 삭제
-------------------------------------------------------------
+
+/* =======================================================
+ * Q57. DROP VIEW ... CASCADE – 의존 뷰까지 삭제
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -262,9 +277,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q58. SQL – REVOKE는 권한 회수, 열 이름 변경 아님
-------------------------------------------------------------
+
+/* =======================================================
+ * Q58. SQL – REVOKE는 권한 회수, 열 이름 변경 아님
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -296,9 +313,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q59. 외래키(Foreign Key)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q59. 외래키(Foreign Key)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -330,9 +349,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q60. 데이터 사전(Data Dictionary) – 일반 사용자가 직접 수정 X
-------------------------------------------------------------
+
+/* =======================================================
+ * Q60. 데이터 사전(Data Dictionary) – 일반 사용자가 직접 수정 X
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

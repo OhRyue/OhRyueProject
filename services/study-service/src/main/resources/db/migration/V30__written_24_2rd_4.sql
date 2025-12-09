@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q31. 빌드 자동화 도구  [정답: ②]
---  topic_id = 24101 (빌드/CI 도구)
-------------------------------------------------------------
+/* =======================================================
+ * Q31. 빌드 자동화 도구  [정답: ②]
+ *  - topic_id = 24101 (빌드/CI 도구)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -32,10 +32,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'CONFIG_CM');
 
-------------------------------------------------------------
--- Q32. 해싱 함수 종류  [정답: ④]
---  topic_id = 22203 (해싱/해시함수)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q32. 해싱 함수 종류  [정답: ④]
+ *  - topic_id = 22203 (해싱/해시함수)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -64,10 +65,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q33. 효과적인 모듈 설계  [정답: ④]
---  topic_id = 24102 (모듈 설계/응집도·결합도)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q33. 효과적인 모듈 설계  [정답: ④]
+ *  - topic_id = 24102 (모듈 설계/응집도·결합도)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -96,10 +98,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q34. White Box Testing  [정답: ①]
---  topic_id = 22105 (화이트박스 테스트)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q34. White Box Testing  [정답: ①]
+ *  - topic_id = 22105 (화이트박스 테스트)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -128,10 +131,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q35. Walkthrough vs Inspection  [정답: ③]
---  topic_id = 24103 (검토 기법)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q35. Walkthrough vs Inspection  [정답: ③]
+ *  - topic_id = 24103 (검토 기법)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -161,10 +165,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q36. 중위 → 후위 표기 변환  [정답: ②]
---  topic_id = 22204 (수식 표기/스택)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q36. 중위 → 후위 표기 변환  [정답: ②]
+ *  - topic_id = 22204 (수식 표기/스택)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -195,10 +200,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q37. 분산 버전 관리(DVCS) 방식  [정답: ①]
---  topic_id = 23104 (형상관리/VCS 방식)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q37. 분산 버전 관리(DVCS) 방식  [정답: ①]
+ *  - topic_id = 23104 (형상관리/VCS 방식)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -210,9 +216,9 @@ INSERT INTO question (
   'EASY',
   '다음 설명에 해당하는 소프트웨어 버전 관리 도구 방식은 무엇인가?
 
-> · 버전 관리 자료가 원격 저장소와 로컬 저장소에 함께 저장되어 관리된다.  
-> · 로컬 저장소에서 버전 관리가 가능하므로, 원격 저장소에 문제가 생겨도  
->   로컬 저장소의 자료를 이용하여 작업할 수 있다.  
+> · 버전 관리 자료가 원격 저장소와 로컬 저장소에 함께 저장되어 관리된다.
+> · 로컬 저장소에서 버전 관리가 가능하므로, 원격 저장소에 문제가 생겨도
+>   로컬 저장소의 자료를 이용하여 작업할 수 있다.
 > · 대표적인 버전 관리 도구로 Git이 있다.',
   'A',
   'Git처럼 각 개발자 PC에 전체 이력이 복제되어 있는 구조를
@@ -233,10 +239,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'CONFIG_CM');
 
-------------------------------------------------------------
--- Q38. 위험 모니터링  [정답: ④]
---  topic_id = 24104 (프로젝트 위험관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q38. 위험 모니터링  [정답: ④]
+ *  - topic_id = 24104 (프로젝트 위험관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -265,10 +272,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_COST_PM');
 
-------------------------------------------------------------
--- Q39. 무방향 그래프 최대 간선 수  [정답: ④]
---  topic_id = 22205 (그래프 이론)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q39. 무방향 그래프 최대 간선 수  [정답: ④]
+ *  - topic_id = 22205 (그래프 이론)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -297,10 +305,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q40. 이진 검색 알고리즘 설명  [정답: ③]
---  topic_id = 22206 (검색 알고리즘)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q40. 이진 검색 알고리즘 설명  [정답: ③]
+ *  - topic_id = 22206 (검색 알고리즘)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

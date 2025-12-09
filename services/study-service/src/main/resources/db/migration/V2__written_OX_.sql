@@ -36,19 +36,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '현행 시스템 분석 단계에서는 응답 시간과 처리량과 같은 성능 지표를 수집해야 한다.%'
 );
 
-SET @q_ox_analysis_perf := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '현행 시스템 분석 단계에서는 응답 시간과 처리량과 같은 성능 지표를 수집해야 한다.%'
-   LIMIT 1
-);
-
--- 태그: 성능/NFR 수집 → 요구도출
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_analysis_perf, '요구도출'
-WHERE @q_ox_analysis_perf IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_analysis_perf AND tag='요구도출');
-
 -- 비기능 요구 함께 수집
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_analysis, 'WRITTEN', 'OX', 'EASY',
@@ -61,19 +48,6 @@ WHERE NOT EXISTS (
    WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
      AND stem LIKE '현행 시스템 분석에서는 기능 요구사항만 수집하고 보안·성능·가용성과 같은 비기능 요구는 이후 단계에서 별도로 분석한다.%'
 );
-
-SET @q_ox_analysis_nfr := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '현행 시스템 분석에서는 기능 요구사항만 수집하고 보안·성능·가용성과 같은 비기능 요구는 이후 단계에서 별도로 분석한다.%'
-   LIMIT 1
-);
-
--- 태그: 비기능 요구 수집 → 요구도출
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_analysis_nfr, '요구도출'
-WHERE @q_ox_analysis_nfr IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_analysis_nfr AND tag='요구도출');
 
 -- 업무 프로세스/조직 구조 파악
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
@@ -88,19 +62,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '현행 시스템 분석 시에는 업무 프로세스 흐름과 관련 조직/사용자 역할을 함께 파악하는 것이 좋다.%'
 );
 
-SET @q_ox_analysis_process_org := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '현행 시스템 분석 시에는 업무 프로세스 흐름과 관련 조직/사용자 역할을 함께 파악하는 것이 좋다.%'
-   LIMIT 1
-);
-
--- 태그: 업무 프로세스/조직 → 업무시나리오
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_analysis_process_org, '업무시나리오'
-WHERE @q_ox_analysis_process_org IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_analysis_process_org AND tag='업무시나리오');
-
 -- 인터페이스 정의 없이도 충분? (오답)
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_analysis, 'WRITTEN', 'OX', 'NORMAL',
@@ -114,19 +75,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '현행 시스템 분석에서는 내부 기능만 상세히 분석하고 외부 시스템과의 인터페이스는 설계 단계에서 처음 분석한다.%'
 );
 
-SET @q_ox_analysis_interface := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '현행 시스템 분석에서는 내부 기능만 상세히 분석하고 외부 시스템과의 인터페이스는 설계 단계에서 처음 분석한다.%'
-   LIMIT 1
-);
-
--- 태그: 인터페이스 현황 분석 → 인터페이스요구
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_analysis_interface, '인터페이스요구'
-WHERE @q_ox_analysis_interface IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_analysis_interface AND tag='인터페이스요구');
-
 -- 장애/운영 지표 반영
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_analysis, 'WRITTEN', 'OX', 'NORMAL',
@@ -139,19 +87,6 @@ WHERE NOT EXISTS (
    WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
      AND stem LIKE '현행 시스템의 장애 이력과 모니터링 지표는 신규 시스템 요구사항과는 무관하므로 수집하지 않아도 된다.%'
 );
-
-SET @q_ox_analysis_incidents := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_analysis AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '현행 시스템의 장애 이력과 모니터링 지표는 신규 시스템 요구사항과는 무관하므로 수집하지 않아도 된다.%'
-   LIMIT 1
-);
-
--- 태그: 장애 이력/모니터링 → 장애분석
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_analysis_incidents, '장애분석'
-WHERE @q_ox_analysis_incidents IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_analysis_incidents AND tag='장애분석');
 
 -- =========================================================
 -- 2) WRITTEN OX – 1.1.2 요구사항 확인 (요구공학/Agile 성격)
@@ -170,19 +105,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '요구사항 확인 단계에서 이해관계자를 식별하지 못하면 요구 누락 위험이 높아질 수 있다.%'
 );
 
-SET @q_ox_req_stakeholder := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '요구사항 확인 단계에서 이해관계자를 식별하지 못하면 요구 누락 위험이 높아질 수 있다.%'
-   LIMIT 1
-);
-
--- 태그: 이해관계자 식별 → 요구도출
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_req_stakeholder, '요구도출'
-WHERE @q_ox_req_stakeholder IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_req_stakeholder AND tag='요구도출');
-
 -- 자연어 명세의 모호성
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_req, 'WRITTEN', 'OX', 'NORMAL',
@@ -195,19 +117,6 @@ WHERE NOT EXISTS (
    WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
      AND stem LIKE '자연어 기반 요구사항 명세는 이해가 쉽고 모호성이 거의 없기 때문에 추가 검토 과정이 필요 없다.%'
 );
-
-SET @q_ox_req_natural := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '자연어 기반 요구사항 명세는 이해가 쉽고 모호성이 거의 없기 때문에 추가 검토 과정이 필요 없다.%'
-   LIMIT 1
-);
-
--- 태그: 자연어 명세의 모호성 → 요구검증
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_req_natural, '요구검증'
-WHERE @q_ox_req_natural IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_req_natural AND tag='요구검증');
 
 -- 애자일 변화 수용
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
@@ -222,19 +131,6 @@ WHERE NOT EXISTS (
      AND stem LIKE '애자일(Agile) 방법론에서는 변경되는 요구사항을 계획 대비 예외로 보고 최대한 줄이는 것이 목표이다.%'
 );
 
-SET @q_ox_req_agile_change := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '애자일(Agile) 방법론에서는 변경되는 요구사항을 계획 대비 예외로 보고 최대한 줄이는 것이 목표이다.%'
-   LIMIT 1
-);
-
--- 태그: 요구 변경/Agile 수용 → 요구관리
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_req_agile_change, '요구관리'
-WHERE @q_ox_req_agile_change IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_req_agile_change AND tag='요구관리');
-
 -- 유스케이스/시나리오
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty, stem, answer_key, solution_text, source)
 SELECT @cert_id, @topic_req, 'WRITTEN', 'OX', 'NORMAL',
@@ -247,18 +143,5 @@ WHERE NOT EXISTS (
    WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
      AND stem LIKE '유스케이스는 액터와 시스템 간 상호작용을 시나리오 형태로 표현하는 요구 분석 기법이다.%'
 );
-
-SET @q_ox_req_usecase := (
-  SELECT id FROM question
-   WHERE topic_id=@topic_req AND mode='WRITTEN' AND type='OX'
-     AND stem LIKE '유스케이스는 액터와 시스템 간 상호작용을 시나리오 형태로 표현하는 요구 분석 기법이다.%'
-   LIMIT 1
-);
-
--- 태그: 유스케이스/시나리오 → 업무시나리오
-INSERT INTO question_tag (question_id, tag)
-SELECT @q_ox_req_usecase, '업무시나리오'
-WHERE @q_ox_req_usecase IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM question_tag WHERE question_id=@q_ox_req_usecase AND tag='업무시나리오');
 
 SET FOREIGN_KEY_CHECKS = 1;

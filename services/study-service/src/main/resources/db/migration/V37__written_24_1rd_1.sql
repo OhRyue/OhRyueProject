@@ -1,9 +1,14 @@
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
 USE certpilot_study;
 
-------------------------------------------------------------
--- 2024-1 Q1. Coad-Yourdon 객체지향 분석 방법  [정답: ①]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+SET @cert_id    := 1;
+
+/* =======================================================
+ * 2024-1 Q1. Coad-Yourdon 객체지향 분석 방법  [정답: ①]
+ * topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -41,10 +46,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- 2024-1 Q2. 트랜잭션 감시·제어 미들웨어  [정답: ③]
---  topic_id = 15202 (5.2.2 SW 구축관리)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q2. 트랜잭션 감시·제어 미들웨어  [정답: ③]
+ * topic_id = 15202 (5.2.2 SW 구축관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -86,10 +92,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- 2024-1 Q3. 자료 흐름도(DFD)의 구성 요소  [정답: ②]
---  topic_id = 11103 (1.1.3 분석 모델 확인)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q3. 자료 흐름도(DFD)의 구성 요소  [정답: ②]
+ * topic_id = 11103 (1.1.3 분석 모델 확인)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -134,10 +141,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- 2024-1 Q4. 정보 은닉과 가장 밀접한 객체지향 개념  [정답: ①]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q4. 정보 은닉과 가장 밀접한 객체지향 개념  [정답: ①]
+ * topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -176,10 +184,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- 2024-1 Q5. 자료 사전에서 선택(Selection)을 의미하는 기호  [정답: ①]
---  topic_id = 13302 (3.3.2 데이터 모델링 및 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q5. 자료 사전에서 선택(Selection)을 의미하는 기호  [정답: ①]
+ * topic_id = 13302 (3.3.2 데이터 모델링 및 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -216,10 +225,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_META_CRUD');
 
-------------------------------------------------------------
--- 2024-1 Q6. 요구 분석 과정 설명 중 거리가 먼 것  [정답: ②]
---  topic_id = 11102 (1.1.2 요구사항 확인)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q6. 요구 분석 과정 설명 중 거리가 먼 것  [정답: ②]
+ * topic_id = 11102 (1.1.2 요구사항 확인)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -263,10 +273,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- 2024-1 Q7. Rumbaugh 분석 기법 - 정보 모델링(Object 모델)  [정답: ①]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q7. Rumbaugh 분석 기법 - 정보 모델링(Object 모델)  [정답: ①]
+ * topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -304,10 +315,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- 2024-1 Q8. UML 다이어그램 설명 중 틀린 것  [정답: ④]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q8. UML 다이어그램 설명 중 틀린 것  [정답: ④]
+ * topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -353,10 +365,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- 2024-1 Q9. UI 특성 중 틀린 것  [정답: ②]
---  topic_id = 11201 (1.2.1 UI 요구사항 확인)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q9. UI 특성 중 틀린 것  [정답: ②]
+ * topic_id = 11201 (1.2.1 UI 요구사항 확인)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -401,10 +414,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- 2024-1 Q10. GoF 디자인 패턴 설명 중 틀린 것  [정답: ③]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q10. GoF 디자인 패턴 설명 중 틀린 것  [정답: ③]
+ * topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

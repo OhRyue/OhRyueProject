@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- 2024-1 Q11. XP(eXtreme Programming) 설명 중 틀린 것  [정답: ①]
---  topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정)
-------------------------------------------------------------
+/* =======================================================
+ * 2024-1 Q11. XP(eXtreme Programming) 설명 중 틀린 것  [정답: ①]
+ * topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -48,10 +48,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- 2024-1 Q12. CLI 사용자 인터페이스  [정답: ②]
---  topic_id = 11201 (1.2.1 UI 요구사항 확인)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q12. CLI 사용자 인터페이스  [정답: ②]
+ * topic_id = 11201 (1.2.1 UI 요구사항 확인)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -88,10 +89,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'UI_UX');
 
-------------------------------------------------------------
--- 2024-1 Q13. UML 정적 다이어그램이 아닌 것  [정답: ③]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q13. UML 정적 다이어그램이 아닌 것  [정답: ③]
+ * topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -140,10 +142,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- 2024-1 Q14. UI 설계 도구 - 목업  [정답: ①]
---  topic_id = 11201 (1.2.1 UI 요구사항 확인)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q14. UI 설계 도구 - 목업  [정답: ①]
+ * topic_id = 11201 (1.2.1 UI 요구사항 확인)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -186,10 +189,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'UI_UX');
 
-------------------------------------------------------------
--- 2024-1 Q15. 비기능적 요구에 대한 설명  [정답: ②]
---  topic_id = 11102 (1.1.2 요구사항 확인)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q15. 비기능적 요구에 대한 설명  [정답: ②]
+ * topic_id = 11102 (1.1.2 요구사항 확인)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -237,10 +241,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_REQ_MODEL');
 
-------------------------------------------------------------
--- 2024-1 Q16. 컴포넌트의 정의  [정답: ③]
---  topic_id = 11301 (1.3.1 공통 모듈 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q16. 컴포넌트의 정의  [정답: ③]
+ * topic_id = 11301 (1.3.1 공통 모듈 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -283,10 +288,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- 2024-1 Q17. SOLID 원칙에 속하지 않는 것  [정답: ④]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q17. SOLID 원칙에 속하지 않는 것  [정답: ④]
+ * topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -327,10 +333,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- 2024-1 Q18. UML 스테레오타입 표기 기호  [정답: ①]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q18. UML 스테레오타입 표기 기호  [정답: ①]
+ * topic_id = 11302 (1.3.2 객체 지향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -367,10 +374,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OOP_UML_PATTERN');
 
-------------------------------------------------------------
--- 2024-1 Q19. CASE의 원천 기술이 아닌 것  [정답: ④]
---  topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q19. CASE의 원천 기술이 아닌 것  [정답: ④]
+ * topic_id = 15101 (5.1.1 소프트웨어 개발방법론 선정)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -410,10 +418,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'PROCESS_WATERFALL_AGILE');
 
-------------------------------------------------------------
--- 2024-1 Q20. 상태 다이어그램에서 전이의 요인이 되는 요소  [정답: ①]
---  topic_id = 11302 (1.3.2 객체 지향 설계)
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q20. 상태 다이어그램에서 전이의 요인이 되는 요소  [정답: ①]
+ * topic_id = 11302 (1.3.2 객체 지 향 설계)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

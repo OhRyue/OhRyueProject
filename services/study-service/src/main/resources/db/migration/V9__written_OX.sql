@@ -6,7 +6,7 @@ USE certpilot_study;
 SET @cert_id   := 1;
 SET @tp_11401  := 11401; -- 1.4.1 인터페이스 요구사항 확인
 SET @tp_11402  := 11402; -- 1.4.2 인터페이스 대상 식별
-SET @tp_11403  := 11403; -- 1.4.3 인터페이스 상세 설계;
+SET @tp_11403  := 11403; -- 1.4.3 인터페이스 상세 설계
 
 
 /* =======================================================
@@ -210,75 +210,5 @@ SELECT @cert_id, @tp_11403, 'WRITTEN', 'OX', 'NORMAL',
        '예시 메시지는 구현자가 사양을 오해하지 않도록 돕는 좋은 수단입니다.',
        'seed:v5:11403:ox:example'
 WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:v5:11403:ox:example');
-
-
-
-/* =======================================================
- * question_tag – 11401/11402/11403 태그 매핑
- *  - 11401: 인터페이스요구
- *  - 11402: 연계대상
- *  - 11403: 인터페이스설계 / 데이터명세
- * ======================================================= */
-
--- 11401 – 인터페이스 요구사항 확인
---  -> 모든 WRITTEN 문제에 '인터페이스요구' 태그 부여
-INSERT INTO question_tag (question_id, tag, created_at)
-SELECT q.id, '인터페이스요구', NOW()
-FROM question q
-WHERE q.topic_id = @tp_11401
-  AND q.mode = 'WRITTEN'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM question_tag qt
-    WHERE qt.question_id = q.id
-      AND qt.tag = '인터페이스요구'
-  );
-
-
--- 11402 – 인터페이스 대상 식별
---  -> 모든 WRITTEN 문제에 '연계대상' 태그 부여
-INSERT INTO question_tag (question_id, tag, created_at)
-SELECT q.id, '연계대상', NOW()
-FROM question q
-WHERE q.topic_id = @tp_11402
-  AND q.mode = 'WRITTEN'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM question_tag qt
-    WHERE qt.question_id = q.id
-      AND qt.tag = '연계대상'
-  );
-
-
--- 11403 – 인터페이스 상세 설계
--- 1) 전체 문제 공통 태그: '인터페이스설계'
-INSERT INTO question_tag (question_id, tag, created_at)
-SELECT q.id, '인터페이스설계', NOW()
-FROM question q
-WHERE q.topic_id = @tp_11403
-  AND q.mode = 'WRITTEN'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM question_tag qt
-    WHERE qt.question_id = q.id
-      AND qt.tag = '인터페이스설계'
-  );
-
--- 2) 데이터 스펙에 더 가까운 문제들에 '데이터명세' 추가 태그
---    (필드 정의, 날짜/시간 포맷, 예시 메시지, 에러 응답 구조 등)
-INSERT INTO question_tag (question_id, tag, created_at)
-SELECT q.id, '데이터명세', NOW()
-FROM question q
-WHERE q.source IN (
-  'seed:v5:11403:ox:field-detail',
-  'seed:v5:11403:ox:datetime',
-  'seed:v5:11403:ox:example'
-)
-AND NOT EXISTS (
-  SELECT 1
-  FROM question_tag qt
-  WHERE qt.question_id = q.id
-    AND qt.tag = '데이터명세'
-);
 
 SET FOREIGN_KEY_CHECKS = 1;

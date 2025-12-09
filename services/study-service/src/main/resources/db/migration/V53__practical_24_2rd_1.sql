@@ -4,14 +4,13 @@ SET FOREIGN_KEY_CHECKS = 0;
 USE certpilot_study;
 
 SET @cert_id    := 1;
-SET @tp_p_misc  := 39901;  -- TODO: 실제 실기 토픽 ID로 교체
 
 /* =======================================================
  * 2024년 2회 – 정보처리기사 실기
  * Q1 ~ Q10 (모두 PRACTICAL / SHORT / NORMAL)
  * ======================================================= */
 
--- Q1. Java 배열 동일성 비교 (답: NNN)
+-- Q1. Java 배열 동일성 비교  [정답: NNN]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -50,7 +49,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q2. 반정규화 정의 (답: 반정규화)
+-- Q2. 반정규화 정의  [정답: 반정규화]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -74,7 +73,8 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_MODEL_NORMAL_DENORMAL');
 
--- Q3. SQL DML/조회 구문 빈칸 (답: VALUES / SELECT / FROM / SET)
+
+-- Q3. SQL DML/조회 구문 빈칸  [정답: VALUES / SELECT / FROM / SET]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -115,7 +115,8 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SQL_SELECT_JOIN');
 
--- Q4. Cardinality / Degree (답: 카디널리티 5, 디그리 4)
+
+-- Q4. Cardinality / Degree  [정답: 카디널리티 5, 디그리 4]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -146,7 +147,8 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_MODEL_ER_PHYSICAL');
 
--- Q5. IPsec 프로토콜 (답: IPsec)
+
+-- Q5. IPsec 프로토콜  [정답: IPsec]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -171,7 +173,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
 
--- Q6. 응집도 유형 (순차적 응집도)
+-- Q6. 응집도 유형 (순차적 응집도)  [정답: 순차적 응집도]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -200,7 +202,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q7. Iterator 패턴
+-- Q7. Iterator 패턴  [정답: Iterator]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source, image_url
@@ -228,7 +230,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q8. Python 부분 문자열 카운트 (답: ab3 ca3)
+-- Q8. Python 부분 문자열 카운트  [정답: ab3 ca3]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -265,7 +267,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
 
--- Q9. 가상회선 / 데이터그램 교환 방식
+-- Q9. 가상회선 / 데이터그램 교환 방식  [정답: ① 가상회선 ② 데이터그램]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -293,7 +295,7 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
 
--- Q10. C switch / break (답: -13)
+-- Q10. C switch / break  [정답: -13]
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -342,4 +344,3 @@ b = 19 + 2 + 3 = 24, a - b = 11 - 24 = -13 이 출력된다.',
 SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
-

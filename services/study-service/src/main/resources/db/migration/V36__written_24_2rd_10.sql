@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q91. 메타데이터  [정답: D]
--- topic_id = 15108 (메타데이터/데이터 관리)
-------------------------------------------------------------
+/* =======================================================
+ * Q91. 메타데이터  [정답: D]
+ *  - topic_id = 15108 (메타데이터/데이터 관리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -15,7 +15,7 @@ INSERT INTO question (
   'EASY',
   '다음 괄호에 공통으로 들어갈 용어는 무엇인가?
 
-> 일련의 데이터를 정의·설명하는 데이터로, 데이터사전·스키마 등을 의미하며  
+> 일련의 데이터를 정의·설명하는 데이터로, 데이터사전·스키마 등을 의미하며
 > 빠른 검색과 체계적인 정리를 위해 사용된다.',
   'D',
   '데이터를 설명하는 “데이터에 대한 데이터”를 메타데이터(Meta Data)라고 합니다. 데이터사전, 스키마 정의 등이 대표적인 예입니다.',
@@ -33,10 +33,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_META_CRUD');
 
-------------------------------------------------------------
--- Q92. SDN  [정답: A]
--- topic_id = 15109 (SDN/네트워크 가상화)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q92. SDN  [정답: A]
+ *  - topic_id = 15109 (SDN/네트워크 가상화)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -48,8 +49,8 @@ INSERT INTO question (
   'NORMAL',
   '다음 설명에 해당하는 네트워크 기술은 무엇인가?
 
-> - 제어부와 데이터 전달부를 분리하여 네트워크를 소프트웨어로 제어  
-> - 기존 라우터/스위치의 한계를 보완하고, 경로를 동적으로 제어 가능  
+> - 제어부와 데이터 전달부를 분리하여 네트워크를 소프트웨어로 제어
+> - 기존 라우터/스위치의 한계를 보완하고, 경로를 동적으로 제어 가능
 > - 펌웨어 변경 없이 특정 서비스의 전송 경로를 유연하게 조정',
   'A',
   '네트워크 제어 영역과 데이터 전달 영역을 분리해 중앙에서 프로그래밍 가능한 구조로 만드는 기술은 SDN입니다.',
@@ -67,10 +68,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
-------------------------------------------------------------
--- Q93. 접근통제 정책이 아닌 것  [정답: B]
--- topic_id = 15110 (접근통제 정책)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q93. 접근통제 정책이 아닌 것  [정답: B]
+ *  - topic_id = 15110 (접근통제 정책)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -97,10 +99,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_BASE_DRM');
 
-------------------------------------------------------------
--- Q94. 병행수행 문제점이 아닌 것  [정답: B]
--- topic_id = 15111 (트랜잭션/병행제어)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q94. 병행수행 문제점이 아닌 것  [정답: B]
+ *  - topic_id = 15111 (트랜잭션/병행제어)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -127,10 +130,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q95. USN / RFID  [정답: C]
--- topic_id = 15112 (USN/RFID/유비쿼터스)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q95. USN / RFID  [정답: C]
+ *  - topic_id = 15112 (USN/RFID/유비쿼터스)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -142,7 +146,7 @@ INSERT INTO question (
   'EASY',
   '다음 괄호에 들어갈 기술은 무엇인가?
 
-> (    ) / RFID 는 모든 것에 태그를 부착하고, 태그에서 수집한 정보를  
+> (    ) / RFID 는 모든 것에 태그를 부착하고, 태그에서 수집한 정보를
 >  무선으로 수집·전송할 수 있도록 구성한 네트워크를 말한다.',
   'C',
   '각종 센서와 RFID 태그로부터 정보를 수집·전송하는 유비쿼터스 센서 네트워크는 USN(Ubiquitous Sensor Network)입니다.',
@@ -160,10 +164,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
-------------------------------------------------------------
--- Q96. 소프트웨어 재공학 – 틀린 설명  [정답: D]
--- topic_id = 15113 (SW 재공학/유지보수)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q96. 소프트웨어 재공학 – 틀린 설명  [정답: D]
+ *  - topic_id = 15113 (SW 재공학/유지보수)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -190,10 +195,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_COST_PM');
 
-------------------------------------------------------------
--- Q97. 양방향 암호가 아닌 것 (해시)  [정답: D]
--- topic_id = 15106 (암호/해시)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q97. 양방향 암호가 아닌 것 (해시)  [정답: D]
+ *  - topic_id = 15106 (암호/해시)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -220,10 +226,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SEC_ATTACK_DEFENSE');
 
-------------------------------------------------------------
--- Q98. 데이터 다이어트  [정답: B]
--- topic_id = 15114 (데이터 관리/최적화)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q98. 데이터 다이어트  [정답: B]
+ *  - topic_id = 15114 (데이터 관리/최적화)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -250,10 +257,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'IT_NEW_DOCKER_SDN');
 
-------------------------------------------------------------
--- Q99. 테일러링 내부 기준이 아닌 것  [정답: D]
--- topic_id = 15115 (테일러링/방법론)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q99. 테일러링 내부 기준이 아닌 것  [정답: D]
+ *  - topic_id = 15115 (테일러링/방법론)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -280,10 +288,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_COST_PM');
 
-------------------------------------------------------------
--- Q100. OWASP  [정답: D]
--- topic_id = 15101 (보안 단체/가이드라인)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q100. OWASP  [정답: D]
+ *  - topic_id = 15101 (보안 단체/가이드라인)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

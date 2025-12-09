@@ -4,16 +4,13 @@ SET FOREIGN_KEY_CHECKS = 0;
 USE certpilot_study;
 
 SET @cert_id    := 1;
-SET @tp_p_misc  := 39901;  -- TODO: 실제 실기 토픽 ID로 교체
 
 /* =======================================================
  * 2024년 1회 – 정보처리기사 실기
  * Q1 ~ Q10 (모두 PRACTICAL / SHORT)
  * ======================================================= */
 
-------------------------------------------------------------
 -- Q1. Java 싱글톤(static) 공유 인스턴스 카운트  [정답: 4]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -77,9 +74,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
 -- Q2. C 언어 삼항 연산자 + 비트 시프트  [정답: 151]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -116,9 +111,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
 -- Q3. 응집도 높은 순서 정렬  [정답: ㄱㄴㄹㄷ]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -148,9 +141,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
 -- Q4. C 문자열 뒤집기 후 홀수 인덱스 문자 출력  [정답: GECA]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -210,9 +201,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_REQ_SCENARIO');
 
-------------------------------------------------------------
 -- Q5. 서브넷/라우팅 – 각 네트워크에서 할당 가능한 IP 선택  [정답: 192.168.35.72 / 129.200.8.249 / 192.168.36.249]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source, image_url
@@ -253,9 +242,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
 -- Q6. 정규형 판별 – 고객/강좌/강사 관계  [정답: 제3정규형]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -289,9 +276,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_MODEL_NORMAL_DENORMAL');
 
-------------------------------------------------------------
 -- Q7. 링크 상태 라우팅 프로토콜  [정답: OSPF]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -317,9 +302,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
 -- Q8. 조인 종류 – 세타/동등/자연 조인  [정답: 세타 조인 / 동등 조인 / 자연 조인]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -348,9 +331,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_SQL_SELECT_JOIN');
 
-------------------------------------------------------------
 -- Q9. 페이지 교체 – LRU / LFU 페이지 부재 횟수  [정답: LRU 6, LFU 6]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source
@@ -395,9 +376,7 @@ SET @q_id := LAST_INSERT_ID();
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'P_DB_OPERATION_MONITOR');
 
-------------------------------------------------------------
 -- Q10. Java 상속/생성자/메서드 호출 순서  [정답: 6 3 1 7 2]
-------------------------------------------------------------
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, payload_json, answer_key, solution_text, source

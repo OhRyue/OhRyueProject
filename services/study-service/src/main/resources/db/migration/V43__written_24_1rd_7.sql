@@ -1,11 +1,12 @@
--- =========================================
--- 2024년 1회 – 프로그래밍 언어 활용 (4과목)
--- Q61 ~ Q70  (cert_id = 1)
--- =========================================
+/* =========================================
+ * 2024년 1회 – 프로그래밍 언어 활용 (4과목)
+ * Q61 ~ Q70  (cert_id = 1)
+ * ========================================= */
 
-------------------------------------------------------------
--- Q61. C 문자열 처리 함수
-------------------------------------------------------------
+
+/* =======================================================
+ * Q61. C 문자열 처리 함수
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -38,9 +39,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q62. C 배열/피보나치
-------------------------------------------------------------
+
+/* =======================================================
+ * Q62. C 배열/피보나치
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -91,9 +93,9 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
 
-------------------------------------------------------------
--- Q63. IPv6 설명
-------------------------------------------------------------
+/* =======================================================
+ * Q63. IPv6 설명
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -125,9 +127,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'NET_PROTO_IP');
 
-------------------------------------------------------------
--- Q64. 파이썬 변수 작성 규칙
-------------------------------------------------------------
+
+/* =======================================================
+ * Q64. 파이썬 변수 작성 규칙
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -160,9 +163,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q65. 스레드 설명
-------------------------------------------------------------
+
+/* =======================================================
+ * Q65. 스레드 설명
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -195,9 +199,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
-------------------------------------------------------------
--- Q66. HRN 스케줄링
-------------------------------------------------------------
+
+/* =======================================================
+ * Q66. HRN 스케줄링
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -207,7 +212,7 @@ INSERT INTO question (
   'WRITTEN',
   'MCQ',
   'HARD',
-  'HRN(Highest Response Ratio Next) 방식으로 스케줄링할 때,  
+  'HRN(Highest Response Ratio Next) 방식으로 스케줄링할 때,
 다음과 같이 대기 시간과 서비스 실행 시간이 주어진 작업 A, B, C, D의 처리 순서로 옳은 것은 무엇인가요?
 
 | 작업 | 대기 시간 | 서비스 실행 시간 |
@@ -219,7 +224,7 @@ INSERT INTO question (
   'C',
   'HRN 스케줄링은 다음과 같은 응답비율(Response Ratio)로 우선순위를 결정합니다.
 
-  응답비율 = (대기시간 + 서비스시간) / 서비스시간  
+  응답비율 = (대기시간 + 서비스시간) / 서비스시간
            = 1 + (대기시간 / 서비스시간)
 
 초기 상태에서 작업들의 응답비율은 다음과 같습니다.
@@ -228,7 +233,7 @@ INSERT INTO question (
 - C: (15 + 45) / 45 ≈ 1.33
 - D: (20 + 2) / 2   = 11.0
 
-가장 커서 먼저 실행되는 작업은 D이며, 이후 계산을 반복하면  
+가장 커서 먼저 실행되는 작업은 D이며, 이후 계산을 반복하면
 최종 순서는 **D → A → B → C**가 됩니다.
 
 따라서 정답은 ③번입니다.',
@@ -247,9 +252,9 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'OS_PROC_MEM');
 
 
-------------------------------------------------------------
--- Q67. Java while(y--)
-------------------------------------------------------------
+/* =======================================================
+ * Q67. Java while(y--)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -292,9 +297,9 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
 
-------------------------------------------------------------
--- Q68. C 산술 연산자
-------------------------------------------------------------
+/* =======================================================
+ * Q68. C 산술 연산자
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -329,9 +334,10 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
-------------------------------------------------------------
--- Q69. Java 전위/후위 연산
-------------------------------------------------------------
+
+/* =======================================================
+ * Q69. Java 전위/후위 연산
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -379,9 +385,9 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
 
-------------------------------------------------------------
--- Q70. Class C IP 주소
-------------------------------------------------------------
+/* =======================================================
+ * Q70. Class C IP 주소
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

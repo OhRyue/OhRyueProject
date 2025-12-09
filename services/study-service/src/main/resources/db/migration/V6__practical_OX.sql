@@ -15,11 +15,10 @@ SET @tp_sql_tuning     := 31302; -- P.3.2 인덱스/튜닝
 SET @tp_tx_isolation   := 31401; -- P.4.1 트랜잭션/격리
 SET @tp_concurrency    := 31402; -- P.4.2 동시성/락
 SET @tp_backup         := 31501; -- P.5.1 백업/복구
-SET @tp_incident       := 31502; -- P.5.2 장애 분석/개선
+SET @tp_incident       := 31502; -- P.5.2 장애 분석/개선;
 
 /* =========================================================
  * P.1.1 업무 시나리오 해석 – OX 3문항
- * 태그: 업무시나리오
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -57,21 +56,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:req_scenario:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '업무시나리오'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:req_scenario:ox1',
-  'seed:prac:req_scenario:ox2',
-  'seed:prac:req_scenario:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '업무시나리오'
-);
-
 /* =========================================================
  * P.1.2 업무/데이터 요구 도출 – OX 3문항
- * 태그: 데이터요구
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -109,21 +95,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:req_data:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '데이터요구'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:req_data:ox1',
-  'seed:prac:req_data:ox2',
-  'seed:prac:req_data:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '데이터요구'
-);
-
 /* =========================================================
  * P.2.1 개념/논리/물리 모델링 – OX 3문항
- * 태그: 모델링
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -161,21 +134,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:model_levels:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '모델링'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:model_levels:ox1',
-  'seed:prac:model_levels:ox2',
-  'seed:prac:model_levels:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '모델링'
-);
-
 /* =========================================================
  * P.2.2 정규화/반정규화 – OX 3문항
- * 태그: 정규화
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -213,21 +173,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:normalization:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '정규화'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:normalization:ox1',
-  'seed:prac:normalization:ox2',
-  'seed:prac:normalization:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '정규화'
-);
-
 /* =========================================================
  * P.3.1 SQL 작성 – OX 3문항
- * 태그: SQL
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -265,21 +212,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:sql_query:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, 'SQL'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:sql_query:ox1',
-  'seed:prac:sql_query:ox2',
-  'seed:prac:sql_query:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = 'SQL'
-);
-
 /* =========================================================
  * P.3.2 인덱스/튜닝 – OX 3문항
- * 태그: 튜닝
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -317,21 +251,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:sql_tuning:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '튜닝'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:sql_tuning:ox1',
-  'seed:prac:sql_tuning:ox2',
-  'seed:prac:sql_tuning:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '튜닝'
-);
-
 /* =========================================================
  * P.4.1 트랜잭션/격리수준 – OX 3문항
- * 태그: 트랜잭션
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -369,21 +290,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:tx_isolation:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '트랜잭션'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:tx_isolation:ox1',
-  'seed:prac:tx_isolation:ox2',
-  'seed:prac:tx_isolation:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '트랜잭션'
-);
-
 /* =========================================================
  * P.4.2 동시성/락 – OX 3문항
- * 태그: 동시성
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -421,21 +329,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:concurrency:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '동시성'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:concurrency:ox1',
-  'seed:prac:concurrency:ox2',
-  'seed:prac:concurrency:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '동시성'
-);
-
 /* =========================================================
  * P.5.1 백업/복구 – OX 3문항
- * 태그: 백업복구
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -473,21 +368,8 @@ WHERE NOT EXISTS (
    WHERE source='seed:prac:backup:ox3'
 );
 
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '백업복구'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:backup:ox1',
-  'seed:prac:backup:ox2',
-  'seed:prac:backup:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '백업복구'
-);
-
 /* =========================================================
  * P.5.2 장애 분석/개선 – OX 3문항
- * 태그: 장애분석
  * ========================================================= */
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, answer_key, solution_text, source)
@@ -523,18 +405,6 @@ SELECT @cert_id, @tp_incident, 'PRACTICAL', 'OX', 'NORMAL',
 WHERE NOT EXISTS (
   SELECT 1 FROM question
    WHERE source='seed:prac:incident:ox3'
-);
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '장애분석'
-FROM question q
-WHERE q.source IN (
-  'seed:prac:incident:ox1',
-  'seed:prac:incident:ox2',
-  'seed:prac:incident:ox3'
-) AND NOT EXISTS (
-  SELECT 1 FROM question_tag t
-   WHERE t.question_id = q.id AND t.tag = '장애분석'
 );
 
 SET FOREIGN_KEY_CHECKS = 1;

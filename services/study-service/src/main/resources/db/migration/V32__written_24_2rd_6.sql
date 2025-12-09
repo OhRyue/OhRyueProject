@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q51. UPDATE 문 SET 위치  [정답: B]
--- topic_id = 13201 (SQL 기본)
-------------------------------------------------------------
+/* =======================================================
+ * Q51. UPDATE 문 SET 위치  [정답: B]
+ *  - topic_id = 13201 (SQL 기본)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -37,10 +37,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q52. 분산 DB 투명성 - 장애 투명성  [정답: B]
--- topic_id = 13405 (분산 DB/투명성)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q52. 분산 DB 투명성 - 장애 투명성  [정답: B]
+ *  - topic_id = 13405 (분산 DB/투명성)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -69,10 +70,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q53. 설계 단계와 작업 매핑  [정답: A]
--- topic_id = 13101 (DB 설계 과정)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q53. 설계 단계와 작업 매핑  [정답: A]
+ *  - topic_id = 13101 (DB 설계 과정)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -103,10 +105,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q54. UPDATE + WHERE (부서=인사, 코드<=3000)  [정답: D]
--- topic_id = 13201 (SQL 기본)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q54. UPDATE + WHERE (부서=인사, 코드<=3000)  [정답: D]
+ *  - topic_id = 13201 (SQL 기본)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -116,10 +119,10 @@ INSERT INTO question (
   'WRITTEN',
   'MCQ',
   'NORMAL',
-  '다음 SQL 질의어를 문장으로 바르게 표현한 것은?  
+  '다음 SQL 질의어를 문장으로 바르게 표현한 것은?
 (사원 테이블: 사원코드, 이름, 부서)
 
-> "부서가 인사이고, 사원코드가 3000 이하인 사원의  
+> "부서가 인사이고, 사원코드가 3000 이하인 사원의
 >  사원코드에 1000을 더하라."',
   'D',
   '조건은 “부서 = 인사” 이면서 동시에 “사원코드 ≤ 3000” 입니다.
@@ -139,10 +142,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q55. 분산 DB 장점  [정답: B]
--- topic_id = 13405 (분산 DB/특징)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q55. 분산 DB 장점  [정답: B]
+ *  - topic_id = 13405 (분산 DB/특징)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -172,10 +176,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q56. 외래키 설명  [정답: D]
--- topic_id = 13301 (키/무결성)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q56. 외래키 설명  [정답: D]
+ *  - topic_id = 13301 (키/무결성)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -187,10 +192,10 @@ INSERT INTO question (
   'EASY',
   '다음 문장의 괄호 ( ) 안에 공통으로 들어갈 가장 적절한 용어는 무엇인가?
 
-> "( )는 관계형 데이터 모델에서 한 릴레이션의 속성이  
->  참조되는 릴레이션의 기본키와 대응되어,  
->  릴레이션 간 참조 관계를 표현하는 중요한 도구이다.  
->  ( )를 포함하는 릴레이션이 참조하는 릴레이션이 되고,  
+> "( )는 관계형 데이터 모델에서 한 릴레이션의 속성이
+>  참조되는 릴레이션의 기본키와 대응되어,
+>  릴레이션 간 참조 관계를 표현하는 중요한 도구이다.
+>  ( )를 포함하는 릴레이션이 참조하는 릴레이션이 되고,
 >  대응되는 기본키를 포함하는 릴레이션이 참조 릴레이션이 된다."',
   'D',
   '다른 릴레이션의 기본키를 참조하는 속성을 “외래키(Foreign Key)”라고 합니다.
@@ -211,10 +216,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q57. 트리거  [정답: B]
--- topic_id = 13202 (고급 SQL/트리거)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q57. 트리거  [정답: B]
+ *  - topic_id = 13202 (고급 SQL/트리거)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -243,10 +249,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q58. DB 특성  [정답: D]
--- topic_id = 13101 (DB 개요/특성)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q58. DB 특성  [정답: D]
+ *  - topic_id = 13101 (DB 개요/특성)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -258,9 +265,9 @@ INSERT INTO question (
   'EASY',
   '데이터베이스의 특성에 해당하는 것들을 모두 고른 것은?
 
-> ㉠ 계속적인 변화  
->  ㉡ 실시간 접근성  
->  ㉢ 내용에 의한 참조  
+> ㉠ 계속적인 변화
+>  ㉡ 실시간 접근성
+>  ㉢ 내용에 의한 참조
 >  ㉣ 동시 공용',
   'D',
   '전통적으로 데이터베이스의 대표적 특성은
@@ -283,10 +290,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q59. DBMS 기능 - 조작 기능  [정답: C]
--- topic_id = 13102 (DBMS 기능)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q59. DBMS 기능 - 조작 기능  [정답: C]
+ *  - topic_id = 13102 (DBMS 기능)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -317,10 +325,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q60. View 특성  [정답: D]
--- topic_id = 13203 (뷰/서브쿼리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q60. View 특성  [정답: D]
+ *  - topic_id = 13203 (뷰/서브쿼리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

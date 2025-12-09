@@ -1,8 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q41. ON DELETE CASCADE (참조 무결성)
-------------------------------------------------------------
+/* =======================================================
+ * Q41. ON DELETE CASCADE (참조 무결성)
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -32,9 +33,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q42. VIEW 특징 – 물리 저장 X
-------------------------------------------------------------
+
+/* =======================================================
+ * Q42. VIEW 특징 – 물리 저장 X
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -65,9 +68,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q43. DML 명령 집합
-------------------------------------------------------------
+
+/* =======================================================
+ * Q43. DML 명령 집합
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -100,9 +105,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q44. 반복 속성 분해 → 제1정규형
-------------------------------------------------------------
+
+/* =======================================================
+ * Q44. 반복 속성 분해 → 제1정규형
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -132,9 +139,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q45. 기본키의 NOT NULL 성질 → 개체 무결성
-------------------------------------------------------------
+
+/* =======================================================
+ * Q45. 기본키의 NOT NULL 성질 → 개체 무결성
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -164,9 +173,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q46. 데이터 모델 요소 – 출력 구조는 아님
-------------------------------------------------------------
+
+/* =======================================================
+ * Q46. 데이터 모델 요소 – 출력 구조는 아님
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -197,9 +208,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q47. GRANT UPDATE ON STUDENT TO PARK;
-------------------------------------------------------------
+
+/* =======================================================
+ * Q47. GRANT UPDATE ON STUDENT TO PARK;
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -237,9 +250,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q48. CRUD 매트릭스 분석
-------------------------------------------------------------
+
+/* =======================================================
+ * Q48. CRUD 매트릭스 분석
+ *  - WRITTEN / MCQ / NORMAL
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -271,9 +286,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_META_CRUD');
 
-------------------------------------------------------------
--- Q49. 개념 스키마(Conceptual Schema)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q49. 개념 스키마(Conceptual Schema)
+ *  - WRITTEN / MCQ / EASY
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

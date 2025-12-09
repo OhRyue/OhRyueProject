@@ -1,9 +1,9 @@
 USE certpilot_study;
 
-------------------------------------------------------------
--- Q41. 데이터 모델 구성요소  [정답: B]
--- topic_id = 13302 (데이터 모델)
-------------------------------------------------------------
+/* =======================================================
+ * Q41. 데이터 모델 구성요소  [정답: B]
+ *  - topic_id = 13302 (데이터 모델)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -33,10 +33,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q42. 시스템 카탈로그  [정답: B]
--- topic_id = 13402 (시스템 카탈로그/메타데이터)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q42. 시스템 카탈로그  [정답: B]
+ *  - topic_id = 13402 (시스템 카탈로그/메타데이터)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -65,10 +66,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_META_CRUD');
 
-------------------------------------------------------------
--- Q43. 관계대수  [정답: A]
--- topic_id = 13301 (관계대수/관계해석)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q43. 관계대수  [정답: A]
+ *  - topic_id = 13301 (관계대수/관계해석)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -98,10 +100,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q44. SQL DML  [정답: B 로 수정]
--- topic_id = 13201 (SQL 기본)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q44. SQL DML  [정답: B 로 수정]
+ *  - topic_id = 13201 (SQL 기본)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -134,10 +137,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q45. 무결성 제약 – 개체 무결성  [정답: A]
--- topic_id = 13301 (무결성 제약)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q45. 무결성 제약 – 개체 무결성  [정답: A]
+ *  - topic_id = 13301 (무결성 제약)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -167,10 +171,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q46. 참조 무결성 / 키 제약  [정답: D]
--- topic_id = 13301 (무결성/키 제약)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q46. 참조 무결성 / 키 제약  [정답: D]
+ *  - topic_id = 13301 (무결성/키 제약)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -202,10 +207,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q47. 트리 차수  [정답: B]
--- topic_id = 13401 (인덱스/트리)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q47. 트리 차수  [정답: B]
+ *  - topic_id = 13401 (인덱스/트리)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -235,10 +241,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q48. 1NF → 2NF 조건  [정답: D]
--- topic_id = 13302 (정규화)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q48. 1NF → 2NF 조건  [정답: D]
+ *  - topic_id = 13302 (정규화)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -267,10 +274,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_MODEL_NORMAL');
 
-------------------------------------------------------------
--- Q49. 로킹 단위  [정답: D]
--- topic_id = 13404 (병행제어/트랜잭션)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q49. 로킹 단위  [정답: D]
+ *  - topic_id = 13404 (병행제어/트랜잭션)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -300,10 +308,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DB_SQL_TX');
 
-------------------------------------------------------------
--- Q50. 파티션  [정답: A]
--- topic_id = 13402 (저장구조/파티션)
-------------------------------------------------------------
+
+/* =======================================================
+ * Q50. 파티션  [정답: A]
+ *  - topic_id = 13402 (저장구조/파티션)
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source

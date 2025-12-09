@@ -15,7 +15,6 @@ SET @tp_31302   := 31302; -- SQL 튜닝/인덱스/성능
  * ======================================================= */
 
 -- [31202] OX 3개 (ox4~ox6)
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31202, 'PRACTICAL', 'OX', 'NORMAL',
@@ -53,7 +52,6 @@ WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:normalization
  * ======================================================= */
 
 -- [31301] OX 3개 (ox4~ox6)
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31301, 'PRACTICAL', 'OX', 'NORMAL',
@@ -91,7 +89,6 @@ WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:sql_query:ox6
  * ======================================================= */
 
 -- [31302] OX 3개 (ox4~ox6)
-
 INSERT INTO question (cert_id, topic_id, mode, type, difficulty,
                       stem, payload_json, answer_key, solution_text, source)
 SELECT @cert_id, @tp_31302, 'PRACTICAL', 'OX', 'NORMAL',
@@ -121,71 +118,5 @@ SELECT @cert_id, @tp_31302, 'PRACTICAL', 'OX', 'NORMAL',
        '옵티마이저는 통계 정보에 기반해 실행 계획을 선택하므로, 통계를 갱신하면 조인 순서/인덱스 사용 여부가 바뀔 수 있습니다.',
        'seed:prac:sql_tuning:ox6'
 WHERE NOT EXISTS (SELECT 1 FROM question WHERE source = 'seed:prac:sql_tuning:ox6');
-
-
-/* =========================================================
- * PRACTICAL question_tag 매핑 (태그 시스템 기준)
- *  - 31202: 정규화/반정규화 → 정규화
- *  - 31301: SQL 기본/집계/조인 → SQL
- *  - 31302: SQL 튜닝/인덱스/성능 → 튜닝
- *  규칙:
- *   1) 위에서 정의한 태그만 사용
- *   2) 허용되지 않은 태그는 제거
- *   3) 태그가 전혀 없는 문제는 대표 태그로 새로 매핑
- * ========================================================= */
-
--- 31202 정규화/반정규화
---  - 허용 태그: '정규화'
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31202
-  AND qt.tag <> '정규화';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '정규화'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '정규화'
-WHERE q.topic_id = @tp_31202
-  AND qt.question_id IS NULL;
-
-
--- 31301 SQL 기본/집계/조인
---  - 허용 태그: 'SQL'
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31301
-  AND qt.tag <> 'SQL';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, 'SQL'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = 'SQL'
-WHERE q.topic_id = @tp_31301
-  AND qt.question_id IS NULL;
-
-
--- 31302 SQL 튜닝/인덱스/성능
---  - 허용 태그: '튜닝'
-DELETE qt
-FROM question_tag qt
-JOIN question q ON qt.question_id = q.id
-WHERE q.topic_id = @tp_31302
-  AND qt.tag <> '튜닝';
-
-INSERT INTO question_tag (question_id, tag)
-SELECT q.id, '튜닝'
-FROM question q
-LEFT JOIN question_tag qt
-  ON qt.question_id = q.id
- AND qt.tag = '튜닝'
-WHERE q.topic_id = @tp_31302
-  AND qt.question_id IS NULL;
-
 
 SET FOREIGN_KEY_CHECKS = 1;

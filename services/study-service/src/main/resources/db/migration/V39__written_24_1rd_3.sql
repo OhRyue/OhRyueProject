@@ -1,11 +1,15 @@
--- =========================================
--- 2024년 1회 – 소프트웨어 개발 (2과목)
--- Q21 ~ Q30
--- =========================================
+USE certpilot_study;
 
-------------------------------------------------------------
--- Q21. EAI 구축 유형
-------------------------------------------------------------
+/* =========================================
+ * 2024년 1회 – 소프트웨어 개발 (2과목)
+ * Q21 ~ Q30
+ * ========================================= */
+
+
+/* =======================================================
+ * 2024-1 Q21. EAI 구축 유형
+ * topic_id = 12202
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -32,9 +36,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'SW_ARCH_DESIGN');
 
-------------------------------------------------------------
--- Q22. 알파/베타 테스트
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q22. 알파/베타 테스트
+ * topic_id = 12401
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -61,9 +67,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q23. 트리의 차수 정의
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q23. 트리의 차수 정의
+ * topic_id = 14002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -91,9 +99,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q24. AJAX
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q24. AJAX
+ * topic_id = 12502
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -105,8 +115,8 @@ INSERT INTO question (
   'EASY',
   '다음 설명에 해당하는 인터페이스 구현 기술은 무엇인가요?
 
-> JavaScript를 사용한 비동기 통신 기술  
-> 클라이언트와 서버 간에 XML/JSON 등의 데이터를 주고받으면서  
+> JavaScript를 사용한 비동기 통신 기술
+> 클라이언트와 서버 간에 XML/JSON 등의 데이터를 주고받으면서
 > 화면 전체를 새로 고치지 않고 일부만 갱신할 수 있다.',
   'C',
   'AJAX는 JavaScript를 이용해 비동기 방식으로 서버와 데이터를 주고받는 기술입니다. 전체 페이지 새로고침 없이 필요한 영역만 갱신할 수 있어, 현대 웹 UI 구현에서 널리 사용됩니다.',
@@ -125,9 +135,10 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'LANG_BASIC_SCRIPT');
 
 
-------------------------------------------------------------
--- Q25. 해싱 – 폴딩법
-------------------------------------------------------------
+/* =======================================================
+ * 2024-1 Q25. 해싱 – 폴딩법
+ * topic_id = 14002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -154,9 +165,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q26. 선택 정렬 3회전 결과
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q26. 선택 정렬 3회전 결과
+ * topic_id = 14002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -190,9 +203,10 @@ INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
 
-------------------------------------------------------------
--- Q27. 정적 분석 도구
-------------------------------------------------------------
+/* =======================================================
+ * 2024-1 Q27. 정적 분석 도구
+ * topic_id = 12401
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -219,9 +233,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q28. 중위(Inorder) 순회
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q28. 중위(Inorder) 순회
+ * topic_id = 14002
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source, image_url
@@ -231,7 +247,7 @@ INSERT INTO question (
   'WRITTEN',
   'MCQ',
   'NORMAL',
-  '다음 이진 트리를 중위(Inorder) 순회(왼쪽 서브트리 → 루트 → 오른쪽 서브트리) 했을 때의 방문 순서로 옳은 것은?,
+  '다음 이진 트리를 중위(Inorder) 순회(왼쪽 서브트리 → 루트 → 오른쪽 서브트리) 했을 때의 방문 순서로 옳은 것은?',
   'B',
   '중위 순회는 “왼쪽 서브트리 → 루트 → 오른쪽 서브트리” 순서로 방문합니다.
   왼쪽 서브트리(B): D, B, E
@@ -253,9 +269,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'DS_ALGO');
 
-------------------------------------------------------------
--- Q29. 소프트웨어 테스트 설명
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q29. 소프트웨어 테스트 설명
+ * topic_id = 12401
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
@@ -282,9 +300,11 @@ INSERT INTO question_choice (question_id, label, content, is_correct) VALUES
 INSERT INTO question_tag (question_id, tag) VALUES
   (@q_id, 'TEST_BASE_TECH');
 
-------------------------------------------------------------
--- Q30. 소프트웨어 형상 관리
-------------------------------------------------------------
+
+/* =======================================================
+ * 2024-1 Q30. 소프트웨어 형상 관리
+ * topic_id = 15202
+ * ======================================================= */
 INSERT INTO question (
   cert_id, topic_id, mode, type, difficulty,
   stem, answer_key, solution_text, source
