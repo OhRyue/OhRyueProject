@@ -1156,7 +1156,7 @@ public class PracticalService {
       List<UserAnswer> answers = sessionAnswers.stream()
           .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
           .toList();
-      mistakes = collectMistakes(answers, questionCache);
+      mistakes = toDisplayMistakes(collectMistakes(answers, questionCache));
     }
 
     // 4. LearningStep과 summary_json에서 메타데이터 추출 (summary_json 우선)
@@ -1344,8 +1344,11 @@ public class PracticalService {
         0,              // Review 모드에는 MINI 없음
         0,
         false,
+        practicalTotal,   // mcqTotal (필드 재사용 - 하위호환)
+        practicalCorrect, // mcqCorrect (필드 재사용 - 하위호환)
         practicalTotal,
         practicalCorrect,
+        practicalCompleted,
         summaryText,
         completed,
         earnedXp,
@@ -1453,7 +1456,7 @@ public class PracticalService {
       List<UserAnswer> topicAnswers = sessionAnswers.stream()
           .filter(ans -> questionCache.containsKey(ans.getQuestionId()))
           .toList();
-      mistakes = collectMistakes(topicAnswers, questionCache);
+      mistakes = toDisplayMistakes(collectMistakes(topicAnswers, questionCache));
     }
 
     boolean completed = miniPassed && practicalCompleted;
@@ -1485,6 +1488,10 @@ public class PracticalService {
         practicalCorrect,  // 실기 문제 정답 수만 전달
         mistakes
     );
+    // 실기 문제를 모두 완료했는데 요약이 비어있거나 '미시도' 류 메시지가 나오지 않도록 기본값 보강
+    if (practicalCompleted && practicalTotal > 0 && (summaryText == null || summaryText.isBlank())) {
+      summaryText = AIExplanationService.defaultPracticalSummary(practicalTotal, practicalCorrect);
+    }
 
     // XP 정보 초기값
     Integer earnedXp = null;
@@ -1651,8 +1658,11 @@ public class PracticalService {
         miniTotal,
         miniCorrect,
         miniPassed,
+        practicalTotal,      // mcqTotal (필드 재사용 - 하위호환)
+        practicalCorrect,    // mcqCorrect (필드 재사용 - 하위호환)
         practicalTotal,
         practicalCorrect,
+        practicalCompleted,
         summaryText,
         completed,
         earnedXp,
@@ -2092,6 +2102,27 @@ public class PracticalService {
         .map(ans -> questionCache.get(ans.getQuestionId()))
         .filter(Objects::nonNull)
         .flatMap(q -> questionTagRepository.findTagsByQuestionId(q.getId()).stream())
+        .distinct()
+        .toList();
+  }
+
+  /**
+   * 태그 코드 목록을 사용자 표시용 라벨로 변환한다.
+   * - labelKo 우선, 없으면 labelEn, 그래도 없으면 코드 유지
+   */
+  private List<String> toDisplayMistakes(List<String> tagCodes) {
+    if (tagCodes == null || tagCodes.isEmpty()) {
+      return List.of();
+    }
+    Map<String, com.OhRyue.common.dto.TagViewDto> tagMap = tagQueryService.getTagsByCodes(tagCodes);
+    return tagCodes.stream()
+        .map(code -> {
+          var dto = tagMap.get(code);
+          if (dto == null) return code;
+          if (dto.labelKo() != null && !dto.labelKo().isBlank()) return dto.labelKo();
+          if (dto.labelEn() != null && !dto.labelEn().isBlank()) return dto.labelEn();
+          return code;
+        })
         .distinct()
         .toList();
   }

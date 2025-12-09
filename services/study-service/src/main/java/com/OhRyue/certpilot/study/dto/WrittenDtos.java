@@ -155,6 +155,9 @@ public class WrittenDtos {
       boolean miniPassed,// 미니체크 전부 정답 여부
       int mcqTotal,      // MCQ 총 풀이 수 (필기) 또는 실기 주관식 총 풀이 수 (실기)
       int mcqCorrect,    // MCQ 정답 수 (필기) 또는 실기 주관식 통과 수 (실기)
+      int practicalTotal,    // 실기 SHORT 총 풀이 수 (PRACTICAL 전용, 필기는 0)
+      int practicalCorrect,  // 실기 SHORT 정답 수 (PRACTICAL 전용, 필기는 0)
+      boolean practicalCompleted, // 실기 SHORT 단계 완료 여부 (PRACTICAL 전용)
       String aiSummary,  // AI 학습 요약(폴백 포함)
       boolean completed, // 완료 여부(최소 시도)
       // XP 정보 (완료 시에만 값이 있음)

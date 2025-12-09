@@ -236,7 +236,7 @@ public class AIExplanationService {
         String.format(Locale.ROOT, "%.1f", acc) + "% 입니다. 오답 태그를 중심으로 복습을 이어가세요.";
   }
 
-  private static String defaultPracticalSummary(int total, int correct) {
+  public static String defaultPracticalSummary(int total, int correct) {
     double acc = total == 0 ? 0.0 : (correct * 100.0) / total;
     return "실기 학습을 마쳤습니다. 총 " + total + "문제 중 " + correct + "문제를 맞혀 정확도 " +
         String.format(Locale.ROOT, "%.1f", acc) + "% 입니다. 핵심 키워드를 정리하고 재서술 훈련을 반복해보세요.";

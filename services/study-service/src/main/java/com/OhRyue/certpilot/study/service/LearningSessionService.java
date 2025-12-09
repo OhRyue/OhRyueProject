@@ -96,6 +96,8 @@ public class LearningSessionService {
     if ("REVIEW".equalsIgnoreCase(modeStr)) {
       return ORDER_REVIEW_WRITTEN;
     }
+    // MICRO 모드는 examMode 정보가 없으면 판단할 수 없으므로 parseMode로 처리
+    // (실제로는 findNextStep에서 단계를 보고 판단함)
     // difficulty 기반 보조학습 모드 처리
     if ("ASSIST_WRITTEN_DIFFICULTY".equals(modeStr)) {
       return ORDER_ASSIST_WRITTEN_DIFFICULTY;
@@ -188,7 +190,12 @@ public class LearningSessionService {
       }
     } else {
       // req.examMode()가 없으면 modeStr에서 파싱
-      examMode = parseMode(modeStr);
+      // MICRO 모드의 경우 req.examMode()가 필수이지만, 없으면 기본값으로 실기(PRACTICAL) 처리
+      if ("MICRO".equalsIgnoreCase(modeStr)) {
+        examMode = ExamMode.PRACTICAL; // 기본값: 실기 MICRO
+      } else {
+        examMode = parseMode(modeStr);
+      }
     }
     
     // Review 모드일 경우 별도 처리
@@ -712,6 +719,21 @@ public class LearningSessionService {
       boolean isPracticalReview = stepRepo.findByLearningSessionIdAndStepCode(session.getId(), "SHORT")
         .isPresent();
       stepOrder = isPracticalReview ? ORDER_REVIEW_PRACTICAL : ORDER_REVIEW_WRITTEN;
+    } else if ("MICRO".equals(mode)) {
+      // MICRO 모드: 이미 생성된 단계를 보고 필기/실기 구분
+      // SHORT 단계가 있으면 실기 MICRO, MCQ 단계가 있으면 필기 MICRO
+      boolean hasShort = steps.stream().anyMatch(s -> "SHORT".equals(s.getStepCode()));
+      boolean hasMcq = steps.stream().anyMatch(s -> "MCQ".equals(s.getStepCode()));
+      if (hasShort) {
+        // 실기 MICRO
+        stepOrder = ORDER_PRACTICAL;
+      } else if (hasMcq) {
+        // 필기 MICRO
+        stepOrder = ORDER_WRITTEN;
+      } else {
+        // 기본값은 실기 (하위 호환성)
+        stepOrder = ORDER_PRACTICAL;
+      }
     } else {
       stepOrder = orderOf(mode);
     }
@@ -738,7 +760,8 @@ public class LearningSessionService {
       } else if ("ASSIST_PRACTICAL_CATEGORY".equals(mode)) {
         previousStepCode = "ASSIST_PRACTICAL_CATEGORY";
       } else {
-        previousStepCode = mode.equals("PRACTICAL") ? "SHORT" : "MCQ";
+        // MICRO 모드도 실기 모드이므로 SHORT 단계 사용
+        previousStepCode = (mode.equals("PRACTICAL") || mode.equals("MICRO")) ? "SHORT" : "MCQ";
       }
       var previousStep = steps.stream()
           .filter(x -> x.getStepCode().equals(previousStepCode))
