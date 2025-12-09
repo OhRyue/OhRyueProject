@@ -24,3 +24,11 @@ eureka:
 auth:
   jwt:
     secret: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}
+
+llm:
+  base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+  api-key: ${LLM_API_KEY:}
+  timeout-ms: 6000
+  # 요약(summary) 기능 전용 타임아웃 (기본값: 20000ms = 20초)
+  # summary는 더 긴 응답이 필요하므로 별도 타임아웃 설정
+  summary-timeout-ms: ${LLM_SUMMARY_TIMEOUT_MS:20000}

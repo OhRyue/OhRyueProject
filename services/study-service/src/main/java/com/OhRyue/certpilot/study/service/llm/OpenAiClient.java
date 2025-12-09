@@ -159,7 +159,8 @@ public class OpenAiClient implements AiClient {
         - JSON 이외의 텍스트(설명, 문장, 주석 등)는 절대 출력하지 마세요.
         """;
     String user = buildSummaryPrompt(request);
-    Map<String, Object> json = invoke(system, user);
+    // 요약(summary) 기능은 별도의 타임아웃 사용 (기본값: 20초)
+    Map<String, Object> json = invoke(system, user, props.getSummaryTimeoutMs());
     return new SummaryResponse(
         Jsons.optString(json, "one_liner"),
         Jsons.optListString(json, "bullets"),
@@ -223,8 +224,25 @@ public class OpenAiClient implements AiClient {
   }
 
   /* ===================== OpenAI invocation ===================== */
+  /**
+   * LLM 호출 (기본 타임아웃 사용)
+   * - explain, grade 등 일반 기능에 사용
+   */
   @SuppressWarnings("unchecked")
   private Map<String, Object> invoke(String system, String user) {
+    return invoke(system, user, props.getTimeoutMs());
+  }
+
+  /**
+   * LLM 호출 (커스텀 타임아웃 지정)
+   * - summary 기능 등 더 긴 응답이 필요한 경우 사용
+   * 
+   * @param system 시스템 프롬프트
+   * @param user 사용자 프롬프트
+   * @param timeoutMs 타임아웃 (밀리초)
+   */
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> invoke(String system, String user, int timeoutMs) {
     Map<String, Object> body = Map.of(
         "model", props.getModel(),
         "response_format", Map.of("type", "json_object"),
@@ -243,7 +261,7 @@ public class OpenAiClient implements AiClient {
         .bodyValue(body)
         .retrieve()
         .bodyToMono(Map.class)
-        .timeout(Duration.ofMillis(Math.max(props.getTimeoutMs(), 1000)))
+        .timeout(Duration.ofMillis(Math.max(timeoutMs, 1000)))
         .retryWhen(Retry.max(1))
         .block();
 

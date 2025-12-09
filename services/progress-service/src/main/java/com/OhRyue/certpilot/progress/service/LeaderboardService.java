@@ -237,6 +237,9 @@ public class LeaderboardService {
                 .filter(r -> r.getXpGained() > report.getXpGained())
                 .count();
             
+            // Streak 조회
+            UserStreak streak = userStreakRepository.findById(report.getUserId()).orElse(null);
+            
             // 닉네임 및 skinId 조회
             String nickname = "";
             Long skinId = null;
@@ -258,7 +261,7 @@ public class LeaderboardService {
                 report.getXpGained(),
                 (int) higher + 1,
                 (long) report.getXpGained(),
-                null,
+                streak == null ? null : streak.getCurrentDays(),
                 Instant.now()
             );
           })
@@ -392,6 +395,10 @@ public class LeaderboardService {
     List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
     List<String> userIds = weekly.stream().map(ReportWeekly::getUserId).toList();
     
+    // Streak 조회
+    Map<String, UserStreak> streaks = userStreakRepository.findAllById(userIds).stream()
+        .collect(Collectors.toMap(UserStreak::getUserId, s -> s));
+    
     // 닉네임 및 skinId 조회
     Map<String, String> nicknameMap = new HashMap<>();
     Map<String, Long> skinIdMap = new HashMap<>();
@@ -411,6 +418,7 @@ public class LeaderboardService {
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     int rank = 1;
     for (ReportWeekly report : weekly) {
+      UserStreak streak = streaks.get(report.getUserId());
       String nickname = nicknameMap.getOrDefault(report.getUserId(), "");
       Long skinId = skinIdMap.get(report.getUserId());
       entries.add(new RankDtos.LeaderboardEntry(
@@ -420,7 +428,7 @@ public class LeaderboardService {
           report.getXpGained(),
           rank++,
           (long) report.getXpGained(),
-          null,
+          streak == null ? null : streak.getCurrentDays(),
           Instant.now()
       ));
     }
@@ -431,6 +439,10 @@ public class LeaderboardService {
     Pageable pageable = PageRequest.of(page, size);
     List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
     List<String> userIds = weekly.stream().map(ReportWeekly::getUserId).toList();
+    
+    // Streak 조회
+    Map<String, UserStreak> streaks = userStreakRepository.findAllById(userIds).stream()
+        .collect(Collectors.toMap(UserStreak::getUserId, s -> s));
     
     // 닉네임 및 skinId 조회
     Map<String, String> nicknameMap = new HashMap<>();
@@ -451,6 +463,7 @@ public class LeaderboardService {
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     int rank = page * size + 1;
     for (ReportWeekly report : weekly) {
+      UserStreak streak = streaks.get(report.getUserId());
       String nickname = nicknameMap.getOrDefault(report.getUserId(), "");
       Long skinId = skinIdMap.get(report.getUserId());
       entries.add(new RankDtos.LeaderboardEntry(
@@ -460,7 +473,7 @@ public class LeaderboardService {
           report.getXpGained(),
           rank++,
           (long) report.getXpGained(),
-          null,
+          streak == null ? null : streak.getCurrentDays(),
           Instant.now()
       ));
     }
