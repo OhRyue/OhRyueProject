@@ -17,6 +17,7 @@ import com.OhRyue.certpilot.study.repository.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ import java.util.*;
 import java.util.Comparator;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WrittenService {
@@ -49,6 +51,7 @@ public class WrittenService {
   private final ObjectMapper objectMapper;
   private final CurriculumGateway curriculumGateway;
   private final TagQueryService tagQueryService;
+  private final ProgressActivityService progressActivityService;
 
   /* ========================= 개념 ========================= */
 
@@ -559,7 +562,7 @@ public class WrittenService {
     int mcqTotalInSummary = readInt(summaryMcqMeta, "total");
     
     // 5-2. 세션이 완료되었을 때 finalizeStudySession 호출
-    // 핵심: 모든 문제가 제출되었거나, summary_json에 완료 정보가 있고 score_pct가 0이면 무조건 호출
+    // 핵심: 모든 문제가 제출되었거나, 이미 완료된 세션이면 항상 호출 (Activity 생성 보장)
     // MCQ 세션은 독립적으로 score_pct와 passed를 계산 (MINI와 무관)
     boolean shouldFinalize = false;
     if (session != null) {
@@ -567,7 +570,12 @@ public class WrittenService {
       if (allMcqQuestionsAnswered) {
         shouldFinalize = true;
       }
-      // 조건 2: summary_json에 완료 정보가 있고, score_pct가 0이거나 NULL이면 무조건 호출
+      // 조건 2: 이미 완료된 세션 (completed=1, finished_at IS NOT NULL)이면 호출
+      // 이전에 finalizeStudySession이 호출되지 않았거나 Activity가 생성되지 않았을 수 있으므로 재호출
+      if (Boolean.TRUE.equals(session.getCompleted()) && session.getFinishedAt() != null) {
+        shouldFinalize = true;
+      }
+      // 조건 3: summary_json에 완료 정보가 있고, score_pct가 0이거나 NULL이면 무조건 호출
       // (summary_json에는 올바른 정보가 있는데 DB에는 0으로 저장되어 있으면 재계산 필요)
       if (mcqCompletedInSummary && mcqTotalInSummary >= MCQ_SIZE) {
         if (session.getScorePct() == null || session.getScorePct() == 0.0 || !Boolean.TRUE.equals(session.getPassed())) {
@@ -856,8 +864,14 @@ public class WrittenService {
     boolean allReviewQuestionsAnswered = reviewAnsweredCount >= REVIEW_SIZE && reviewAnsweredCount == allReviewItems.size();
     
     // 5-2. 세션이 완료되었을 때 finalizeStudySession 호출
-    // 모든 문제가 제출되었으면 finalizeStudySession 호출 (이미 완료된 경우도 재계산)
-    if (allReviewQuestionsAnswered && session != null) {
+    // 모든 문제가 제출되었거나, 이미 완료된 세션이면 항상 호출 (Activity 생성 보장)
+    boolean shouldFinalizeReview = allReviewQuestionsAnswered;
+    if (session != null && Boolean.TRUE.equals(session.getCompleted()) && session.getFinishedAt() != null) {
+      // 이미 완료된 세션도 Activity가 없을 수 있으므로 재호출
+      shouldFinalizeReview = true;
+    }
+    
+    if (shouldFinalizeReview && session != null) {
       // finalizeStudySession: study_session_item 기준으로 정확히 계산
       StudySessionManager.FinalizeResult result = sessionManager.finalizeStudySession(session);
       
@@ -1131,6 +1145,30 @@ public class WrittenService {
 
     // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
     // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
+    
+    // Activity 생성 보장: completed=true이고 MINI가 아닌 경우 Activity 생성
+    if (completed && session != null) {
+      try {
+        String stepCode = session.getLearningStep() != null ? session.getLearningStep().getStepCode() : null;
+        boolean isMiniStep = "MINI".equals(stepCode) || "MICRO_MINI".equals(stepCode);
+        
+        if (!isMiniStep) {
+          // finalize가 아직 안 되었다면 finalize 수행
+          boolean alreadyFinished = session.getFinishedAt() != null;
+          if (!alreadyFinished) {
+            sessionManager.finalizeStudySession(session);
+            // finalize 내부에서 Activity 생성 (MINI 제외 로직 포함)
+          } else {
+            // 이미 finished_at이 있는데 Activity가 없을 가능성 → 보정
+            progressActivityService.ensureActivityForSession(session);
+          }
+        }
+      } catch (Exception e) {
+        log.error("Failed to ensure Activity for REVIEW summary: sessionId={}, learningSessionId={}", 
+                sessionId, learningSessionId, e);
+        // Activity 생성 실패해도 summary 응답은 계속 진행
+      }
+    }
     
     // 최종 payload 생성 (XP 정보 포함)
     WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
@@ -1468,6 +1506,30 @@ public class WrittenService {
 
     // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
     // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
+    
+    // Activity 생성 보장: completed=true이고 MINI가 아닌 경우 Activity 생성
+    if (completed && session != null) {
+      try {
+        String stepCode = session.getLearningStep() != null ? session.getLearningStep().getStepCode() : null;
+        boolean isMiniStep = "MINI".equals(stepCode) || "MICRO_MINI".equals(stepCode);
+        
+        if (!isMiniStep) {
+          // finalize가 아직 안 되었다면 finalize 수행
+          boolean alreadyFinished = session.getFinishedAt() != null;
+          if (!alreadyFinished) {
+            sessionManager.finalizeStudySession(session);
+            // finalize 내부에서 Activity 생성 (MINI 제외 로직 포함)
+          } else {
+            // 이미 finished_at이 있는데 Activity가 없을 가능성 → 보정
+            progressActivityService.ensureActivityForSession(session);
+          }
+        }
+      } catch (Exception e) {
+        log.error("Failed to ensure Activity for MICRO summary: sessionId={}, learningSessionId={}", 
+                sessionId, learningSessionId, e);
+        // Activity 생성 실패해도 summary 응답은 계속 진행
+      }
+    }
     
     // 최종 payload 생성 (XP 정보 포함)
     WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(

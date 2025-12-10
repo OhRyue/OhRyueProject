@@ -201,6 +201,7 @@ public class ActivityService {
                 .userId(req.userId())
                 .activityGroup(req.activityGroup())
                 .mainType(req.mainType())
+                .mainStepType(req.mainStepType())
                 .assistType(req.assistType())
                 .battleType(req.battleType())
                 .mode(req.mode())
@@ -230,6 +231,7 @@ public class ActivityService {
                 activity.getId(),
                 activity.getActivityGroup(),
                 activity.getMainType(),
+                activity.getMainStepType(),
                 activity.getAssistType(),
                 activity.getBattleType(),
                 activity.getMode(),
@@ -248,6 +250,7 @@ public class ActivityService {
                 activity.getId(),
                 activity.getActivityGroup(),
                 activity.getMainType(),
+                activity.getMainStepType(),
                 activity.getAssistType(),
                 activity.getBattleType(),
                 activity.getMode(),
@@ -270,6 +273,7 @@ public class ActivityService {
                 activity.getId(),
                 activity.getActivityGroup(),
                 activity.getMainType(),
+                activity.getMainStepType(),
                 activity.getAssistType(),
                 activity.getBattleType(),
                 activity.getMode(),
@@ -290,9 +294,16 @@ public class ActivityService {
 
         switch (activity.getActivityGroup()) {
             case MAIN -> {
-                sb.append("MAIN");
+                sb.append("메인학습");
                 if (activity.getMainType() != null) {
-                    sb.append(", ").append(activity.getMainType().name());
+                    if (activity.getMainType() == com.OhRyue.certpilot.progress.domain.enums.MainType.MICRO) {
+                        sb.append(" · Micro");
+                        if (activity.getMainStepType() != null) {
+                            sb.append("(").append(activity.getMainStepType().name()).append(")");
+                        }
+                    } else if (activity.getMainType() == com.OhRyue.certpilot.progress.domain.enums.MainType.REVIEW) {
+                        sb.append(" · Review");
+                    }
                 }
             }
             case ASSIST -> {
@@ -322,7 +333,7 @@ public class ActivityService {
 
         if (activity.getMode() != null) {
             String modeName = activity.getMode() == ExamMode.WRITTEN ? "필기" : "실기";
-            sb.append(", ").append(modeName);
+            sb.append(" · ").append(modeName);
         }
 
         return sb.toString();

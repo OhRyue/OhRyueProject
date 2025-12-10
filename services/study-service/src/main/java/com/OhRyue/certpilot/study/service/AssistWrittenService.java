@@ -75,6 +75,7 @@ public class AssistWrittenService {
   private final AIExplanationService aiExplanationService;
   private final com.OhRyue.certpilot.study.client.ProgressXpClient progressXpClient;
   private final TagQueryService tagQueryService;
+  private final ProgressActivityService progressActivityService;
 
   /* ================= 카테고리: 토픽 배열 선택 → 해당 토픽들에서 출제 ================= */
 
@@ -1388,7 +1389,27 @@ public class AssistWrittenService {
       }
     }
 
-    // 8. 응답 생성
+    // 8. Activity 생성 보장: completed=true인 경우 Activity 생성
+    // ASSIST는 MINI 단계가 없으므로 항상 Activity 생성 대상
+    if (completed && studySession != null) {
+      try {
+        // finalize가 아직 안 되었다면 finalize 수행
+        boolean alreadyFinished = studySession.getFinishedAt() != null;
+        if (!alreadyFinished) {
+          sessionManager.finalizeStudySession(studySession);
+          // finalize 내부에서 Activity 생성
+        } else {
+          // 이미 finished_at이 있는데 Activity가 없을 가능성 → 보정
+          progressActivityService.ensureActivityForSession(studySession);
+        }
+      } catch (Exception e) {
+        log.error("Failed to ensure Activity for ASSIST WRITTEN summary: sessionId={}, learningSessionId={}", 
+                studySession.getId(), learningSessionId, e);
+        // Activity 생성 실패해도 summary 응답은 계속 진행
+      }
+    }
+    
+    // 9. 응답 생성
     AssistDtos.WrittenSummaryResp payload = new AssistDtos.WrittenSummaryResp(
         total,
         correct,

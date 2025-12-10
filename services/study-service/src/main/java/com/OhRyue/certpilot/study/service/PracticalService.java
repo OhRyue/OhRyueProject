@@ -73,6 +73,7 @@ public class PracticalService {
   // cert-service 커리큘럼 연동 (토픽 제목/개념 조회용)
   private final CurriculumGateway curriculumGateway;
   private final TagQueryService tagQueryService;
+  private final ProgressActivityService progressActivityService;
 
   /* ========================= 개념 ========================= */
 
@@ -1067,8 +1068,14 @@ public class PracticalService {
         reviewPracticalAnsweredCount == allReviewPracticalItems.size();
     
     // 5-2. 세션이 완료되었을 때 finalizeStudySession 호출
-    // 모든 문제가 제출되었으면 finalizeStudySession 호출 (이미 완료된 경우도 재계산)
-    if (allReviewPracticalQuestionsAnswered && session != null) {
+    // 모든 문제가 제출되었거나, 이미 완료된 세션이면 항상 호출 (Activity 생성 보장)
+    boolean shouldFinalizeReview = allReviewPracticalQuestionsAnswered;
+    if (session != null && Boolean.TRUE.equals(session.getCompleted()) && session.getFinishedAt() != null) {
+      // 이미 완료된 세션도 Activity가 없을 수 있으므로 재호출
+      shouldFinalizeReview = true;
+    }
+    
+    if (shouldFinalizeReview && session != null) {
       // finalizeStudySession: study_session_item 기준으로 정확히 계산
       StudySessionManager.FinalizeResult result = sessionManager.finalizeStudySession(session);
       
@@ -1338,6 +1345,31 @@ public class PracticalService {
 
     // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
     // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
+    
+    // Activity 생성 보장: completed=true이고 MINI가 아닌 경우 Activity 생성
+    if (completed && session != null) {
+      try {
+        String stepCode = session.getLearningStep() != null ? session.getLearningStep().getStepCode() : null;
+        boolean isMiniStep = "MINI".equals(stepCode) || "MICRO_MINI".equals(stepCode);
+        
+        if (!isMiniStep) {
+          // finalize가 아직 안 되었다면 finalize 수행
+          boolean alreadyFinished = session.getFinishedAt() != null;
+          if (!alreadyFinished) {
+            sessionManager.finalizeStudySession(session);
+            // finalize 내부에서 Activity 생성 (MINI 제외 로직 포함)
+          } else {
+            // 이미 finished_at이 있는데 Activity가 없을 가능성 → 보정
+            progressActivityService.ensureActivityForSession(session);
+          }
+        }
+      } catch (Exception e) {
+        // log 없으므로 System.out 사용
+        System.err.println("Failed to ensure Activity for PRACTICAL REVIEW summary: sessionId=" + sessionId + 
+                ", learningSessionId=" + learningSessionId + ", error=" + e.getMessage());
+        // Activity 생성 실패해도 summary 응답은 계속 진행
+      }
+    }
 
     // 최종 payload 생성 (XP 정보 포함)
     WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(
@@ -1652,6 +1684,31 @@ public class PracticalService {
 
     // SUMMARY 단계는 advance API를 통해 완료 처리되어야 함
     // 상태 변경은 advance에서 수행되므로 여기서는 하지 않음
+    
+    // Activity 생성 보장: completed=true이고 MINI가 아닌 경우 Activity 생성
+    if (completed && session != null) {
+      try {
+        String stepCode = session.getLearningStep() != null ? session.getLearningStep().getStepCode() : null;
+        boolean isMiniStep = "MINI".equals(stepCode) || "MICRO_MINI".equals(stepCode);
+        
+        if (!isMiniStep) {
+          // finalize가 아직 안 되었다면 finalize 수행
+          boolean alreadyFinished = session.getFinishedAt() != null;
+          if (!alreadyFinished) {
+            sessionManager.finalizeStudySession(session);
+            // finalize 내부에서 Activity 생성 (MINI 제외 로직 포함)
+          } else {
+            // 이미 finished_at이 있는데 Activity가 없을 가능성 → 보정
+            progressActivityService.ensureActivityForSession(session);
+          }
+        }
+      } catch (Exception e) {
+        // log 없으므로 System.out 사용
+        System.err.println("Failed to ensure Activity for PRACTICAL MICRO summary: sessionId=" + sessionId + 
+                ", learningSessionId=" + learningSessionId + ", error=" + e.getMessage());
+        // Activity 생성 실패해도 summary 응답은 계속 진행
+      }
+    }
 
     // 최종 payload 생성 (XP 정보 포함)
     WrittenDtos.SummaryResp payload = new WrittenDtos.SummaryResp(

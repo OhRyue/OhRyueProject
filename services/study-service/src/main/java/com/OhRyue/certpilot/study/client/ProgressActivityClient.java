@@ -22,6 +22,7 @@ public interface ProgressActivityClient {
             String userId,
             String activityGroup,  // MAIN, ASSIST, BATTLE
             String mainType,       // MICRO, REVIEW (MAIN일 때만)
+            String mainStepType,   // MINI, MCQ, SHORT (MICRO일 때만)
             String assistType,     // CATEGORY, WEAKNESS, DIFFICULTY (ASSIST일 때만)
             String battleType,     // DUEL_CATEGORY, DUEL_DIFFICULTY, TOURNAMENT, GOLDENBELL (BATTLE일 때만)
             String mode,           // WRITTEN, PRACTICAL

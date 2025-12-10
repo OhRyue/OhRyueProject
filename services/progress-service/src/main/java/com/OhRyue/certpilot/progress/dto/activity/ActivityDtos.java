@@ -5,6 +5,7 @@ import com.OhRyue.certpilot.progress.domain.enums.AssistType;
 import com.OhRyue.certpilot.progress.domain.enums.BattleType;
 import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
 import com.OhRyue.certpilot.progress.domain.enums.MainType;
+import com.OhRyue.certpilot.progress.domain.enums.MainStepType;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -28,10 +29,11 @@ public final class ActivityDtos {
             @Schema(description = "활동 ID") Long activityId,
             @Schema(description = "활동 그룹") ActivityGroup activityGroup,
             @Schema(description = "메인 타입") MainType mainType,
+            @Schema(description = "메인 스텝 타입 (MICRO일 때만)") MainStepType mainStepType,
             @Schema(description = "보조 타입") AssistType assistType,
             @Schema(description = "배틀 타입") BattleType battleType,
             @Schema(description = "모드 (필기/실기)") ExamMode mode,
-            @Schema(description = "표시용 텍스트", example = "MAIN, MICRO, 필기") String displayText,
+            @Schema(description = "표시용 텍스트", example = "메인학습 · Micro(MINI) · 필기") String displayText,
             @Schema(description = "시작 시간") LocalDateTime startedAt,
             @Schema(description = "종료 시간") LocalDateTime finishedAt
     ) {}
@@ -41,6 +43,7 @@ public final class ActivityDtos {
             @Schema(description = "활동 ID") Long activityId,
             @Schema(description = "활동 그룹") ActivityGroup activityGroup,
             @Schema(description = "메인 타입") MainType mainType,
+            @Schema(description = "메인 스텝 타입 (MICRO일 때만)") MainStepType mainStepType,
             @Schema(description = "보조 타입") AssistType assistType,
             @Schema(description = "배틀 타입") BattleType battleType,
             @Schema(description = "모드 (필기/실기)") ExamMode mode,
@@ -58,6 +61,7 @@ public final class ActivityDtos {
             @Schema(description = "활동 ID") Long activityId,
             @Schema(description = "활동 그룹") ActivityGroup activityGroup,
             @Schema(description = "메인 타입") MainType mainType,
+            @Schema(description = "메인 스텝 타입 (MICRO일 때만)") MainStepType mainStepType,
             @Schema(description = "보조 타입") AssistType assistType,
             @Schema(description = "배틀 타입") BattleType battleType,
             @Schema(description = "모드 (필기/실기)") ExamMode mode,
@@ -101,6 +105,7 @@ public final class ActivityDtos {
             @Schema(description = "사용자 ID") String userId,
             @Schema(description = "활동 그룹") ActivityGroup activityGroup,
             @Schema(description = "메인 타입") MainType mainType,
+            @Schema(description = "메인 스텝 타입 (MICRO일 때만)") MainStepType mainStepType,
             @Schema(description = "보조 타입") AssistType assistType,
             @Schema(description = "배틀 타입") BattleType battleType,
             @Schema(description = "모드 (필기/실기)") ExamMode mode,

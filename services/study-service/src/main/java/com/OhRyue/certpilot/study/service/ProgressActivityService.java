@@ -27,6 +27,52 @@ public class ProgressActivityService {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     /**
+     * 세션이 완료된 경우 Activity 생성 보장 (idempotent, 비동기)
+     * summary 호출 시점에 사용하는 공통 메서드
+     * - MINI 스텝은 제외
+     * - 이미 Activity가 있으면 생성하지 않음 (progress-service에서 중복 체크)
+     * - session의 score_pct와 question_count를 사용하여 통계 계산
+     */
+    @Async
+    public void ensureActivityForSession(StudySession session) {
+        if (session == null) {
+            log.warn("ensureActivityForSession: session is null");
+            return;
+        }
+        
+        // MINI 스텝은 Activity 생성 제외
+        String stepCode = session.getLearningStep() != null ? session.getLearningStep().getStepCode() : null;
+        boolean isMiniStep = "MINI".equals(stepCode) || "MICRO_MINI".equals(stepCode);
+        if (isMiniStep) {
+            log.debug("ensureActivityForSession: MINI step skipped, sessionId={}, stepCode={}", session.getId(), stepCode);
+            return;
+        }
+        
+        // 세션이 완료되지 않았으면 Activity 생성하지 않음
+        if (!Boolean.TRUE.equals(session.getCompleted()) || session.getFinishedAt() == null) {
+            log.debug("ensureActivityForSession: session not completed, sessionId={}, completed={}, finishedAt={}", 
+                    session.getId(), session.getCompleted(), session.getFinishedAt());
+            return;
+        }
+        
+        // session의 통계 정보 사용
+        int total = session.getQuestionCount() != null ? session.getQuestionCount() : 0;
+        double scorePct = session.getScorePct() != null ? session.getScorePct() : 0.0;
+        int correct = total > 0 && scorePct > 0 ? (int) Math.round((scorePct * total) / 100.0) : 0;
+        
+        if (total == 0) {
+            log.warn("ensureActivityForSession: session has no questions, sessionId={}", session.getId());
+            return;
+        }
+        
+        log.info("ensureActivityForSession: creating Activity for completed session, sessionId={}, mode={}, total={}, correct={}, scorePct={}", 
+                session.getId(), session.getMode(), total, correct, scorePct);
+        
+        // Activity 생성 (중복 체크는 createActivity 내부에서 처리)
+        createActivityForSession(session, total, correct, scorePct);
+    }
+    
+    /**
      * 세션 종료 시 ProgressActivity 생성 (비동기)
      */
     @Async
@@ -35,12 +81,25 @@ public class ProgressActivityService {
             // ActivityGroup 및 타입 결정
             String activityGroup;
             String mainType = null;
+            String mainStepType = null;
             String assistType = null;
             
             String mode = session.getMode();
             if ("MICRO".equals(mode) || "REVIEW".equals(mode)) {
                 activityGroup = "MAIN";
                 mainType = mode.equals("MICRO") ? "MICRO" : "REVIEW";
+                
+                // MICRO일 때만 mainStepType 결정
+                if ("MICRO".equals(mode) && session.getLearningStep() != null) {
+                    String stepCode = session.getLearningStep().getStepCode();
+                    if ("MINI".equals(stepCode)) {
+                        mainStepType = "MINI";
+                    } else if ("MCQ".equals(stepCode)) {
+                        mainStepType = "MCQ";
+                    } else if ("SHORT".equals(stepCode)) {
+                        mainStepType = "SHORT";
+                    }
+                }
             } else if (mode != null && mode.startsWith("ASSIST_")) {
                 activityGroup = "ASSIST";
                 if (mode.contains("CATEGORY")) {
@@ -171,6 +230,7 @@ public class ProgressActivityService {
                     session.getUserId(),
                     activityGroup,
                     mainType,
+                    mainStepType,
                     assistType,
                     null, // battleType
                     session.getExamMode().name(),

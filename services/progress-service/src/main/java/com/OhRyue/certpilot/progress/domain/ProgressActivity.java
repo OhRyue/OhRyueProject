@@ -5,6 +5,7 @@ import com.OhRyue.certpilot.progress.domain.enums.AssistType;
 import com.OhRyue.certpilot.progress.domain.enums.BattleType;
 import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
 import com.OhRyue.certpilot.progress.domain.enums.MainType;
+import com.OhRyue.certpilot.progress.domain.enums.MainStepType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -43,6 +44,10 @@ public class ProgressActivity {
     @Enumerated(EnumType.STRING)
     @Column(name = "main_type", length = 20)
     private MainType mainType;  // MAIN일 때만 사용
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "main_step_type", length = 20)
+    private MainStepType mainStepType;  // MICRO일 때만 사용 (MINI, MCQ, SHORT)
 
     @Enumerated(EnumType.STRING)
     @Column(name = "assist_type", length = 20)
