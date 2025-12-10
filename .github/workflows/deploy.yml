@@ -9,11 +9,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 현재 커밋 체크아웃 - 로그 확인용
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # KT Cloud 서버에 SSH 접속해서 배포 스크립트 실행
       - name: SSH to KT Cloud and deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -36,8 +34,11 @@ jobs:
             echo "==[Step 3] Docker compose build=="
             docker compose build --progress=plain
 
-            echo "==[Step 4] Docker compose up=="
-            docker compose up -d --remove-orphans
+            echo "==[Step 4] Docker compose up with scaling=="
+            docker compose up -d --remove-orphans \
+              --scale account-service=2 \
+              --scale study-service=2 \
+              --scale versus-service=2
 
             echo "==[Step 5] Clean old images=="
             docker image prune -f
