@@ -7,3 +7,5 @@ ADD COLUMN main_step_type ENUM('MINI','MCQ','SHORT') NULL COMMENT 'MICRO일 때�
 
 SET FOREIGN_KEY_CHECKS = 1;
 
+
+

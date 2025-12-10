@@ -7,6 +7,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
@@ -15,7 +16,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.OhRyue.certpilot.progress.domain.ProgressActivity;
+import com.OhRyue.certpilot.progress.domain.enums.ActivityGroup;
 import com.OhRyue.certpilot.progress.domain.enums.ExamMode;
 import com.OhRyue.certpilot.progress.dto.activity.ActivityDtos.*;
 import com.OhRyue.certpilot.progress.dto.activity.ActivityDtos.ActivityDetailDto;
@@ -25,6 +29,7 @@ import com.OhRyue.certpilot.progress.dto.activity.ActivityDtos.ProgressActivityC
 import com.OhRyue.certpilot.progress.dto.activity.ActivityDtos.QuestionDetailDto;
 import com.OhRyue.certpilot.progress.dto.activity.ActivityDtos.RecentActivityItemDto;
 import com.OhRyue.certpilot.progress.dto.activity.ActivityDtos.TodaySummaryDto;
+import com.OhRyue.certpilot.progress.feign.CertClient;
 import com.OhRyue.certpilot.progress.feign.StudyInternalClient;
 import com.OhRyue.certpilot.progress.feign.VersusInternalClient;
 import com.OhRyue.certpilot.progress.feign.dto.MatchDetailDto;
@@ -45,6 +50,10 @@ public class ActivityService {
     private final ProgressActivityRepository activityRepository;
     private final StudyInternalClient studyInternalClient;
     private final VersusInternalClient versusInternalClient;
+    private final CertClient certClient;
+    private final ObjectMapper objectMapper;
+
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     /**
      * 오늘의 성과 요약
@@ -95,7 +104,11 @@ public class ActivityService {
         List<ProgressActivity> activities = activityRepository.findTop5ByUserIdOrderByFinishedAtDesc(userId);
 
         return activities.stream()
-                .map(this::toRecentActivityItem)
+                .map(activity -> {
+                    // MAIN(MICRO/REVIEW)의 경우 topicName 채우기
+                    fillTopicNameIfNeeded(activity);
+                    return toRecentActivityItem(activity);
+                })
                 .collect(Collectors.toList());
     }
 
@@ -106,7 +119,11 @@ public class ActivityService {
         Pageable pageable = PageRequest.of(page, size);
         Page<ProgressActivity> activityPage = activityRepository.findByUserIdOrderByFinishedAtDesc(userId, pageable);
 
-        return activityPage.map(this::toActivityListItem);
+        return activityPage.map(activity -> {
+            // MAIN(MICRO/REVIEW)의 경우 topicName 채우기
+            fillTopicNameIfNeeded(activity);
+            return toActivityListItem(activity);
+        });
     }
 
     /**
@@ -122,50 +139,58 @@ public class ActivityService {
             throw new IllegalArgumentException("Activity does not belong to user: " + userId);
         }
 
+        // MAIN(MICRO/REVIEW)의 경우 topicName 채우기
+        fillTopicNameIfNeeded(activity);
+
         ActivityDetailHeaderDto header = toActivityDetailHeader(activity);
 
         // 문제 상세 조회
         List<QuestionDetailDto> questions;
         try {
-            if ("study".equals(activity.getSourceService())) {
-                // study-service에서 세션 상세 조회
-                StudySessionDetailDto sessionDetail = studyInternalClient
-                        .getSessionDetail(activity.getSourceSessionId(), userId);
-                questions = sessionDetail.questions().stream()
-                        .map(q -> new QuestionDetailDto(
-                                q.order(),
-                                q.questionId(),
-                                q.questionType(),
-                                q.stem(),
-                                q.myAnswer(),
-                                q.correctAnswer(),
-                                q.isCorrect(),
-                                q.answeredAt(),
-                                q.timeTakenMs(),
-                                q.score()
-                        ))
-                        .collect(Collectors.toList());
-            } else if ("versus".equals(activity.getSourceService())) {
-                // versus-service에서 매치 상세 조회
-                MatchDetailDto matchDetail = versusInternalClient
-                        .getMatchDetail(activity.getSourceSessionId(), userId);
-                questions = matchDetail.questions().stream()
-                        .map(q -> new QuestionDetailDto(
-                                q.order(),
-                                q.questionId(),
-                                q.questionType(),
-                                q.stem(),
-                                q.myAnswer(),
-                                q.correctAnswer(),
-                                q.isCorrect(),
-                                q.answeredAt(),
-                                q.timeTakenMs(),
-                                q.score()
-                        ))
-                        .collect(Collectors.toList());
-            } else {
-                log.warn("Unknown source service: {}", activity.getSourceService());
-                questions = List.of();
+            String sourceService = activity.getSourceService();
+            switch (sourceService) {
+                case "study" -> {
+                    // study-service에서 세션 상세 조회
+                    StudySessionDetailDto sessionDetail = studyInternalClient
+                            .getSessionDetail(activity.getSourceSessionId(), userId);
+                    questions = sessionDetail.questions().stream()
+                            .map(q -> new QuestionDetailDto(
+                                    q.order(),
+                                    q.questionId(),
+                                    q.questionType(),
+                                    q.stem(),
+                                    q.myAnswer(),
+                                    q.correctAnswer(),
+                                    q.isCorrect(),
+                                    q.answeredAt(),
+                                    q.timeTakenMs(),
+                                    q.score()
+                            ))
+                            .collect(Collectors.toList());
+                }
+                case "versus" -> {
+                    // versus-service에서 매치 상세 조회
+                    MatchDetailDto matchDetail = versusInternalClient
+                            .getMatchDetail(activity.getSourceSessionId(), userId);
+                    questions = matchDetail.questions().stream()
+                            .map(q -> new QuestionDetailDto(
+                                    q.order(),
+                                    q.questionId(),
+                                    q.questionType(),
+                                    q.stem(),
+                                    q.myAnswer(),
+                                    q.correctAnswer(),
+                                    q.isCorrect(),
+                                    q.answeredAt(),
+                                    q.timeTakenMs(),
+                                    q.score()
+                            ))
+                            .collect(Collectors.toList());
+                }
+                default -> {
+                    log.warn("Unknown source service: {}", sourceService);
+                    questions = List.of();
+                }
             }
         } catch (Exception e) {
             log.error("Failed to get activity detail from source service: activityId={}, sourceService={}, sourceSessionId={}",
@@ -298,9 +323,7 @@ public class ActivityService {
                 if (activity.getMainType() != null) {
                     if (activity.getMainType() == com.OhRyue.certpilot.progress.domain.enums.MainType.MICRO) {
                         sb.append(" · Micro");
-                        if (activity.getMainStepType() != null) {
-                            sb.append("(").append(activity.getMainStepType().name()).append(")");
-                        }
+                        // 괄호 안의 세부 타입 제거 (MCQ, OX, SHORT 등)
                     } else if (activity.getMainType() == com.OhRyue.certpilot.progress.domain.enums.MainType.REVIEW) {
                         sb.append(" · Review");
                     }
@@ -314,7 +337,7 @@ public class ActivityService {
                         case WEAKNESS -> "약점보완";
                         case DIFFICULTY -> "난이도";
                     };
-                    sb.append(", ").append(assistTypeName);
+                    sb.append(" · ").append(assistTypeName);
                 }
             }
             case BATTLE -> {
@@ -326,7 +349,7 @@ public class ActivityService {
                         case TOURNAMENT -> "토너먼트";
                         case GOLDENBELL -> "골든벨";
                     };
-                    sb.append(", ").append(battleTypeName);
+                    sb.append(" · ").append(battleTypeName);
                 }
             }
         }
@@ -337,5 +360,80 @@ public class ActivityService {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * MAIN(MICRO/REVIEW) Activity의 topicName을 채우는 헬퍼 메서드
+     * - topicName이 이미 있으면 스킵
+     * - topicId가 있으면 cert-service에서 조회
+     * - 없으면 study-service의 세션 정보에서 topicScopeJson 파싱하여 topicId 추출 후 조회
+     */
+    private void fillTopicNameIfNeeded(ProgressActivity activity) {
+        // ASSIST나 BATTLE은 이미 topicName이 정상적으로 저장되어 있음
+        if (activity.getActivityGroup() != ActivityGroup.MAIN) {
+            return;
+        }
+
+        // 이미 topicName이 있으면 스킵
+        if (activity.getTopicName() != null && !activity.getTopicName().isBlank()) {
+            return;
+        }
+
+        Long topicIdToUse = null;
+
+        // 1. topicId가 직접 있는 경우
+        if (activity.getTopicId() != null) {
+            topicIdToUse = activity.getTopicId();
+        } else if ("study".equals(activity.getSourceService()) && activity.getSourceSessionId() != null) {
+            // 2. study-service의 세션 정보에서 topicScopeJson 파싱
+            try {
+                StudySessionDetailDto sessionDetail = studyInternalClient
+                        .getSessionDetail(activity.getSourceSessionId(), activity.getUserId());
+                
+                if (sessionDetail.topicScopeJson() != null && !sessionDetail.topicScopeJson().isBlank()) {
+                    Map<String, Object> scope = objectMapper.readValue(sessionDetail.topicScopeJson(), MAP_TYPE);
+                    
+                    // MICRO: topicId 사용
+                    if (activity.getMainType() != null && 
+                        activity.getMainType() == com.OhRyue.certpilot.progress.domain.enums.MainType.MICRO) {
+                        Object topicIdObj = scope.get("topicId");
+                        if (topicIdObj != null) {
+                            topicIdToUse = ((Number) topicIdObj).longValue();
+                        }
+                    } 
+                    // REVIEW: rootTopicId 사용
+                    else if (activity.getMainType() != null && 
+                             activity.getMainType() == com.OhRyue.certpilot.progress.domain.enums.MainType.REVIEW) {
+                        Object rootTopicIdObj = scope.get("rootTopicId");
+                        if (rootTopicIdObj != null) {
+                            topicIdToUse = ((Number) rootTopicIdObj).longValue();
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Failed to get topicScopeJson from study-service: activityId={}, sessionId={}, error={}",
+                        activity.getId(), activity.getSourceSessionId(), e.getMessage());
+            }
+        }
+
+        // 3. topicId를 찾았으면 cert-service에서 topicName 조회
+        if (topicIdToUse != null) {
+            try {
+                String topicJson = certClient.getTopic(topicIdToUse);
+                if (topicJson != null && !topicJson.isBlank()) {
+                    Map<String, Object> topicMap = objectMapper.readValue(topicJson, MAP_TYPE);
+                    Object titleObj = topicMap.get("title");
+                    if (titleObj != null) {
+                        String topicName = titleObj.toString();
+                        activity.setTopicName(topicName);
+                        log.debug("Filled topicName for activityId={}, topicId={}, topicName={}",
+                                activity.getId(), topicIdToUse, topicName);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get topic name from cert-service: activityId={}, topicId={}, error={}",
+                        activity.getId(), topicIdToUse, e.getMessage());
+            }
+        }
     }
 }

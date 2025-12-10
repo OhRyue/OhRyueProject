@@ -13,7 +13,8 @@ public final class InternalDtos {
     public record StudySessionDetailDto(
             @Schema(description = "세션 ID") Long sessionId,
             @Schema(description = "사용자 ID") String userId,
-            @Schema(description = "문제 리스트") List<QuestionDetailDto> questions
+            @Schema(description = "문제 리스트") List<QuestionDetailDto> questions,
+            @Schema(description = "토픽 스코프 JSON (topicId 또는 rootTopicId 포함)") String topicScopeJson
     ) {}
 
     @Schema(description = "문제 상세 정보")

@@ -135,7 +135,8 @@ public class StudyInternalService {
         return new InternalDtos.StudySessionDetailDto(
                 session.getId(),
                 userId,
-                questionDetails
+                questionDetails,
+                session.getTopicScopeJson()  // topicScopeJson 포함하여 반환
         );
     }
 
