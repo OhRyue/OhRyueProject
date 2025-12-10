@@ -89,6 +89,12 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         || path.startsWith("/api/account/reset-password")     // 비밀번호 재설정
         || path.startsWith("/api/account/forgot-password")    // 비밀번호 찾기
         || path.startsWith("/api/account/refresh")            // 토큰 재발급
+        || path.startsWith("/api/account/internal")           // 내부 서비스 간 통신용 API (스케줄러 등)
+        || path.startsWith("/api/progress/internal")         // progress-service 내부 API
+        || path.startsWith("/api/study/internal")             // study-service 내부 API
+        || path.startsWith("/api/versus/internal")            // versus-service 내부 API
+        || path.startsWith("/api/cert/internal")             // cert-service 내부 API
+        || path.startsWith("/api/community/internal")        // community-service 내부 API
 
         // 2) 공통 공개 API (health, swagger)
         || path.startsWith("/actuator")

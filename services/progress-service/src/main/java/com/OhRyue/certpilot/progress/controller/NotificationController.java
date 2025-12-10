@@ -1,12 +1,14 @@
 package com.OhRyue.certpilot.progress.controller;
 
 import com.OhRyue.certpilot.progress.domain.enums.NotificationType;
+import com.OhRyue.certpilot.progress.dto.ManualWeeklyReportRequest;
 import com.OhRyue.certpilot.progress.dto.NotificationDtos;
 import com.OhRyue.certpilot.progress.feign.AccountClient;
 import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
 import com.OhRyue.certpilot.progress.repository.ReportWeeklyRepository;
 import com.OhRyue.certpilot.progress.repository.UserBadgeRepository;
 import com.OhRyue.certpilot.progress.service.NotificationService;
+import com.OhRyue.certpilot.progress.service.WeeklyReportService;
 import com.OhRyue.certpilot.progress.service.WeeklyReportTemplateService;
 import com.OhRyue.certpilot.progress.service.mail.MailSender;
 import com.OhRyue.common.auth.AuthUserUtil;
@@ -34,6 +36,7 @@ public class NotificationController {
     private final UserBadgeRepository userBadgeRepository;
     private final MailSender mailSender;
     private final WeeklyReportTemplateService weeklyReportTemplateService;
+    private final WeeklyReportService weeklyReportService;
 
     @Operation(summary = "내 알림 목록 조회")
     @GetMapping("/my")
@@ -346,6 +349,13 @@ public class NotificationController {
                     "주간 학습 리포트 발송 중 오류가 발생했습니다: " + e.getMessage()
             ));
         }
+    }
+
+    @Operation(summary = "주간 학습 리포트 메일 수동 발송 (데모용, 하드코딩 데이터 사용)")
+    @PostMapping("/weekly-report/manual-demo")
+    public ResponseEntity<Void> sendManualWeeklyReport(@RequestBody ManualWeeklyReportRequest request) {
+        weeklyReportService.sendManualDemoWeeklyReport(request.getEmail());
+        return ResponseEntity.ok().build();
     }
 }
 

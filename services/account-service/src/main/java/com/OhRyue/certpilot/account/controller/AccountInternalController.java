@@ -93,11 +93,8 @@ public class AccountInternalController {
 
   @Operation(summary = "일일 학습 알림을 받을 사용자 목록 조회(내부 전용)")
   @GetMapping("/users/daily-reminder-enabled")
-  public ResponseEntity<List<UserSummary>> getUsersWithDailyReminderEnabled(Authentication authentication) {
-    if (authentication == null || !authentication.isAuthenticated()) {
-      return ResponseEntity.status(401).build();
-    }
-
+  public ResponseEntity<List<UserSummary>> getUsersWithDailyReminderEnabled() {
+    // 내부 서비스 간 통신이므로 인증 체크 불필요 (SecurityConfig에서 permitAll 설정됨)
     List<UserSummary> users = userSettingsRepository.findAll().stream()
         .map(settings -> {
           SettingsDtos.SettingsResponse snapshot = settingsService.getSnapshot(settings.getUserId());
@@ -115,11 +112,8 @@ public class AccountInternalController {
 
   @Operation(summary = "주간 리포트를 받을 사용자 목록 조회(내부 전용)")
   @GetMapping("/users/weekly-report-enabled")
-  public ResponseEntity<List<UserWithEmail>> getUsersWithWeeklyReportEnabled(Authentication authentication) {
-    if (authentication == null || !authentication.isAuthenticated()) {
-      return ResponseEntity.status(401).build();
-    }
-
+  public ResponseEntity<List<UserWithEmail>> getUsersWithWeeklyReportEnabled() {
+    // 내부 서비스 간 통신이므로 인증 체크 불필요 (SecurityConfig에서 permitAll 설정됨)
     List<UserWithEmail> users = userSettingsRepository.findAll().stream()
         .map(settings -> {
           SettingsDtos.SettingsResponse snapshot = settingsService.getSnapshot(settings.getUserId());

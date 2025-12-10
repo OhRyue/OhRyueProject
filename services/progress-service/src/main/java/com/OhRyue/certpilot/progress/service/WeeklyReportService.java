@@ -40,6 +40,43 @@ public class WeeklyReportService {
     private final AccountClient accountClient;
     private final WeeklyReportTemplateService weeklyReportTemplateService;
 
+    /**
+     * TODO: 데모용 manual weekly report, 테스트 끝나면 제거
+     */
+    public void sendManualDemoWeeklyReport(String email) {
+        if (email == null || email.isBlank()) {
+            log.warn("Manual demo weekly report requested with empty email, skipping");
+            return;
+        }
+
+        // 고정 데이터
+        String weekIso = "2025-W49";
+        String nickname = "김치보끔밥";
+        int totalSolved = 124;
+        int totalCorrect = 93;
+        double accuracy = 75.0;
+        int totalStudyMinutes = 210;
+        int newBadgesCount = 2;
+        int streakDays = 4;
+
+        String subject = String.format("[CertPilot] %s 주간 학습 리포트", weekIso);
+
+        // 카드형 템플릿 사용 (기존 템플릿 재활용)
+        String cardHtml = weeklyReportTemplateService.buildCardTemplate(
+                nickname,
+                weekIso,
+                totalSolved,
+                totalCorrect,
+                accuracy,
+                totalStudyMinutes,
+                newBadgesCount,
+                streakDays
+        );
+
+        mailSender.sendHtml(email, subject, cardHtml);
+        log.info("Manual demo weekly report sent to {}", email);
+    }
+
     @Transactional(readOnly = true)
     public void sendWeeklyReportsForAllUsers() {
         try {

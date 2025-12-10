@@ -8,6 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -20,15 +23,30 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DailyReminderScheduler {
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final NotificationService notificationService;
     private final AccountClient accountClient;
 
     @Scheduled(cron = "0 0 12 * * *", zone = "Asia/Seoul")
     public void sendDailyReminders() {
+        LocalDateTime now = LocalDateTime.now(KST);
+        log.info("========================================");
+        log.info("📅 [DailyReminderScheduler] 스케줄러 실행 시작 - 현재 시간: {}", now.format(FORMATTER));
+        log.info("========================================");
+        
         try {
-            log.info("Starting daily reminder notification job");
             List<AccountClient.UserSummary> users = accountClient.getUsersWithDailyReminderEnabled();
-            log.info("Found {} users with daily reminder enabled", users.size());
+            log.info("✅ [DailyReminderScheduler] 일일 학습 알림을 받을 사용자 수: {}", users.size());
+
+            if (users.isEmpty()) {
+                log.warn("⚠️ [DailyReminderScheduler] 일일 학습 알림을 받을 사용자가 없습니다.");
+                return;
+            }
+
+            int successCount = 0;
+            int failCount = 0;
 
             for (AccountClient.UserSummary user : users) {
                 try {
@@ -39,17 +57,26 @@ public class DailyReminderScheduler {
                             "하루 10문제라도 좋으니, 지금 바로 CertPilot에서 학습을 시작해 보세요!",
                             Map.of()
                     );
+                    successCount++;
+                    log.debug("✅ [DailyReminderScheduler] 사용자 {}에게 일일 학습 알림 발송 성공", user.userId());
                 } catch (Exception e) {
-                    log.error("Failed to send daily reminder to user {}: {}", user.userId(), e.getMessage(), e);
+                    failCount++;
+                    log.error("❌ [DailyReminderScheduler] 사용자 {}에게 일일 학습 알림 발송 실패: {}", 
+                            user.userId(), e.getMessage(), e);
                 }
             }
 
-            log.info("Completed daily reminder notification job for {} users", users.size());
+            log.info("========================================");
+            log.info("📊 [DailyReminderScheduler] 작업 완료 - 성공: {}, 실패: {}, 총: {}", 
+                    successCount, failCount, users.size());
+            log.info("========================================");
         } catch (Exception e) {
-            log.error("Failed to send daily reminders: {}", e.getMessage(), e);
+            log.error("❌ [DailyReminderScheduler] 일일 학습 알림 작업 중 예외 발생: {}", e.getMessage(), e);
+            throw e; // 스케줄러 예외를 다시 던져서 Spring이 로그에 기록하도록 함
         }
     }
 }
+
 
 
 
