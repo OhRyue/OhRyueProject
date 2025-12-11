@@ -15,7 +15,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -41,11 +40,8 @@ public class AccountInternalController {
 
   @Operation(summary = "여러 사용자의 프로필 요약 조회")
   @GetMapping("/users/summaries")
-  public ResponseEntity<List<ProfileResponse>> summaries(Authentication authentication,
-                                                         @RequestParam(name = "ids") List<String> ids) {
-    if (authentication == null || !authentication.isAuthenticated()) {
-      return ResponseEntity.status(401).build();
-    }
+  public ResponseEntity<List<ProfileResponse>> summaries(@RequestParam(name = "ids") List<String> ids) {
+    // 내부 서비스 간 통신이므로 인증 체크 불필요 (SecurityConfig에서 permitAll 설정됨)
     if (ids == null || ids.isEmpty()) {
       return ResponseEntity.ok(List.of());
     }

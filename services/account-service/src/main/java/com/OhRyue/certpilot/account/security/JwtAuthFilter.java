@@ -38,6 +38,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 || path.startsWith("/api/account/forgot-password")
                 || path.startsWith("/api/account/forgot-password/verify")
                 || path.startsWith("/api/account/forgot-password/reset")
+                || path.startsWith("/api/account/internal")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-ui")
                 || path.startsWith("/swagger-ui.html")
