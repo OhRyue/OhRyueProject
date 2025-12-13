@@ -4,11 +4,13 @@ import com.OhRyue.certpilot.versus.dto.RoomSnapshotDto;
 import com.OhRyue.certpilot.versus.dto.VersusDtos;
 import com.OhRyue.certpilot.versus.dto.WebSocketDtos;
 import com.OhRyue.certpilot.versus.service.AnswerSubmissionService;
+import com.OhRyue.certpilot.versus.service.PresenceService;
 import com.OhRyue.certpilot.versus.service.RoomSnapshotService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
@@ -30,6 +32,8 @@ public class WebSocketController {
 
     private final RoomSnapshotService roomSnapshotService;
     private final AnswerSubmissionService answerSubmissionService;
+    private final PresenceService presenceService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     /**
      * JOIN_ROOM 명령 처리
@@ -136,6 +140,45 @@ public class WebSocketController {
         } catch (Exception e) {
             log.error("SUBMIT_ANSWER 오류: userId={}, roomId={}, questionId={}", userId, roomId, questionId, e);
             return WebSocketDtos.SubmitAnswerResponse.failure(roomId, questionId, "답안 제출 중 오류가 발생했습니다.");
+        }
+    }
+
+    /**
+     * HEARTBEAT 명령 처리
+     * 
+     * 클라이언트가 하트비트를 전송할 때 호출
+     * - roomId를 받아서 Redis에 접속 상태 업데이트
+     * - userId는 WebSocket 인증 정보(Principal)에서 추출
+     * 
+     * @param command HEARTBEAT 명령 (roomId 포함)
+     * @param principal WebSocket 인증 정보 (JWT에서 추출된 userId)
+     */
+    @MessageMapping("/versus/heartbeat")
+    @SendToUser("/queue/versus/heartbeat")
+    public WebSocketDtos.HeartbeatResponse handleHeartbeat(
+            @Payload WebSocketDtos.HeartbeatCommand command,
+            Principal principal
+    ) {
+        String userId = principal != null ? principal.getName() : null;
+        Long roomId = command.roomId();
+
+        log.debug("WebSocket HEARTBEAT 요청: userId={}, roomId={}", userId, roomId);
+
+        if (roomId == null) {
+            log.warn("HEARTBEAT: roomId가 null입니다. userId={}", userId);
+            return WebSocketDtos.HeartbeatResponse.failure(null, "roomId는 필수입니다.");
+        }
+
+        try {
+            // Redis에 접속 상태 업데이트
+            presenceService.updatePresence(roomId, userId);
+
+            log.debug("HEARTBEAT 성공: userId={}, roomId={}", userId, roomId);
+            return WebSocketDtos.HeartbeatResponse.success(roomId);
+
+        } catch (Exception e) {
+            log.error("HEARTBEAT 오류: userId={}, roomId={}", userId, roomId, e);
+            return WebSocketDtos.HeartbeatResponse.failure(roomId, "하트비트 처리 중 오류가 발생했습니다.");
         }
     }
 }

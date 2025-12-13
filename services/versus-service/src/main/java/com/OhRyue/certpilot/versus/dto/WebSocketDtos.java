@@ -139,6 +139,56 @@ public class WebSocketDtos {
             return new SubmitAnswerResponse(TYPE, false, roomId, questionId, message, null);
         }
     }
+
+    /**
+     * HEARTBEAT 명령 메시지
+     *
+     * 클라이언트 -> 서버: /app/versus/heartbeat
+     *
+     * 예시:
+     * {
+     *   "command": "HEARTBEAT",
+     *   "roomId": 123
+     * }
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record HeartbeatCommand(
+            @NotNull
+            Long roomId
+    ) {
+        public static final String COMMAND = "HEARTBEAT";
+    }
+
+    /**
+     * HEARTBEAT 응답 메시지
+     *
+     * 서버 -> 클라이언트: /user/queue/versus/heartbeat
+     *
+     * 예시:
+     * {
+     *   "type": "HEARTBEAT_RESPONSE",
+     *   "success": true,
+     *   "roomId": 123,
+     *   "message": null
+     * }
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record HeartbeatResponse(
+            String type,
+            boolean success,
+            Long roomId,
+            String message
+    ) {
+        public static final String TYPE = "HEARTBEAT_RESPONSE";
+
+        public static HeartbeatResponse success(Long roomId) {
+            return new HeartbeatResponse(TYPE, true, roomId, null);
+        }
+
+        public static HeartbeatResponse failure(Long roomId, String message) {
+            return new HeartbeatResponse(TYPE, false, roomId, message);
+        }
+    }
 }
 
 
