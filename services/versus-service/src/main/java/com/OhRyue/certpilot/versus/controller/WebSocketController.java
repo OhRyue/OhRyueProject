@@ -1,10 +1,13 @@
 package com.OhRyue.certpilot.versus.controller;
 
+import com.OhRyue.certpilot.versus.domain.MatchMode;
+import com.OhRyue.certpilot.versus.dto.MatchingDtos;
 import com.OhRyue.certpilot.versus.dto.RoomSnapshotDto;
 import com.OhRyue.certpilot.versus.dto.VersusDtos;
 import com.OhRyue.certpilot.versus.dto.WebSocketDtos;
 import com.OhRyue.certpilot.versus.service.AnswerSubmissionService;
 import com.OhRyue.certpilot.versus.service.PresenceService;
+import com.OhRyue.certpilot.versus.service.RedisMatchingQueueService;
 import com.OhRyue.certpilot.versus.service.RoomSnapshotService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +36,7 @@ public class WebSocketController {
     private final RoomSnapshotService roomSnapshotService;
     private final AnswerSubmissionService answerSubmissionService;
     private final PresenceService presenceService;
+    private final RedisMatchingQueueService redisMatchingQueueService;
     private final SimpMessagingTemplate messagingTemplate;
 
     /**
@@ -179,6 +183,102 @@ public class WebSocketController {
         } catch (Exception e) {
             log.error("HEARTBEAT 오류: userId={}, roomId={}", userId, roomId, e);
             return WebSocketDtos.HeartbeatResponse.failure(roomId, "하트비트 처리 중 오류가 발생했습니다.");
+        }
+    }
+
+    /**
+     * REQUEST_MATCH 명령 처리
+     * 
+     * 클라이언트가 매칭을 요청할 때 호출
+     * 
+     * @param command REQUEST_MATCH 명령
+     * @param principal WebSocket 인증 정보
+     * @return MATCH_RESPONSE
+     */
+    @MessageMapping("/versus/match/request")
+    @SendToUser("/queue/versus/match")
+    public WebSocketDtos.MatchResponse handleRequestMatch(
+            @Payload WebSocketDtos.RequestMatchCommand command,
+            Principal principal
+    ) {
+        String userId = principal != null ? principal.getName() : null;
+
+        log.info("WebSocket REQUEST_MATCH 요청: userId={}, mode={}", userId, command.mode());
+
+        if (userId == null) {
+            return WebSocketDtos.MatchResponse.failure("인증이 필요합니다.");
+        }
+
+        try {
+            // MatchMode 변환
+            MatchMode mode = MatchMode.valueOf(command.mode());
+
+            // MatchingDtos.MatchRequest 생성
+            MatchingDtos.MatchRequest matchRequest = new MatchingDtos.MatchRequest(
+                    mode,
+                    command.certId(),
+                    command.matchingMode(),
+                    command.topicId(),
+                    command.difficulty(),
+                    command.examMode()
+            );
+
+            // 매칭 요청
+            MatchingDtos.MatchStatusResp status = redisMatchingQueueService.requestMatch(userId, matchRequest);
+
+            log.info("REQUEST_MATCH 성공: userId={}, matching={}, roomId={}, waitingCount={}",
+                    userId, status.matching(), status.roomId(), status.waitingCount());
+
+            return WebSocketDtos.MatchResponse.success(
+                    status.matching(),
+                    status.roomId(),
+                    status.waitingCount()
+            );
+
+        } catch (IllegalArgumentException e) {
+            log.warn("REQUEST_MATCH 실패: userId={}, error={}", userId, e.getMessage());
+            return WebSocketDtos.MatchResponse.failure("잘못된 매칭 모드입니다: " + e.getMessage());
+
+        } catch (Exception e) {
+            log.error("REQUEST_MATCH 오류: userId={}", userId, e);
+            return WebSocketDtos.MatchResponse.failure("매칭 요청 중 오류가 발생했습니다.");
+        }
+    }
+
+    /**
+     * CANCEL_MATCH 명령 처리
+     * 
+     * 클라이언트가 매칭을 취소할 때 호출
+     * 
+     * @param command CANCEL_MATCH 명령
+     * @param principal WebSocket 인증 정보
+     * @return MATCH_RESPONSE
+     */
+    @MessageMapping("/versus/match/cancel")
+    @SendToUser("/queue/versus/match")
+    public WebSocketDtos.MatchResponse handleCancelMatch(
+            @Payload WebSocketDtos.CancelMatchCommand command,
+            Principal principal
+    ) {
+        String userId = principal != null ? principal.getName() : null;
+
+        log.info("WebSocket CANCEL_MATCH 요청: userId={}, mode={}", userId, command.mode());
+
+        if (userId == null) {
+            return WebSocketDtos.MatchResponse.failure("인증이 필요합니다.");
+        }
+
+        try {
+            // 매칭 취소
+            redisMatchingQueueService.cancelMatch(userId);
+
+            log.info("CANCEL_MATCH 성공: userId={}", userId);
+
+            return WebSocketDtos.MatchResponse.success(false, null, null);
+
+        } catch (Exception e) {
+            log.error("CANCEL_MATCH 오류: userId={}", userId, e);
+            return WebSocketDtos.MatchResponse.failure("매칭 취소 중 오류가 발생했습니다.");
         }
     }
 }

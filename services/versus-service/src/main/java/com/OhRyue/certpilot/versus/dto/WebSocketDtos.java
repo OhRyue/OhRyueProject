@@ -189,6 +189,92 @@ public class WebSocketDtos {
             return new HeartbeatResponse(TYPE, false, roomId, message);
         }
     }
+
+    /**
+     * REQUEST_MATCH 명령 메시지
+     *
+     * 클라이언트 -> 서버: /app/versus/match/request
+     *
+     * 예시:
+     * {
+     *   "command": "REQUEST_MATCH",
+     *   "mode": "DUEL",
+     *   "certId": "1",
+     *   "matchingMode": "CATEGORY",
+     *   "topicId": 101,
+     *   "difficulty": null,
+     *   "examMode": "WRITTEN"
+     * }
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record RequestMatchCommand(
+            @NotNull
+            String mode, // DUEL, TOURNAMENT
+            @NotNull
+            String certId,
+            @NotNull
+            String matchingMode, // CATEGORY, DIFFICULTY
+            Long topicId, // CATEGORY 모드일 때 필수
+            String difficulty, // DIFFICULTY 모드일 때 필수 (EASY, NORMAL, HARD)
+            @NotNull
+            String examMode // WRITTEN, PRACTICAL
+    ) {
+        public static final String COMMAND = "REQUEST_MATCH";
+    }
+
+    /**
+     * CANCEL_MATCH 명령 메시지
+     *
+     * 클라이언트 -> 서버: /app/versus/match/cancel
+     *
+     * 예시:
+     * {
+     *   "command": "CANCEL_MATCH",
+     *   "mode": "DUEL"
+     * }
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record CancelMatchCommand(
+            @NotNull
+            String mode // DUEL, TOURNAMENT
+    ) {
+        public static final String COMMAND = "CANCEL_MATCH";
+    }
+
+    /**
+     * REQUEST_MATCH / CANCEL_MATCH 응답 메시지
+     *
+     * 서버 -> 클라이언트: /user/queue/versus/match
+     *
+     * 예시:
+     * {
+     *   "type": "MATCH_RESPONSE",
+     *   "success": true,
+     *   "matching": true,
+     *   "roomId": null,
+     *   "waitingCount": 1,
+     *   "message": null
+     * }
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record MatchResponse(
+            String type,
+            boolean success,
+            boolean matching, // 매칭 중 여부
+            Long roomId, // 매칭 성공 시 방 ID
+            Integer waitingCount, // 대기 인원 수
+            String message
+    ) {
+        public static final String TYPE = "MATCH_RESPONSE";
+
+        public static MatchResponse success(boolean matching, Long roomId, Integer waitingCount) {
+            return new MatchResponse(TYPE, true, matching, roomId, waitingCount, null);
+        }
+
+        public static MatchResponse failure(String message) {
+            return new MatchResponse(TYPE, false, false, null, null, message);
+        }
+    }
 }
 
 
