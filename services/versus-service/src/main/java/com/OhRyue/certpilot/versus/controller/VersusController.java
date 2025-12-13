@@ -4,6 +4,7 @@ import com.OhRyue.certpilot.versus.domain.MatchMode;
 import com.OhRyue.certpilot.versus.domain.MatchStatus;
 import com.OhRyue.certpilot.versus.dto.MatchingDtos;
 import com.OhRyue.certpilot.versus.dto.VersusDtos;
+import com.OhRyue.certpilot.versus.service.AnswerSubmissionService;
 import com.OhRyue.certpilot.versus.service.DemoMatchingService;
 import com.OhRyue.certpilot.versus.service.MatchingQueueService;
 import com.OhRyue.certpilot.versus.service.VersusMatchService;
@@ -35,6 +36,7 @@ public class VersusController {
   private final MatchingQueueService matchingQueueService;
   private final DemoMatchingService demoMatchingService;
   private final VersusMatchService versusMatchService;
+  private final AnswerSubmissionService answerSubmissionService;
 
   @Operation(summary = "헬스 체크")
   @GetMapping("/ping")
@@ -350,7 +352,8 @@ public class VersusController {
       @Valid @RequestBody VersusDtos.SubmitAnswerReq req) {
     // 🔹 여기서도 userId는 JWT에서만 가져옴
     String userId = AuthUserUtil.getCurrentUserId();
-    return versusService.submitAnswer(roomId, userId, req);
+    // AnswerSubmissionService를 통해 답안 제출 처리 (HTTP/WebSocket 공통 로직)
+    return answerSubmissionService.submitAnswer(roomId, userId, req);
   }
 
   @Operation(

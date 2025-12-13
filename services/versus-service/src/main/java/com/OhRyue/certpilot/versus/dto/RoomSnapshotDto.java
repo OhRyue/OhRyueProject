@@ -170,3 +170,4 @@ public record RoomSnapshotDto(
     ) {}
 }
 
+

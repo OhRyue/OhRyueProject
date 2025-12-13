@@ -1,7 +1,9 @@
 package com.OhRyue.certpilot.versus.controller;
 
 import com.OhRyue.certpilot.versus.dto.RoomSnapshotDto;
+import com.OhRyue.certpilot.versus.dto.VersusDtos;
 import com.OhRyue.certpilot.versus.dto.WebSocketDtos;
+import com.OhRyue.certpilot.versus.service.AnswerSubmissionService;
 import com.OhRyue.certpilot.versus.service.RoomSnapshotService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,8 +20,8 @@ import java.security.Principal;
  * STOMP 기반 WebSocket 메시징 처리
  * 
  * 엔드포인트:
- * - 클라이언트 -> 서버: /app/versus/join
- * - 서버 -> 클라이언트: /user/queue/versus/join
+ * - 클라이언트 -> 서버: /app/versus/join, /app/versus/answer
+ * - 서버 -> 클라이언트: /user/queue/versus/join, /user/queue/versus/answer
  */
 @Controller
 @RequiredArgsConstructor
@@ -27,6 +29,7 @@ import java.security.Principal;
 public class WebSocketController {
 
     private final RoomSnapshotService roomSnapshotService;
+    private final AnswerSubmissionService answerSubmissionService;
 
     /**
      * JOIN_ROOM 명령 처리
@@ -72,6 +75,67 @@ public class WebSocketController {
         } catch (Exception e) {
             log.error("JOIN_ROOM 오류: userId={}, roomId={}", userId, roomId, e);
             return WebSocketDtos.JoinRoomResponse.failure(roomId, "방 입장 중 오류가 발생했습니다.");
+        }
+    }
+
+    /**
+     * SUBMIT_ANSWER 명령 처리
+     * 
+     * 클라이언트가 답안을 제출할 때 호출
+     * - roomId, questionId, userAnswer를 받아서 답안 제출 처리
+     * - userId는 WebSocket 인증 정보(Principal)에서 추출
+     * 
+     * @param command SUBMIT_ANSWER 명령
+     * @param principal WebSocket 인증 정보 (JWT에서 추출된 userId)
+     * @return SUBMIT_ANSWER 응답 (스코어보드 포함)
+     */
+    @MessageMapping("/versus/answer")
+    @SendToUser("/queue/versus/answer")
+    public WebSocketDtos.SubmitAnswerResponse handleSubmitAnswer(
+            @Payload WebSocketDtos.SubmitAnswerCommand command,
+            Principal principal
+    ) {
+        String userId = principal != null ? principal.getName() : null;
+        Long roomId = command.roomId();
+        Long questionId = command.questionId();
+
+        log.info("WebSocket SUBMIT_ANSWER 요청: userId={}, roomId={}, questionId={}",
+                userId, roomId, questionId);
+
+        if (roomId == null) {
+            log.warn("SUBMIT_ANSWER: roomId가 null입니다. userId={}", userId);
+            return WebSocketDtos.SubmitAnswerResponse.failure(null, null, "roomId는 필수입니다.");
+        }
+
+        if (questionId == null) {
+            log.warn("SUBMIT_ANSWER: questionId가 null입니다. userId={}, roomId={}", userId, roomId);
+            return WebSocketDtos.SubmitAnswerResponse.failure(roomId, null, "questionId는 필수입니다.");
+        }
+
+        if (command.userAnswer() == null || command.userAnswer().isBlank()) {
+            log.warn("SUBMIT_ANSWER: userAnswer가 비어있습니다. userId={}, roomId={}, questionId={}",
+                    userId, roomId, questionId);
+            return WebSocketDtos.SubmitAnswerResponse.failure(roomId, questionId, "userAnswer는 필수입니다.");
+        }
+
+        try {
+            // AnswerSubmissionService를 통해 답안 제출 처리
+            VersusDtos.ScoreBoardResp scoreboard = answerSubmissionService.submitAnswer(
+                    roomId, userId, command);
+
+            log.info("SUBMIT_ANSWER 성공: userId={}, roomId={}, questionId={}",
+                    userId, roomId, questionId);
+
+            return WebSocketDtos.SubmitAnswerResponse.success(roomId, questionId, scoreboard);
+
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            log.warn("SUBMIT_ANSWER 실패: userId={}, roomId={}, questionId={}, error={}",
+                    userId, roomId, questionId, e.getReason());
+            return WebSocketDtos.SubmitAnswerResponse.failure(roomId, questionId, e.getReason());
+
+        } catch (Exception e) {
+            log.error("SUBMIT_ANSWER 오류: userId={}, roomId={}, questionId={}", userId, roomId, questionId, e);
+            return WebSocketDtos.SubmitAnswerResponse.failure(roomId, questionId, "답안 제출 중 오류가 발생했습니다.");
         }
     }
 }
