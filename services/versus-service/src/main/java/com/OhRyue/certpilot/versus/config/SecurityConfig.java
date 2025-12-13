@@ -31,6 +31,12 @@ public class SecurityConfig {
       "/actuator/prometheus"
   };
 
+  // WebSocket 엔드포인트 (HandshakeInterceptor에서 JWT 인증 처리)
+  private static final String[] WEBSOCKET = {
+      "/ws/versus/**",
+      "/ws/versus"
+  };
+
   private final JwtAuthFilter jwtAuthFilter;
 
   @Bean
@@ -52,6 +58,9 @@ public class SecurityConfig {
             .requestMatchers(SWAGGER).permitAll()
             .requestMatchers(ACTUATOR).permitAll()
             .requestMatchers("/actuator/**").permitAll()
+            // WebSocket 엔드포인트는 HandshakeInterceptor에서 JWT 인증 처리
+            // Security Filter Chain에서는 허용 (인증은 Handshake 단계에서 수행)
+            .requestMatchers(WEBSOCKET).permitAll()
             // 대전/토너먼트/골든벨 API 는 전부 로그인 사용자 기준이므로 인증 필수
             .requestMatchers("/api/versus/**").authenticated()
             .anyRequest().permitAll()

@@ -15,6 +15,18 @@ spring:
     parser:
       allow-unquoted-control-chars: true
       allow-numeric-leading-zeros: true
+  # Redis 설정 (WebSocket 메시징 및 세션 관리용)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
 
 auth:
   jwt:
