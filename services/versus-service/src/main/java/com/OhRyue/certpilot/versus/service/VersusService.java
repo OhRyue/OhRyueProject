@@ -64,6 +64,7 @@ public class VersusService {
     private final MatchEventRepository eventRepository;
     private final VersusRealtimeService realtimeService;
     private final RealtimeEventService realtimeEventService;
+    private final RedisLockService redisLockService;
     private final ObjectMapper objectMapper;
     private final StudyServiceClient studyServiceClient;
     private final ProgressServiceClient progressServiceClient;
@@ -860,14 +861,43 @@ public class VersusService {
         return new VersusDtos.QuestionAnswersResp(questionId, answerInfos);
     }
 
+    /**
+     * 답안 제출 후 매치 진행 처리
+     * 
+     * 분산락을 사용하여 여러 인스턴스에서 중복 실행 방지
+     * - 다음 문제로 이동
+     * - 라운드 종료 / 탈락 처리
+     * - 매치 종료 처리
+     * 
+     * @param room 방 정보
+     * @param question 현재 문제
+     * @param scoreboard 스코어보드
+     * @return ModeResolution
+     */
     public ModeResolution handleModeAfterAnswer(MatchRoom room,
                                                 MatchQuestion question,
                                                 VersusDtos.ScoreBoardResp scoreboard) {
-        return switch (room.getMode()) {
-            case DUEL -> handleDuelProgress(room, question, scoreboard);
-            case TOURNAMENT -> handleTournamentProgress(room, question, scoreboard);
-            case GOLDENBELL -> handleGoldenbellProgress(room, question, scoreboard);
-        };
+        Long roomId = room.getId();
+        
+        // 분산락을 획득한 경우에만 처리
+        // 락 타임아웃: 30초 (처리 시간이 오래 걸릴 수 있으므로 충분히 설정)
+        ModeResolution result = redisLockService.executeWithLock(roomId, 30, () -> {
+            return switch (room.getMode()) {
+                case DUEL -> handleDuelProgress(room, question, scoreboard);
+                case TOURNAMENT -> handleTournamentProgress(room, question, scoreboard);
+                case GOLDENBELL -> handleGoldenbellProgress(room, question, scoreboard);
+            };
+        });
+        
+        // 락 획득 실패 시 (다른 인스턴스가 이미 처리 중)
+        if (result == null) {
+            log.debug("Lock acquisition failed for handleModeAfterAnswer: roomId={} (already processing by another instance)", 
+                    roomId);
+            // 락 획득 실패 시 아무것도 하지 않음 (다른 인스턴스가 처리 중)
+            return new ModeResolution(false, false, false);
+        }
+        
+        return result;
     }
 
     private ModeResolution handleDuelProgress(MatchRoom room,

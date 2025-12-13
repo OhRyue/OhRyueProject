@@ -43,13 +43,15 @@ public class TimeoutAnswerService {
     private final MatchParticipantRepository participantRepository;
     private final MatchEventRepository eventRepository;
     private final VersusService versusService;
+    private final RedisLockService redisLockService;
     private final ObjectMapper objectMapper;
 
     /**
      * 매 10초마다 실행: 시간 초과 답안 자동 처리
+     * 
+     * 분산락을 사용하여 여러 인스턴스에서 중복 실행 방지
      */
     @Scheduled(fixedRate = 10000) // 10초마다
-    @Transactional
     public void processTimeoutAnswers() {
         Instant now = Instant.now();
         
@@ -58,7 +60,12 @@ public class TimeoutAnswerService {
         
         for (MatchRoom room : ongoingRooms) {
             try {
-                processRoomTimeoutAnswers(room, now);
+                // 분산락을 획득한 경우에만 처리
+                // 락 타임아웃: 30초 (처리 시간이 오래 걸릴 수 있으므로 충분히 설정)
+                redisLockService.executeWithLock(room.getId(), 30, () -> {
+                    processRoomTimeoutAnswers(room, now);
+                    return null;
+                });
             } catch (Exception e) {
                 log.error("Failed to process timeout answers for room {}: {}", 
                     room.getId(), e.getMessage(), e);
@@ -68,7 +75,10 @@ public class TimeoutAnswerService {
 
     /**
      * 특정 방의 시간 초과 답안 처리
+     * 
+     * 분산락으로 보호되어 있어 여러 인스턴스에서 중복 실행되지 않음
      */
+    @Transactional
     private void processRoomTimeoutAnswers(MatchRoom room, Instant now) {
         // 현재 진행 중인 문제 찾기 (가장 최근 QUESTION_STARTED 이벤트 사용)
         MatchQuestion currentQuestion = getCurrentQuestion(room.getId());
@@ -123,6 +133,7 @@ public class TimeoutAnswerService {
                 timeInfo.endTime, now);
             
             // 매치 진행 상태 확인 및 다음 문제로 진행
+            // 이미 분산락으로 보호되어 있으므로 추가 락 불필요
             try {
                 VersusDtos.ScoreBoardResp scoreboard = versusService.computeScoreboard(room);
                 versusService.handleModeAfterAnswer(room, currentQuestion, scoreboard);
@@ -176,6 +187,7 @@ public class TimeoutAnswerService {
             room.getId(), question.getQuestionId(), userId);
 
         // 매치 진행 상태 확인 (모든 답변이 오지 않아도 시간 제한 지나면 진행)
+        // 이미 분산락으로 보호되어 있으므로 추가 락 불필요
         try {
             VersusDtos.ScoreBoardResp scoreboard = versusService.computeScoreboard(room);
             versusService.handleModeAfterAnswer(room, question, scoreboard);
