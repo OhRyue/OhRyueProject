@@ -45,9 +45,16 @@ public class SecurityConfig {
             session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
         )
         .exceptionHandling(ex ->
-            ex.authenticationEntryPoint((request, response, authException) ->
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "로그인이 필요합니다")
-            )
+            ex.authenticationEntryPoint((request, response, authException) -> {
+                // 내부 서비스 간 통신용 API는 인증 예외가 발생하지 않아야 하므로
+                // permitAll()로 설정되어 있어 예외가 발생하지 않지만, 
+                // 혹시 모를 경우를 대비해 internal 경로는 예외 처리 제외
+                String path = request.getRequestURI();
+                if (!path.startsWith("/api/account/internal")) {
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "로그인이 필요합니다");
+                }
+                // internal 경로의 경우 그냥 통과 (permitAll에 의해 이미 허용됨)
+            })
         )
         .authorizeHttpRequests(auth -> auth
             // CORS preflight OPTIONS 요청 허용
@@ -74,6 +81,8 @@ public class SecurityConfig {
                 "/api/mail/**"
             ).permitAll()
             // 내부 서비스 간 통신용 API (서비스 간 통신용)
+            // Docker internal network에서만 호출되는 엔드포인트로, Authorization 없이도 접근 가능
+            // TODO: 향후 서비스 간 인증(서버투서버 토큰, mTLS 등)으로 확장 가능
             .requestMatchers("/api/account/internal/**").permitAll()
             // 그 외는 모두 인증 필요
             .anyRequest().authenticated()

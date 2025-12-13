@@ -35,6 +35,7 @@ public class BotPlayService {
     private final MatchParticipantRepository participantRepository;
     private final GoldenbellStateRepository goldenbellStateRepository;
     private final VersusService versusService;
+    private final RealtimeEventService realtimeEventService;
     private final com.OhRyue.certpilot.versus.client.StudyServiceClient studyServiceClient;
     private final ObjectMapper objectMapper;
     private final Random random = new Random();
@@ -1273,9 +1274,11 @@ public class BotPlayService {
     }
 
     /**
-     * 이벤트 저장
+     * 이벤트 저장 및 실시간 브로드캐스트
      */
     private void saveEvent(Long roomId, String eventType, Map<String, Object> payload) {
+        MatchEvent savedEvent = null;
+        
         try {
             String payloadJson = payload == null || payload.isEmpty()
                     ? null
@@ -1287,10 +1290,21 @@ public class BotPlayService {
                     .payloadJson(payloadJson)
                     .build();
             
-            eventRepository.save(event);
+            savedEvent = eventRepository.save(event);
         } catch (Exception e) {
             log.warn("이벤트 저장 실패: roomId={}, eventType={}, error={}", 
                     roomId, eventType, e.getMessage());
+            return;
+        }
+
+        // DB 저장 성공 후 WebSocket으로 실시간 브로드캐스트
+        if (savedEvent != null) {
+            try {
+                realtimeEventService.broadcastEvent(savedEvent);
+            } catch (Exception e) {
+                log.warn("Failed to broadcast event via WebSocket - roomId={}, eventType={}, error={}",
+                        roomId, eventType, e.getMessage());
+            }
         }
     }
 }

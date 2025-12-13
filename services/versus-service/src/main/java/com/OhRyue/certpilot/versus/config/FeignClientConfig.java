@@ -65,8 +65,16 @@ public class FeignClientConfig {
                         log.info("Feign Client에 JWT 토큰 전달: url={}, method={}, token={}...", 
                                 template.url(), template.method(), authorization.substring(0, Math.min(30, authorization.length())));
                     } else {
-                        log.warn("Feign Client 요청에 Authorization 헤더가 없습니다. url={}, method={}, RequestContextHolder: {}, ThreadLocal: {}", 
-                                template.url(), template.method(), attributes != null, AsyncConfig.getJwtToken() != null);
+                        // internal API 호출의 경우 Authorization 헤더가 없어도 정상 (permitAll 설정)
+                        String url = template.url();
+                        boolean isInternalApi = url != null && (url.contains("/internal/") || url.contains("/api/account/internal"));
+                        if (isInternalApi) {
+                            log.debug("Feign Client internal API 호출 (Authorization 없음): url={}, method={}", 
+                                    url, template.method());
+                        } else {
+                            log.warn("Feign Client 요청에 Authorization 헤더가 없습니다. url={}, method={}, RequestContextHolder: {}, ThreadLocal: {}", 
+                                    url, template.method(), attributes != null, AsyncConfig.getJwtToken() != null);
+                        }
                     }
                 } catch (Exception e) {
                     log.error("Feign Client에 JWT 토큰 전달 중 오류 발생: {}", e.getMessage(), e);

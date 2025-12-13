@@ -63,6 +63,7 @@ public class VersusService {
     private final GoldenbellStateRepository goldenbellStateRepository;
     private final MatchEventRepository eventRepository;
     private final VersusRealtimeService realtimeService;
+    private final RealtimeEventService realtimeEventService;
     private final ObjectMapper objectMapper;
     private final StudyServiceClient studyServiceClient;
     private final ProgressServiceClient progressServiceClient;
@@ -2766,7 +2767,22 @@ public class VersusService {
         return "WRITTEN";
     }
 
+    /**
+     * 이벤트 기록 및 실시간 브로드캐스트
+     * 
+     * 1. DB에 이벤트 저장 (기존 동작 유지)
+     * 2. WebSocket으로 실시간 브로드캐스트 (/topic/versus/rooms/{roomId})
+     * 
+     * 브로드캐스트 실패는 로그만 남기고 예외를 전파하지 않음
+     * (DB 저장은 성공했으므로 게임 로직에 영향을 주지 않음)
+     * 
+     * @param roomId 방 ID
+     * @param type 이벤트 타입 (예: PLAYER_JOINED, MATCH_STARTED, QUESTION_STARTED 등)
+     * @param payload 이벤트 페이로드 (Map)
+     */
     private void recordEvent(Long roomId, String type, Map<String, Object> payload) {
+        MatchEvent savedEvent = null;
+        
         try {
             String payloadJson = payload == null || payload.isEmpty()
                     ? null
@@ -2776,7 +2792,7 @@ public class VersusService {
                     .eventType(type)
                     .payloadJson(payloadJson)
                     .build();
-            eventRepository.save(event);
+            savedEvent = eventRepository.save(event);
         } catch (JsonProcessingException e) {
             log.warn("Failed to serialize payload for match event {} in room {}: {}", type, roomId, e.getMessage());
             MatchEvent event = MatchEvent.builder()
@@ -2784,7 +2800,18 @@ public class VersusService {
                     .eventType(type)
                     .payloadJson(null)
                     .build();
-            eventRepository.save(event);
+            savedEvent = eventRepository.save(event);
+        }
+
+        // DB 저장 성공 후 WebSocket으로 실시간 브로드캐스트
+        if (savedEvent != null) {
+            try {
+                realtimeEventService.broadcastEvent(savedEvent);
+            } catch (Exception e) {
+                // 브로드캐스트 실패는 로그만 남기고 예외를 전파하지 않음
+                log.warn("Failed to broadcast event via WebSocket - roomId={}, eventType={}, error={}",
+                        roomId, type, e.getMessage());
+            }
         }
     }
 
