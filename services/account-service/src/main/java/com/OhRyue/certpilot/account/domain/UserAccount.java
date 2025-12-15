@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
  * - email UNIQUE
  * - password_hash
  * - status ENUM('ACTIVE','BLOCKED','DELETED')
+ * - signup_type ENUM('EMAIL','SOCIAL')
  * - created_at, last_login_at
  */
 @Entity
@@ -35,6 +36,11 @@ public class UserAccount {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 16)
   private AccountStatus status = AccountStatus.BLOCKED;
+
+  @Builder.Default
+  @Enumerated(EnumType.STRING)
+  @Column(name = "signup_type", nullable = false, length = 16)
+  private SignupType signupType = SignupType.EMAIL;
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
