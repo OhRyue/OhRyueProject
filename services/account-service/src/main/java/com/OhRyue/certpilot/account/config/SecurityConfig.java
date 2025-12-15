@@ -73,6 +73,9 @@ public class SecurityConfig {
                 "/api/account/send-verification",
                 "/api/account/verify-email",
                 "/api/account/login",
+                "/api/account/login/google",
+                "/api/account/login/kakao",
+                "/api/account/login/naver",
                 "/api/account/check-userId",
                 "/api/account/forgot-password",
                 "/api/account/forgot-password/verify",
@@ -80,6 +83,7 @@ public class SecurityConfig {
                 "/api/account/refresh",
                 "/api/mail/**"
             ).permitAll()
+            // 소셜 계정 연결은 인증 필요
             // 내부 서비스 간 통신용 API (서비스 간 통신용)
             // Docker internal network에서만 호출되는 엔드포인트로, Authorization 없이도 접근 가능
             // TODO: 향후 서비스 간 인증(서버투서버 토큰, mTLS 등)으로 확장 가능

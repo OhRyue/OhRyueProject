@@ -26,10 +26,10 @@ public class UserAccount {
   @Column(length = 100, nullable = false)
   private String id; // 예: 'ohryue' (username을 PK로 사용)
 
-  @Column(nullable = false, unique = true, length = 255)
+  @Column(nullable = true, unique = true, length = 255)
   private String email;
 
-  @Column(name = "password_hash", nullable = false, length = 255)
+  @Column(name = "password_hash", nullable = true, length = 255)
   private String passwordHash;
 
   @Builder.Default

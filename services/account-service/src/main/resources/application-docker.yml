@@ -52,6 +52,15 @@ security:
   jwt:
     hmac-secret: ${SECURITY_JWT_HMAC_SECRET:${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}}
 
+google:
+  oauth2:
+    client-id: ${GOOGLE_CLIENT_ID:}
+
+naver:
+  oauth2:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+
 management:
   endpoints:
     web:
