@@ -4340,8 +4340,12 @@ public class VersusService {
                                 : boardItem != null ? boardItem.correctCount() : 0;
                         Integer totalCount = agg != null ? agg.getTotalCount().intValue()
                                 : boardItem != null ? boardItem.totalCount() : 0;
-                        Long totalTimeMs = agg != null ? agg.getTotalTimeMs()
-                                : boardItem != null ? boardItem.totalTimeMs() : 0L;
+                        Long totalTimeMs = Optional.ofNullable(agg)
+                                .map(MatchAnswerRepository.AnswerAggregate::getTotalTimeMs)
+                                .orElse(Optional.ofNullable(boardItem)
+                                        .map(VersusDtos.ScoreBoardItem::totalTimeMs)
+                                        .orElse(0L));
+                                                        
                         return new ProgressServiceClient.ParticipantResult(
                                 p.getUserId(),
                                 score,
@@ -4408,13 +4412,14 @@ public class VersusService {
                         .map(item -> {
                             List<ProgressServiceClient.AnswerDetail> answers = collectParticipantAnswers(
                                     room.getId(), item.userId());
+                            Long totalTimeMs = Optional.ofNullable(item.totalTimeMs()).orElse(0L);
                             return new ProgressServiceClient.ParticipantResult(
                                     item.userId(),
                                     item.score(),
                                     item.rank(),
                                     item.correctCount(),
                                     item.totalCount(),
-                                    item.totalTimeMs(),
+                                    totalTimeMs,
                                     answers
                             );
                         })

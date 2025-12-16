@@ -1,20 +1,21 @@
 package com.OhRyue.certpilot.versus.service;
 
 import com.OhRyue.certpilot.versus.dto.RealtimeEventDto;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.connection.Message;
+import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Redis Pub/Sub 이벤트 구독자
- * 
+ *
  * Redis에서 수신한 이벤트를 WebSocket으로 브로드캐스트
- * 
+ *
  * 채널: versus:room:{roomId}
  * - 모든 인스턴스가 구독
  * - 수신한 이벤트를 WebSocket으로 브로드캐스트
@@ -22,7 +23,7 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class RealtimeEventSubscriber {
+public class RealtimeEventSubscriber implements MessageListener {
 
     private static final String TOPIC_PREFIX = "/topic/versus/rooms";
 
@@ -31,15 +32,40 @@ public class RealtimeEventSubscriber {
 
     /**
      * Redis에서 수신한 메시지 처리
-     * 
-     * @param message Redis에서 수신한 메시지 (JSON 문자열)
-     * @param pattern 구독한 패턴 (versus:room:*)
+     *
+     * RedisMessageListenerContainer가 호출하는 메서드
+     * - 시그니처: (Message message, byte[] pattern)
+     * - Spring Data Redis 표준 인터페이스
+     *
+     * @param message Redis에서 수신한 메시지
+     * @param pattern 구독한 패턴
      */
-    public void onMessage(String message, String pattern) {
+    @Override
+    public void onMessage(Message message, byte[] pattern) {
         try {
+            if (message == null || message.getBody() == null) {
+                log.warn("RealtimeEventSubscriber: Received null Redis message");
+                return;
+            }
+
+            String messageStr = new String(message.getBody(), StandardCharsets.UTF_8);
+            String channelStr = message.getChannel() != null
+                    ? new String(message.getChannel(), StandardCharsets.UTF_8)
+                    : "unknown";
+            String patternStr = pattern != null
+                    ? new String(pattern, StandardCharsets.UTF_8)
+                    : "unknown";
+
+            log.debug(
+                "RealtimeEventSubscriber: Message received - channel={}, pattern={}, messageLength={}",
+                channelStr,
+                patternStr,
+                messageStr.length()
+            );
+
             // JSON 문자열을 RealtimeEventDto로 파싱
             RealtimeEventDto eventDto = objectMapper.readValue(
-                    message, 
+                    messageStr,
                     RealtimeEventDto.class
             );
 
@@ -54,15 +80,19 @@ public class RealtimeEventSubscriber {
             // WebSocket으로 브로드캐스트
             messagingTemplate.convertAndSend(topic, eventDto);
 
-            log.debug("RealtimeEventSubscriber: Event received from Redis and broadcasted - roomId={}, eventType={}, topic={}",
-                    eventDto.roomId(), eventDto.eventType(), topic);
+            log.debug(
+                "RealtimeEventSubscriber: Event broadcasted - roomId={}, eventType={}, topic={}",
+                eventDto.roomId(),
+                eventDto.eventType(),
+                topic
+            );
 
         } catch (Exception e) {
-            log.error("RealtimeEventSubscriber: Failed to process message from Redis - pattern={}, error={}",
-                    pattern, e.getMessage(), e);
+            log.error(
+                "RealtimeEventSubscriber: Failed to process Redis message - error={}",
+                e.getMessage(),
+                e
+            );
         }
     }
 }
-
-
-

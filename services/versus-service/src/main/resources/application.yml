@@ -31,3 +31,10 @@ spring:
 auth:
   jwt:
     secret: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}
+  # 서비스 간 내부 호출용 JWT 설정
+  internal:
+    jwt:
+      secret: ${INTERNAL_JWT_SECRET:internal-secret-key-change-in-production}
+      issuer: ${INTERNAL_JWT_ISSUER:certpilot-internal}
+      audience: ${INTERNAL_JWT_AUDIENCE:study-service}
+      expiration-minutes: ${INTERNAL_JWT_EXPIRATION_MINUTES:15}

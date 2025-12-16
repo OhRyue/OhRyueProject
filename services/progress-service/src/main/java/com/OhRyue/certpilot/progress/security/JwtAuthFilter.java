@@ -28,9 +28,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
 
     public JwtAuthFilter(
-            @Value("${auth.jwt.secret:${jwt.secret-key:}}") String secret // 새/기존 둘 다 지원
+            @Value("${auth.jwt.secret:${jwt.secret-key:}}") String secret
     ) {
         this.jwtUtil = new JwtUtil(secret);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+
+        // 내부 전용 경로는 "유저 JWT 필터"가 절대 먼저 타면 안 됩니다.
+        // (HS512 키 길이 오류/노이즈 방지)
+        if (isInternalPath(path)) return true;
+
+        // Swagger / actuator 등 공개 경로도 스킵
+        return isPublicPath(path);
     }
 
     @Override
@@ -39,12 +51,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         String path = request.getRequestURI();
-
-        // Swagger / actuator 등 공개 경로는 통과
-        if (isPublicPath(path)) {
-            filterChain.doFilter(request, response);
-            return;
-        }
 
         String userIdHeader = request.getHeader("X-User-Id");
         String rolesHeader = request.getHeader("X-User-Roles");
@@ -55,11 +61,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         try {
             if (StringUtils.hasText(userIdHeader)) {
+                // Gateway가 주입한 헤더 신뢰
                 userId = userIdHeader;
                 if (StringUtils.hasText(rolesHeader)) {
                     roles = rolesHeader.split(",");
                 }
             } else if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
+                // 직접 Bearer 토큰 인증
                 userId = jwtUtil.getUserId(authHeader);
                 roles = jwtUtil.getRoles(authHeader);
             }
@@ -71,22 +79,26 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         .map(SimpleGrantedAuthority::new)
                         .collect(Collectors.toList());
 
-                var auth = new UsernamePasswordAuthenticationToken(
-                        userId, null, authorities
-                );
+                var auth = new UsernamePasswordAuthenticationToken(userId, null, authorities);
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
 
-                log.debug("[progress-service] ✅ JWT 인증 성공 - userId: {}, roles: {}, path: {}",
+                log.debug("[progress-service] ✅ User JWT 인증 성공 - userId: {}, roles: {}, path: {}",
                         userId, Arrays.toString(roles), path);
             }
 
         } catch (Exception e) {
-            log.warn("[progress-service] ❌ JWT 인증 실패 - path: {}, error: {}", path, e.getMessage());
+            log.warn("[progress-service] ❌ User JWT 인증 실패 - path: {}, error: {}", path, e.getMessage());
             SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isInternalPath(String path) {
+        return path.startsWith("/api/progress/versus/")
+                || path.startsWith("/api/progress/internal/")
+                || path.startsWith("/api/progress/notifications/create");
     }
 
     private boolean isPublicPath(String path) {

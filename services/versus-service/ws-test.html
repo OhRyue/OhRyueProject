@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>CertPilot Versus WebSocket Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    button {
+      margin: 5px;
+      padding: 10px 15px;
+      cursor: pointer;
+    }
+    input, select {
+      margin: 5px;
+      padding: 8px;
+      width: 300px;
+    }
+    #log {
+      background: #f5f5f5;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      max-height: 500px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .success { color: green; }
+    .error { color: red; }
+    .info { color: blue; }
+    .muted { color: #666; }
+    .stateBox {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 10px 12px;
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .pill {
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #ddd;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <h1>CertPilot Versus WebSocket Test</h1>
+
+  <div class="section">
+    <h2>0. 현재 상태</h2>
+    <div class="stateBox">
+      <div>connected: <span id="stateConnected" class="pill">false</span></div>
+      <div>roomId: <span id="stateRoomId" class="pill">null</span></div>
+      <div>questionId: <span id="stateQuestionId" class="pill">null</span></div>
+      <div>subscribed: <span id="stateSubscribed" class="pill">false</span></div>
+      <div>heartbeat: <span id="stateHeartbeat" class="pill">stopped</span></div>
+    </div>
+    <div class="muted" style="margin-top:8px;">
+      MATCH 성공 후, 자동으로 (1) room topic 구독 → (2) JOIN_ROOM 전송 → (3) QUESTION_STARTED 이벤트에서 questionId 자동 세팅 됩니다.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>1. 연결 설정</h2>
+    <input type="text" id="jwtToken" placeholder="JWT 토큰을 입력하세요" style="width: 500px;" />
+    <br />
+    <input type="text" id="serverUrl" value="http://localhost:8085" placeholder="서버 URL" />
+    <br />
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+    <span id="connectionStatus" style="margin-left: 20px;"></span>
+  </div>
+
+  <div class="section">
+    <h2>2. 방 입장 (JOIN_ROOM)</h2>
+    <input type="number" id="roomId" value="1" placeholder="Room ID" />
+    <button onclick="joinRoom()">JOIN_ROOM</button>
+  </div>
+
+  <div class="section">
+    <h2>3. 실시간 이벤트 구독</h2>
+    <input type="number" id="subscribeRoomId" value="1" placeholder="Room ID" />
+    <button onclick="subscribeRoomEvents()">Subscribe Room Events</button>
+    <button onclick="unsubscribeRoomEvents()">Unsubscribe</button>
+  </div>
+
+  <div class="section">
+    <h2>4. 답안 제출 (SUBMIT_ANSWER)</h2>
+    <input type="number" id="answerRoomId" value="1" placeholder="Room ID" />
+    <input type="number" id="questionId" value="1" placeholder="Question ID" />
+    <input type="text" id="userAnswer" value="A" placeholder="User Answer" />
+    <button onclick="submitAnswer()">SUBMIT_ANSWER</button>
+  </div>
+
+  <div class="section">
+    <h2>5. 하트비트 (HEARTBEAT)</h2>
+    <input type="number" id="heartbeatRoomId" value="1" placeholder="Room ID" />
+    <button onclick="sendHeartbeat()">Send Heartbeat</button>
+    <button onclick="startHeartbeat()">Start Auto Heartbeat (10s)</button>
+    <button onclick="stopHeartbeat()">Stop Auto Heartbeat</button>
+  </div>
+
+  <div class="section">
+    <h2>6. 매칭 (REQUEST_MATCH / CANCEL_MATCH)</h2>
+    <select id="matchMode">
+      <option value="DUEL">DUEL</option>
+      <option value="TOURNAMENT">TOURNAMENT</option>
+    </select>
+    <input type="text" id="certId" value="1" placeholder="Cert ID" />
+    <select id="matchingMode">
+      <option value="CATEGORY">CATEGORY</option>
+      <option value="DIFFICULTY">DIFFICULTY</option>
+    </select>
+    <input type="number" id="topicId" value="101" placeholder="Topic ID (CATEGORY)" />
+    <input type="text" id="difficulty" value="NORMAL" placeholder="Difficulty (DIFFICULTY)" />
+    <select id="examMode">
+      <option value="WRITTEN">WRITTEN</option>
+      <option value="PRACTICAL">PRACTICAL</option>
+    </select>
+    <br />
+    <button onclick="requestMatch()">REQUEST_MATCH</button>
+    <button onclick="cancelMatch()">CANCEL_MATCH</button>
+  </div>
+
+  <div class="section">
+    <h2>로그</h2>
+    <button onclick="clearLog()">Clear Log</button>
+    <pre id="log"></pre>
+  </div>
+
+  <script>
+    let stompClient = null;
+    let heartbeatInterval = null;
+    let roomEventSubscription = null;
+
+    // ---- Current state ----
+    let currentRoomId = null;
+    let currentQuestionId = null;
+    let isSubscribed = false;
+
+    function setState(connected) {
+      document.getElementById("stateConnected").textContent = String(connected);
+    }
+    function setStateRoom(roomId) {
+      currentRoomId = roomId ?? null;
+      document.getElementById("stateRoomId").textContent = currentRoomId === null ? "null" : String(currentRoomId);
+    }
+    function setStateQuestion(questionId) {
+      currentQuestionId = questionId ?? null;
+      document.getElementById("stateQuestionId").textContent = currentQuestionId === null ? "null" : String(currentQuestionId);
+    }
+    function setStateSubscribed(v) {
+      isSubscribed = !!v;
+      document.getElementById("stateSubscribed").textContent = String(isSubscribed);
+    }
+    function setStateHeartbeat(v) {
+      document.getElementById("stateHeartbeat").textContent = v;
+    }
+
+    function log(msg, type = 'info') {
+      const logElement = document.getElementById("log");
+      const timestamp = new Date().toLocaleTimeString();
+      const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+      logElement.innerHTML += `<span class="${className}">[${timestamp}] ${escapeHtml(msg)}</span>\n`;
+      logElement.scrollTop = logElement.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function clearLog() {
+      document.getElementById("log").textContent = '';
+    }
+
+    function updateConnectionStatus(connected) {
+      const statusElement = document.getElementById("connectionStatus");
+      if (connected) {
+        statusElement.textContent = "✅ Connected";
+        statusElement.style.color = "green";
+      } else {
+        statusElement.textContent = "❌ Disconnected";
+        statusElement.style.color = "red";
+      }
+      setState(connected);
+    }
+
+    // ---- payload에서 questionId 추출 (RealtimeEventDto.payload = Map) ----
+    function extractQuestionIdFromEvent(evt) {
+      if (!evt || !evt.payload) return null;
+
+      const p = evt.payload;
+
+      // 1) flat key 후보들
+      const flatCandidates = ["questionId", "question_id", "currentQuestionId", "qid"];
+      for (const k of flatCandidates) {
+        if (p[k] !== undefined && p[k] !== null) {
+          const v = Number(p[k]);
+          if (!Number.isNaN(v) && v > 0) return v;
+        }
+      }
+
+      // 2) nested: payload.question.id 형태
+      // (서버 구현에 따라 payload 구조가 달라질 수 있어 방어적으로 작성)
+      if (typeof p.question === "object" && p.question) {
+        if (p.question.id !== undefined && p.question.id !== null) {
+          const v = Number(p.question.id);
+          if (!Number.isNaN(v) && v > 0) return v;
+        }
+      }
+
+      // 3) 그래도 못 찾으면 null
+      return null;
+    }
+
+    function applyRoomIdToInputs(roomId) {
+      if (!roomId) return;
+      document.getElementById("roomId").value = roomId;
+      document.getElementById("subscribeRoomId").value = roomId;
+      document.getElementById("answerRoomId").value = roomId;
+      document.getElementById("heartbeatRoomId").value = roomId;
+      setStateRoom(roomId);
+    }
+
+    function applyQuestionIdToInputs(questionId) {
+      if (!questionId) return;
+      document.getElementById("questionId").value = questionId;
+      setStateQuestion(questionId);
+    }
+
+    function connect() {
+      const jwtToken = document.getElementById("jwtToken").value;
+      const serverUrl = document.getElementById("serverUrl").value;
+
+      if (!jwtToken) {
+        log("❌ JWT 토큰을 입력하세요", 'error');
+        return;
+      }
+
+      const socket = new SockJS(`${serverUrl}/ws/versus?token=${encodeURIComponent(jwtToken)}`);
+      stompClient = Stomp.over(socket);
+
+      stompClient.debug = function(str) {
+        // 필요 시 주석 해제
+        // log("STOMP: " + str);
+      };
+
+      stompClient.connect(
+        {},
+        function (frame) {
+          log("✅ CONNECTED", 'success');
+          log("Frame: " + JSON.stringify(frame, null, 2));
+          updateConnectionStatus(true);
+
+          subscribePersonalQueues();
+        },
+        function (error) {
+          log("❌ CONNECTION ERROR: " + error, 'error');
+          updateConnectionStatus(false);
+        }
+      );
+    }
+
+    function disconnect() {
+      if (stompClient) {
+        stopHeartbeat();
+        unsubscribeRoomEvents();
+
+        stompClient.disconnect();
+        stompClient = null;
+
+        log("🔌 DISCONNECTED", 'info');
+        updateConnectionStatus(false);
+
+        setStateRoom(null);
+        setStateQuestion(null);
+        setStateSubscribed(false);
+      }
+    }
+
+    function subscribePersonalQueues() {
+      if (!stompClient || !stompClient.connected) {
+        log("❌ 먼저 연결하세요", 'error');
+        return;
+      }
+
+      // JOIN_ROOM 응답 구독
+      stompClient.subscribe('/user/queue/versus/join', function (message) {
+        log("📨 JOIN_ROOM RESPONSE", 'success');
+        const body = safeJsonParse(message.body);
+        log(JSON.stringify(body, null, 2));
+
+        // join 응답에 roomId가 들어오는 경우도 있을 수 있어 방어적으로 세팅
+        if (body && body.roomId) {
+          applyRoomIdToInputs(Number(body.roomId));
+        }
+      });
+
+      // SUBMIT_ANSWER 응답 구독
+      stompClient.subscribe('/user/queue/versus/answer', function (message) {
+        log("📨 SUBMIT_ANSWER RESPONSE", 'success');
+        log(JSON.stringify(safeJsonParse(message.body), null, 2));
+      });
+
+      // HEARTBEAT 응답 구독
+      stompClient.subscribe('/user/queue/versus/heartbeat', function (message) {
+        log("📨 HEARTBEAT RESPONSE", 'info');
+        log(JSON.stringify(safeJsonParse(message.body), null, 2));
+      });
+
+      // MATCH 응답 구독
+      stompClient.subscribe('/user/queue/versus/match', function (message) {
+        log("📨 MATCH RESPONSE", 'success');
+        const response = safeJsonParse(message.body);
+        log(JSON.stringify(response, null, 2));
+
+        if (response && response.roomId) {
+          const roomId = Number(response.roomId);
+          log(`🎉 매칭 성공! roomId: ${roomId} -> 자동 구독/자동 JOIN 진행`, 'success');
+
+          // 1) roomId를 전역 + input에 반영
+          applyRoomIdToInputs(roomId);
+
+          // 2) 방 이벤트 구독을 먼저!
+          subscribeRoomEvents(true /* silent */);
+
+          // 3) 구독 이후 JOIN_ROOM 전송
+          joinRoom(true /* silent */);
+
+          // 4) 필요하면 자동 하트비트 시작 (원치 않으면 주석 처리)
+          // startHeartbeat(true /* silent */);
+        } else {
+          log("⚠️ MATCH 응답에 roomId가 없습니다. (matching=true 대기 상태일 수 있음)", 'info');
+        }
+      });
+
+      log("📡 개인 큐 구독 완료", 'success');
+    }
+
+    function safeJsonParse(str) {
+      try {
+        return JSON.parse(str);
+      } catch (e) {
+        return { raw: str, parseError: String(e) };
+      }
+    }
+
+    function joinRoom(silent = false) {
+      if (!stompClient || !stompClient.connected) {
+        log("❌ 먼저 연결하세요", 'error');
+        return;
+      }
+
+      const roomId = parseInt(document.getElementById("roomId").value);
+      if (!roomId) {
+        log("❌ Room ID를 입력하세요", 'error');
+        return;
+      }
+
+      const command = {
+        command: "JOIN_ROOM",
+        roomId: roomId
+      };
+
+      stompClient.send("/app/versus/join", {}, JSON.stringify(command));
+      if (!silent) log(`📤 JOIN_ROOM 전송: roomId=${roomId}`, 'info');
+    }
+
+    function subscribeRoomEvents(silent = false) {
+      if (!stompClient || !stompClient.connected) {
+        log("❌ 먼저 연결하세요", 'error');
+        return;
+      }
+
+      const roomId = parseInt(document.getElementById("subscribeRoomId").value);
+      if (!roomId) {
+        log("❌ Room ID를 입력하세요", 'error');
+        return;
+      }
+
+      if (roomEventSubscription) {
+        roomEventSubscription.unsubscribe();
+        roomEventSubscription = null;
+      }
+
+      roomEventSubscription = stompClient.subscribe(
+        `/topic/versus/rooms/${roomId}`,
+        function (message) {
+          const evt = safeJsonParse(message.body);
+
+          log("📨 ROOM EVENT RECEIVED", 'success');
+          log(JSON.stringify(evt, null, 2));
+
+          // RealtimeEventDto 기준: { eventId, roomId, eventType, payload, createdAt }
+          // roomId 반영
+          if (evt && evt.roomId) {
+            applyRoomIdToInputs(Number(evt.roomId));
+          }
+
+          // QUESTION_STARTED면 questionId 자동 세팅
+          if (evt && evt.eventType === "QUESTION_STARTED") {
+            const qid = extractQuestionIdFromEvent(evt);
+            if (qid) {
+              applyQuestionIdToInputs(qid);
+              log(`🧩 QUESTION_STARTED 감지 -> questionId 자동 세팅: ${qid}`, 'success');
+            } else {
+              log("⚠️ QUESTION_STARTED 이벤트인데 payload에서 questionId를 찾지 못했습니다. payload 키를 확인해 주세요.", 'error');
+            }
+          }
+        }
+      );
+
+      setStateSubscribed(true);
+      if (!silent) log(`📡 Room Events 구독 완료: /topic/versus/rooms/${roomId}`, 'success');
+    }
+
+    function unsubscribeRoomEvents() {
+      if (roomEventSubscription) {
+        roomEventSubscription.unsubscribe();
+        roomEventSubscription = null;
+      }
+      setStateSubscribed(false);
+      log("📡 Room Events 구독 해제", 'info');
+    }
+
+    function submitAnswer() {
+      if (!stompClient || !stompClient.connected) {
+        log("❌ 먼저 연결하세요", 'error');
+        return;
+      }
+
+      const roomId = parseInt(document.getElementById("answerRoomId").value);
+      let questionId = parseInt(document.getElementById("questionId").value);
+      const userAnswer = document.getElementById("userAnswer").value;
+
+      // questionId가 비어있으면 currentQuestionId를 fallback으로 사용
+      if ((!questionId || Number.isNaN(questionId)) && currentQuestionId) {
+        questionId = currentQuestionId;
+        document.getElementById("questionId").value = questionId;
+      }
+
+      if (!roomId || !questionId || !userAnswer) {
+        log("❌ Room ID, Question ID, User Answer를 모두 입력하세요 (또는 QUESTION_STARTED 이벤트를 먼저 받으세요)", 'error');
+        return;
+      }
+
+      const command = {
+        command: "SUBMIT_ANSWER",
+        roomId: roomId,
+        questionId: questionId,
+        userAnswer: userAnswer,
+        correct: null,
+        timeMs: null,
+        roundNo: null,
+        phase: null
+      };
+
+      stompClient.send("/app/versus/answer", {}, JSON.stringify(command));
+      log(`📤 SUBMIT_ANSWER 전송: roomId=${roomId}, questionId=${questionId}, answer=${userAnswer}`, 'info');
+    }
+
+    function sendHeartbeat(silent = false) {
+      if (!stompClient || !stompClient.connected) {
+        log("❌ 먼저 연결하세요", 'error');
+        return;
+      }
+
+      const roomId = parseInt(document.getElementById("heartbeatRoomId").value);
+      if (!roomId) {
+        log("❌ Room ID를 입력하세요", 'error');
+        return;
+      }
+
+      const command = {
+        command: "HEARTBEAT",
+        roomId: roomId
+      };
+
+      stompClient.send("/app/versus/heartbeat", {}, JSON.stringify(command));
+      if (!silent) log(`📤 HEARTBEAT 전송: roomId=${roomId}`, 'info');
+    }
+
+    function startHeartbeat(silent = false) {
+      if (heartbeatInterval) {
+        if (!silent) log("⚠️ 이미 하트비트가 실행 중입니다", 'error');
+        return;
+      }
+
+      const roomId = parseInt(document.getElementById("heartbeatRoomId").value);
+      if (!roomId) {
+        if (!silent) log("❌ Room ID를 입력하세요", 'error');
+        return;
+      }
+
+      heartbeatInterval = setInterval(() => {
+        sendHeartbeat(true /* silent */);
+      }, 10000);
+
+      setStateHeartbeat("running(10s)");
+      if (!silent) log(`🔄 자동 하트비트 시작: roomId=${roomId}, 주기=10초`, 'success');
+    }
+
+    function stopHeartbeat() {
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+      }
+      setStateHeartbeat("stopped");
+      log("🛑 자동 하트비트 중지", 'info');
+    }
+
+    function requestMatch() {
+      if (!stompClient || !stompClient.connected) {
+        log("❌ 먼저 연결하세요", 'error');
+        return;
+      }
+
+      const mode = document.getElementById("matchMode").value;
+      const certId = document.getElementById("certId").value;
+      const matchingMode = document.getElementById("matchingMode").value;
+      const topicId = matchingMode === "CATEGORY" ? parseInt(document.getElementById("topicId").value) : null;
+      const difficulty = matchingMode === "DIFFICULTY" ? document.getElementById("difficulty").value : null;
+      const examMode = document.getElementById("examMode").value;
+
+      if (!certId) {
+        log("❌ Cert ID를 입력하세요", 'error');
+        return;
+      }
+
+      // 매칭 시작 전, 상태 초기화
+      setStateRoom(null);
+      setStateQuestion(null);
+
+      const command = {
+        command: "REQUEST_MATCH",
+        mode: mode,
+        certId: certId,
+        matchingMode: matchingMode,
+        topicId: topicId,
+        difficulty: difficulty,
+        examMode: examMode
+      };
+
+      stompClient.send("/app/versus/match/request", {}, JSON.stringify(command));
+      log(`📤 REQUEST_MATCH 전송: mode=${mode}, certId=${certId}, matchingMode=${matchingMode}`, 'info');
+    }
+
+    function cancelMatch() {
+      if (!stompClient || !stompClient.connected) {
+        log("❌ 먼저 연결하세요", 'error');
+        return;
+      }
+
+      const mode = document.getElementById("matchMode").value;
+
+      const command = {
+        command: "CANCEL_MATCH",
+        mode: mode
+      };
+
+      stompClient.send("/app/versus/match/cancel", {}, JSON.stringify(command));
+      log(`📤 CANCEL_MATCH 전송: mode=${mode}`, 'info');
+    }
+
+    window.onload = function() {
+      updateConnectionStatus(false);
+      setStateRoom(null);
+      setStateQuestion(null);
+      setStateSubscribed(false);
+      setStateHeartbeat("stopped");
+
+      log("🚀 CertPilot Versus WebSocket Test 페이지 로드 완료", 'success');
+      log("1) JWT 토큰 입력 → Connect", 'info');
+      log("2) REQUEST_MATCH 누르면, 매칭 성공 시 자동으로 subscribe + JOIN_ROOM 수행", 'info');
+      log("3) ROOM EVENT에서 QUESTION_STARTED를 받으면 questionId 자동 세팅", 'info');
+      log("4) SUBMIT_ANSWER는 questionId 자동 세팅된 뒤 눌러주세요", 'info');
+    };
+  </script>
+</body>
+</html>

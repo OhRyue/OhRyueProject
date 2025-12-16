@@ -2,24 +2,25 @@ package com.OhRyue.certpilot.versus.config;
 
 import com.OhRyue.certpilot.versus.service.RealtimeEventSubscriber;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 
 /**
  * Redis Pub/Sub 설정
- * 
+ *
  * 멀티 인스턴스 환경에서 이벤트를 모든 클라이언트에게 동일하게 전달하기 위한 설정
- * 
+ *
  * 채널: versus:room:{roomId}
  * - 각 방마다 별도의 채널 사용
  * - 패턴 구독: versus:room:*
  */
 @Configuration
 @RequiredArgsConstructor
+@Slf4j
 public class RedisPubSubConfig {
 
     private static final String CHANNEL_PATTERN = "versus:room:*";
@@ -29,7 +30,7 @@ public class RedisPubSubConfig {
 
     /**
      * Redis 메시지 리스너 컨테이너
-     * 
+     *
      * 모든 인스턴스가 Redis 채널을 구독하여 이벤트를 수신
      */
     @Bean
@@ -39,14 +40,12 @@ public class RedisPubSubConfig {
 
         // 패턴 구독: versus:room:*
         // 모든 방의 이벤트를 수신
-        MessageListenerAdapter adapter = new MessageListenerAdapter(
+        container.addMessageListener(
                 realtimeEventSubscriber,
-                "onMessage"
+                new PatternTopic(CHANNEL_PATTERN)
         );
-        
-        container.addMessageListener(adapter, new PatternTopic(CHANNEL_PATTERN));
 
+        log.info("Redis Pub/Sub 리스너 등록 완료 - pattern: {}", CHANNEL_PATTERN);
         return container;
     }
 }
-

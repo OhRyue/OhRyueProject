@@ -35,14 +35,15 @@ public interface MatchAnswerRepository extends JpaRepository<MatchAnswer, Long> 
     }
 
     @Query("""
-        select a.userId as userId,
-               count(a) as totalCount,
-               sum(case when a.correct = true then 1 else 0 end) as correctCount,
-               sum(a.timeMs) as totalTimeMs
-        from MatchAnswer a
-        where a.roomId = :roomId
-        group by a.userId
-        """)
+    select a.userId as userId,
+           count(a) as totalCount,
+           sum(case when a.correct = true then 1 else 0 end) as correctCount,
+           coalesce(sum(coalesce(a.timeMs, 0)), 0) as totalTimeMs
+    from MatchAnswer a
+    where a.roomId = :roomId
+    group by a.userId
+    """)
     List<AnswerAggregate> aggregateByRoomId(@Param("roomId") Long roomId);
+
 }
  

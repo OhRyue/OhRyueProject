@@ -23,81 +23,111 @@ import java.util.stream.Collectors;
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
+  private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
 
-    private final JwtUtil jwtUtil;
+  /**
+   * Internal API 경로는 InternalJwtAuthFilter 전용
+   * - 여기서 절대 건드리면 안 됩니다.
+   * - (이 필터가 SecurityContext를 덮어쓰면 hasRole(INTERNAL)에서 403 발생 가능)
+   */
+  private static final String INTERNAL_PATH_PREFIX = "/api/study/versus/";
 
-    public JwtAuthFilter(@Value("${auth.jwt.secret}") String secret) {
-        this.jwtUtil = new JwtUtil(secret);
+  private final JwtUtil jwtUtil;
+
+  public JwtAuthFilter(@Value("${auth.jwt.secret}") String secret) {
+    this.jwtUtil = new JwtUtil(secret);
+  }
+
+  /**
+   * Internal 전용 경로(/api/study/versus/**)는 이 필터 자체를 실행하지 않음.
+   * -> InternalJwtAuthFilter만 실행되도록 보장
+   */
+  @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    String path = request.getRequestURI();
+    return path != null && path.startsWith(INTERNAL_PATH_PREFIX);
+  }
+
+  @Override
+  protected void doFilterInternal(HttpServletRequest request,
+                                  HttpServletResponse response,
+                                  FilterChain filterChain) throws ServletException, IOException {
+
+    String path = request.getRequestURI();
+
+    // Public 경로는 인증 없이 통과
+    if (isPublicPath(path)) {
+      filterChain.doFilter(request, response);
+      return;
     }
 
-    @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    String userId = null;
+    String[] roles = new String[0];
 
-        String path = request.getRequestURI();
+    try {
+      // 1) Gateway 헤더 우선 사용
+      String userIdHeader = request.getHeader("X-User-Id");
+      String rolesHeader = request.getHeader("X-User-Roles");
 
-        // Swagger / actuator 등 공개 경로는 그냥 통과
-        if (isPublicPath(path)) {
-            filterChain.doFilter(request, response);
-            return;
+      if (StringUtils.hasText(userIdHeader)) {
+        userId = userIdHeader;
+        if (StringUtils.hasText(rolesHeader)) {
+          roles = Arrays.stream(rolesHeader.split(","))
+              .map(String::trim)
+              .filter(StringUtils::hasText)
+              .toArray(String[]::new);
         }
-
-        // 1) Gateway에서 붙인 헤더 우선 사용
-        String userIdHeader = request.getHeader("X-User-Id");
-        String rolesHeader = request.getHeader("X-User-Roles");
+      }
+      // 2) Gateway 우회 호출 대비: Authorization JWT 직접 파싱
+      else {
         String authHeader = request.getHeader("Authorization");
-
-        String userId = null;
-        String[] roles = new String[0];
-
-        try {
-            if (StringUtils.hasText(userIdHeader)) {
-                userId = userIdHeader;
-                if (StringUtils.hasText(rolesHeader)) {
-                    roles = rolesHeader.split(",");
-                }
-            } else if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
-                // 게이트웨이 우회 호출 대비해서 JWT 직접 파싱
-                userId = jwtUtil.getUserId(authHeader);
-                roles = jwtUtil.getRoles(authHeader);
-            }
-
-            // 인증 컨텍스트가 비어 있고, userId가 있으면 세팅
-            if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                var authorities = Arrays.stream(roles)
-                        .filter(StringUtils::hasText)
-                        .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r)
-                        .map(SimpleGrantedAuthority::new)
-                        .collect(Collectors.toList());
-
-                var auth = new UsernamePasswordAuthenticationToken(
-                        userId,
-                        null,
-                        authorities
-                );
-                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(auth);
-
-                log.debug("[study-service] ✅ JWT 인증 성공 - userId: {}, roles: {}, path: {}",
-                        userId, Arrays.toString(roles), path);
-            }
-
-        } catch (Exception e) {
-            log.warn("[study-service] ❌ JWT 인증/파싱 실패 - path: {}, error: {}",
-                    path, e.getMessage());
-            SecurityContextHolder.clearContext();
+        if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
+          String token = authHeader.substring(7); // Bearer 제거
+          userId = jwtUtil.getUserId(token);
+          roles = jwtUtil.getRoles(token);
         }
+      }
 
-        filterChain.doFilter(request, response);
+      // SecurityContext 설정 (이미 있으면 건드리지 않음)
+      if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+        var authorities = Arrays.stream(roles)
+            .filter(StringUtils::hasText)
+            .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r)
+            .map(SimpleGrantedAuthority::new)
+            .collect(Collectors.toList());
+
+        var auth = new UsernamePasswordAuthenticationToken(
+            userId,
+            null,
+            authorities
+        );
+        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        log.debug("[study-service] ✅ User JWT 인증 성공 - userId={}, roles={}, path={}",
+            userId, Arrays.toString(roles), path);
+      }
+
+    } catch (Exception e) {
+      // 예외 발생 시 기존 인증을 무조건 지우지 않음
+      log.warn("[study-service] ❌ JWT 인증/파싱 실패 - path={}, error={}",
+          path, e.getMessage());
+
+      // 기존 인증이 없다면 clear
+      if (SecurityContextHolder.getContext().getAuthentication() == null) {
+        SecurityContextHolder.clearContext();
+      }
     }
 
-    private boolean isPublicPath(String path) {
-        return path.startsWith("/actuator")
-                || path.startsWith("/v3/api-docs")
-                || path.startsWith("/swagger-ui")
-                || path.startsWith("/swagger-ui.html");
-        // 필요하면 공개 학습 API 있으면 여기 추가 (예: /api/study/public/**)
-    }
+    filterChain.doFilter(request, response);
+  }
+
+  private boolean isPublicPath(String path) {
+    if (!StringUtils.hasText(path)) return true;
+    return path.startsWith("/actuator")
+        || path.startsWith("/v3/api-docs")
+        || path.startsWith("/swagger-ui")
+        || path.startsWith("/swagger-ui.html");
+  }
 }
