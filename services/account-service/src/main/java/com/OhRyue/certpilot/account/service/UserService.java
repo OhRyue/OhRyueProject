@@ -1,6 +1,7 @@
 package com.OhRyue.certpilot.account.service;
 
 import com.OhRyue.certpilot.account.domain.AccountStatus;
+import com.OhRyue.certpilot.account.domain.SignupType;
 import com.OhRyue.certpilot.account.domain.UserAccount;
 import com.OhRyue.certpilot.account.repo.UserAccountRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -45,6 +46,7 @@ public class UserService {
                 .email(normalizedEmail)
                 .passwordHash(encodedPassword)
                 .status(AccountStatus.ACTIVE) // 이메일 인증 후 생성되므로 ACTIVE
+                .signupType(SignupType.EMAIL) // 이메일 로그인으로 가입
                 .createdAt(LocalDateTime.now())
                 .lastLoginAt(null)
                 .build();

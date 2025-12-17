@@ -20,6 +20,10 @@ import com.OhRyue.certpilot.account.dto.UserResponseDto;
 import com.OhRyue.certpilot.account.dto.VerifyCodeRequest;
 import com.OhRyue.certpilot.account.dto.VerifyEmailRequest;
 import com.OhRyue.certpilot.account.dto.WithdrawRequest;
+import com.OhRyue.certpilot.account.dto.GoogleLoginRequest;
+import com.OhRyue.certpilot.account.dto.KakaoLoginRequest;
+import com.OhRyue.certpilot.account.dto.NaverLoginRequest;
+import com.OhRyue.certpilot.account.dto.ConnectSocialAccountRequest;
 import com.OhRyue.certpilot.account.repo.UserAccountRepository;
 import com.OhRyue.certpilot.account.service.EmailService;
 import com.OhRyue.certpilot.account.service.GoalCertService;
@@ -27,6 +31,7 @@ import com.OhRyue.certpilot.account.service.OnboardingService;
 import com.OhRyue.certpilot.account.service.ProfileService;
 import com.OhRyue.certpilot.account.service.RefreshTokenService;
 import com.OhRyue.certpilot.account.service.SettingsService;
+import com.OhRyue.certpilot.account.service.SocialLoginService;
 import com.OhRyue.certpilot.account.service.UserService;
 import com.OhRyue.certpilot.account.service.VerificationCodeService;
 import com.OhRyue.certpilot.account.feign.ProgressClient;
@@ -63,6 +68,7 @@ public class AuthController {
   private final UserAccountRepository userAccountRepository;
   private final PasswordEncoder passwordEncoder;
   private final ProgressClient progressClient;
+  private final SocialLoginService socialLoginService;
 
   /* ===================== 회원가입 & 이메일 인증 ===================== */
 
@@ -181,6 +187,148 @@ public class AuthController {
     ));
   }
 
+  @Operation(summary = "구글 소셜 로그인 및 토큰 발급")
+  @PostMapping("/login/google")
+  public ResponseEntity<LoginResponseDto> loginWithGoogle(@Valid @RequestBody GoogleLoginRequest req) {
+    log.info("🔐 [Google Login] 구글 소셜 로그인 요청");
+    
+    // 구글 소셜 로그인 처리 (기존 계정 확인 및 신규 계정 생성)
+    UserAccount user = socialLoginService.loginWithGoogle(req.getIdToken());
+    
+    // 신규 계정인 경우 프로필, 설정, 온보딩 초기화
+    boolean isNewUser = user.getCreatedAt().equals(user.getLastLoginAt());
+    if (isNewUser) {
+      log.info("✨ [Google Login] 신규 사용자 - 프로필/설정/온보딩 초기화 - userId: {}", user.getId());
+      try {
+        profileService.get(user.getId());
+        settingsService.getSnapshot(user.getId());
+        onboardingService.getStatus(user.getId());
+        
+        // 기본 인벤토리 초기화
+        try {
+          log.info("기본 인벤토리 초기화 시작: userId={}", user.getId());
+          String result = progressClient.initializeDefaultInventory(user.getId());
+          log.info("기본 인벤토리 초기화 완료: userId={}, result={}", user.getId(), result);
+        } catch (Exception e) {
+          log.error("기본 인벤토리 초기화 실패: userId={}, error={}", user.getId(), e.getMessage(), e);
+        }
+      } catch (Exception e) {
+        log.error("프로필/설정/온보딩 초기화 실패: userId={}, error={}", user.getId(), e.getMessage(), e);
+      }
+    }
+
+    // JWT 토큰 발급
+    String accessToken = jwtTokenProvider.generateToken(user.getId());
+    String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+    refreshTokenService.save(user.getId(), refreshToken);
+
+    UserProfile profile = profileService.get(user.getId());
+    Boolean onboardingCompleted = profile.getOnboardingCompleted() != null ? profile.getOnboardingCompleted() : false;
+
+    log.info("✅ [Google Login] 구글 소셜 로그인 완료 - userId: {}, email: {}", user.getId(), user.getEmail());
+    
+    return ResponseEntity.ok(new LoginResponseDto(
+        accessToken,
+        refreshToken,
+        user.getId(),
+        user.getEmail(),
+        "USER",
+        onboardingCompleted
+    ));
+  }
+
+  @Operation(summary = "카카오 소셜 로그인 및 토큰 발급")
+  @PostMapping("/login/kakao")
+  public ResponseEntity<LoginResponseDto> loginWithKakao(@Valid @RequestBody KakaoLoginRequest req) {
+    log.info("🔐 [Kakao Login] 카카오 소셜 로그인 요청");
+    
+    UserAccount user = socialLoginService.loginWithKakao(req.getAccessToken());
+    
+    boolean isNewUser = user.getCreatedAt().equals(user.getLastLoginAt());
+    if (isNewUser) {
+      log.info("✨ [Kakao Login] 신규 사용자 - 프로필/설정/온보딩 초기화 - userId: {}", user.getId());
+      try {
+        profileService.get(user.getId());
+        settingsService.getSnapshot(user.getId());
+        onboardingService.getStatus(user.getId());
+        
+        try {
+          log.info("기본 인벤토리 초기화 시작: userId={}", user.getId());
+          String result = progressClient.initializeDefaultInventory(user.getId());
+          log.info("기본 인벤토리 초기화 완료: userId={}, result={}", user.getId(), result);
+        } catch (Exception e) {
+          log.error("기본 인벤토리 초기화 실패: userId={}, error={}", user.getId(), e.getMessage(), e);
+        }
+      } catch (Exception e) {
+        log.error("프로필/설정/온보딩 초기화 실패: userId={}, error={}", user.getId(), e.getMessage(), e);
+      }
+    }
+
+    String accessToken = jwtTokenProvider.generateToken(user.getId());
+    String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+    refreshTokenService.save(user.getId(), refreshToken);
+
+    UserProfile profile = profileService.get(user.getId());
+    Boolean onboardingCompleted = profile.getOnboardingCompleted() != null ? profile.getOnboardingCompleted() : false;
+
+    log.info("✅ [Kakao Login] 카카오 소셜 로그인 완료 - userId: {}, email: {}", user.getId(), user.getEmail());
+    
+    return ResponseEntity.ok(new LoginResponseDto(
+        accessToken,
+        refreshToken,
+        user.getId(),
+        user.getEmail(),
+        "USER",
+        onboardingCompleted
+    ));
+  }
+
+  @Operation(summary = "네이버 소셜 로그인 및 토큰 발급")
+  @PostMapping("/login/naver")
+  public ResponseEntity<LoginResponseDto> loginWithNaver(@Valid @RequestBody NaverLoginRequest req) {
+    log.info("🔐 [Naver Login] 네이버 소셜 로그인 요청");
+    
+    UserAccount user = socialLoginService.loginWithNaver(req.getCode(), req.getState());
+    
+    boolean isNewUser = user.getCreatedAt().equals(user.getLastLoginAt());
+    if (isNewUser) {
+      log.info("✨ [Naver Login] 신규 사용자 - 프로필/설정/온보딩 초기화 - userId: {}", user.getId());
+      try {
+        profileService.get(user.getId());
+        settingsService.getSnapshot(user.getId());
+        onboardingService.getStatus(user.getId());
+        
+        try {
+          log.info("기본 인벤토리 초기화 시작: userId={}", user.getId());
+          String result = progressClient.initializeDefaultInventory(user.getId());
+          log.info("기본 인벤토리 초기화 완료: userId={}, result={}", user.getId(), result);
+        } catch (Exception e) {
+          log.error("기본 인벤토리 초기화 실패: userId={}, error={}", user.getId(), e.getMessage(), e);
+        }
+      } catch (Exception e) {
+        log.error("프로필/설정/온보딩 초기화 실패: userId={}, error={}", user.getId(), e.getMessage(), e);
+      }
+    }
+
+    String accessToken = jwtTokenProvider.generateToken(user.getId());
+    String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+    refreshTokenService.save(user.getId(), refreshToken);
+
+    UserProfile profile = profileService.get(user.getId());
+    Boolean onboardingCompleted = profile.getOnboardingCompleted() != null ? profile.getOnboardingCompleted() : false;
+
+    log.info("✅ [Naver Login] 네이버 소셜 로그인 완료 - userId: {}, email: {}", user.getId(), user.getEmail());
+    
+    return ResponseEntity.ok(new LoginResponseDto(
+        accessToken,
+        refreshToken,
+        user.getId(),
+        user.getEmail(),
+        "USER",
+        onboardingCompleted
+    ));
+  }
+
   @Operation(summary = "Access Token 재발급")
   @PostMapping("/refresh")
   public ResponseEntity<Map<String, String>> refresh(@Valid @RequestBody TokenRefreshRequest request) {
@@ -245,6 +393,37 @@ public class AuthController {
       log.warn("❌ 계정 탈퇴 실패 - userId: {}, reason: {}", userId, e.getMessage());
       return ResponseEntity.status(HttpStatus.BAD_REQUEST)
           .body(Map.of("message", e.getMessage()));
+    }
+  }
+
+  /* ===================== 소셜 계정 연결 ===================== */
+
+  @Operation(summary = "구글 소셜 계정 연결 (로그인 상태에서만 가능)")
+  @PostMapping("/social/connect/google")
+  public ResponseEntity<Map<String, String>> connectGoogleAccount(
+      @Valid @RequestBody ConnectSocialAccountRequest req
+  ) {
+    String userId;
+    try {
+      userId = AuthUserUtil.getCurrentUserId();
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
+    try {
+      socialLoginService.connectGoogleAccount(userId, req.getIdToken());
+      log.info("✅ [Google Connect] 소셜 계정 연결 완료 - userId: {}", userId);
+      return ResponseEntity.ok(Map.of(
+          "message", "구글 소셜 계정이 성공적으로 연결되었습니다."
+      ));
+    } catch (IllegalArgumentException e) {
+      log.warn("❌ [Google Connect] 소셜 계정 연결 실패 - userId: {}, reason: {}", userId, e.getMessage());
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+          .body(Map.of("message", e.getMessage()));
+    } catch (Exception e) {
+      log.error("❌ [Google Connect] 소셜 계정 연결 중 오류 발생 - userId: {}, error: {}", userId, e.getMessage(), e);
+      return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+          .body(Map.of("message", "소셜 계정 연결 중 오류가 발생했습니다."));
     }
   }
 

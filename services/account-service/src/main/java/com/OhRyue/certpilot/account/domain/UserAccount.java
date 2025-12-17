@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
  * - email UNIQUE
  * - password_hash
  * - status ENUM('ACTIVE','BLOCKED','DELETED')
+ * - signup_type ENUM('EMAIL','SOCIAL')
  * - created_at, last_login_at
  */
 @Entity
@@ -25,16 +26,21 @@ public class UserAccount {
   @Column(length = 100, nullable = false)
   private String id; // 예: 'ohryue' (username을 PK로 사용)
 
-  @Column(nullable = false, unique = true, length = 255)
+  @Column(nullable = true, unique = true, length = 255)
   private String email;
 
-  @Column(name = "password_hash", nullable = false, length = 255)
+  @Column(name = "password_hash", nullable = true, length = 255)
   private String passwordHash;
 
   @Builder.Default
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 16)
   private AccountStatus status = AccountStatus.BLOCKED;
+
+  @Builder.Default
+  @Enumerated(EnumType.STRING)
+  @Column(name = "signup_type", nullable = false, length = 16)
+  private SignupType signupType = SignupType.EMAIL;
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
