@@ -170,7 +170,70 @@ public class RedisLockService {
         String lockKey = getLockKey(roomId);
         return Boolean.TRUE.equals(redisTemplate.hasKey(lockKey));
     }
+
+    /**
+     * 락 획득 시도 (수동 제어용)
+     * 
+     * @param key 락 키
+     * @param value 락 값 (UUID 권장)
+     * @param ttl 락 TTL
+     * @return 락 획득 성공 시 true
+     */
+    public boolean tryLock(String key, String value, Duration ttl) {
+        try {
+            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(key, value, ttl);
+            if (Boolean.TRUE.equals(acquired)) {
+                log.debug("Lock acquired: key={}, value={}, ttl={}ms", key, value, ttl.toMillis());
+                return true;
+            } else {
+                log.debug("Lock acquisition failed: key={} (already locked)", key);
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("Error acquiring lock: key={}, error={}", key, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * 락 해제 (수동 제어용)
+     * 
+     * Lua 스크립트를 사용하여 자신이 획득한 락인지 확인 후 해제
+     * 
+     * @param key 락 키
+     * @param value 락 값 (획득 시 사용한 값과 일치해야 함)
+     * @return 락 해제 성공 시 true
+     */
+    public boolean unlock(String key, String value) {
+        try {
+            // Lua 스크립트: 값이 일치할 때만 삭제
+            String luaScript = 
+                "if redis.call('get', KEYS[1]) == ARGV[1] then " +
+                "    return redis.call('del', KEYS[1]) " +
+                "else " +
+                "    return 0 " +
+                "end";
+            
+            Long result = redisTemplate.execute(
+                    new org.springframework.data.redis.core.script.DefaultRedisScript<>(luaScript, Long.class),
+                    java.util.Collections.singletonList(key),
+                    value
+            );
+
+            if (result != null && result > 0) {
+                log.debug("Lock released: key={}, value={}", key, value);
+                return true;
+            } else {
+                log.debug("Lock release skipped: key={} (lock value mismatch or already expired)", key);
+                return false;
+            }
+        } catch (Exception e) {
+            log.warn("Error releasing lock: key={}, error={}", key, e.getMessage());
+            return false;
+        }
+    }
 }
+
 
 
 

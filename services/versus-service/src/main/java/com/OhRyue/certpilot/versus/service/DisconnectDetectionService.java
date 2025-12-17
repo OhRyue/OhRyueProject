@@ -49,6 +49,7 @@ public class DisconnectDetectionService {
     private final MatchEventRepository eventRepository;
     private final RealtimeEventService realtimeEventService;
     private final VersusService versusService;
+    private final DuelMatchFinishService duelMatchFinishService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -165,32 +166,42 @@ public class DisconnectDetectionService {
             long remainingParticipants = participantRepository.countByRoomId(roomId);
 
             if (remainingParticipants <= 1) {
-                // 게임 종료 처리
-                room.setStatus(MatchStatus.DONE);
-                roomRepository.save(room);
+                // 매치 종료 처리: DuelMatchFinishService로 위임
+                try {
+                    DuelMatchFinishService.MatchFinishResult result = duelMatchFinishService.finishMatch(
+                            roomId,
+                            DuelMatchFinishService.FinishMatchReason.PLAYER_LEFT
+                    );
 
-                // 승자 결정
-                String winner = null;
-                if (remainingParticipants == 1) {
-                    List<MatchParticipant> remaining = participantRepository.findByRoomId(roomId);
-                    if (!remaining.isEmpty()) {
-                        winner = remaining.get(0).getUserId();
+                    if (result.isProcessed()) {
+                        log.info("DUEL game ended due to disconnect: roomId={}, disconnectedUserId={}, winner={}, xpGranted={}",
+                                roomId, userId, result.getWinner(), result.isXpGranted());
+                    } else if (result.isAlreadyFinished()) {
+                        log.info("DUEL game already finished: roomId={}, disconnectedUserId={}", roomId, userId);
+                    } else {
+                        log.warn("DUEL game finish skipped: roomId={}, disconnectedUserId={}", roomId, userId);
                     }
+                } catch (Exception e) {
+                    log.error("Failed to finish match via DuelMatchFinishService: roomId={}, disconnectedUserId={}, error={}",
+                            roomId, userId, e.getMessage(), e);
+                    // 에러 발생 시 기존 로직으로 폴백 (안전장치)
+                    room.setStatus(MatchStatus.DONE);
+                    roomRepository.save(room);
+                    String winner = null;
+                    if (remainingParticipants == 1) {
+                        List<MatchParticipant> remaining = participantRepository.findByRoomId(roomId);
+                        if (!remaining.isEmpty()) {
+                            winner = remaining.get(0).getUserId();
+                        }
+                    }
+                    recordEvent(roomId, "MATCH_FINISHED", Map.of(
+                            "mode", "DUEL",
+                            "winner", winner != null ? winner : "NONE",
+                            "reason", "OPPONENT_DISCONNECTED",
+                            "disconnectedUserId", userId,
+                            "finishedAt", now.toString()
+                    ));
                 }
-
-                recordEvent(roomId, "MATCH_FINISHED", Map.of(
-                        "mode", "DUEL",
-                        "winner", winner != null ? winner : "NONE",
-                        "reason", "OPPONENT_DISCONNECTED",
-                        "disconnectedUserId", userId,
-                        "finishedAt", now.toString()
-                ));
-
-                // 게임 종료 이벤트는 기록되었으므로, 실제 보상 지급은 게임 종료 로직에서 처리
-                // (notifyProgressService는 VersusService의 private 메서드이므로 여기서는 호출하지 않음)
-
-                log.info("DUEL game ended due to disconnect: roomId={}, disconnectedUserId={}, winner={}",
-                        roomId, userId, winner);
             }
         }
     }

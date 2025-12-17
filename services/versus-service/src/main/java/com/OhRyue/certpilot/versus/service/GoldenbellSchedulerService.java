@@ -6,6 +6,7 @@ import com.OhRyue.certpilot.versus.domain.MatchStatus;
 import com.OhRyue.certpilot.versus.repository.MatchRoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,10 @@ public class GoldenbellSchedulerService {
 
     private final MatchRoomRepository roomRepository;
     private final VersusService versusService;
+    
+    // timeout 체크 간격 (밀리초). 설정 파일에서 주입 가능, 기본값 30초
+    @Value("${versus.scheduler.timeout-check-interval-ms:30000}")
+    private long timeoutCheckIntervalMs;
 
     /**
      * 매 1분마다 실행: 예약 시간이 된 GOLDENBELL 방 자동 시작
@@ -77,10 +82,11 @@ public class GoldenbellSchedulerService {
     }
 
     /**
-     * 매 30초마다 실행: 하트비트 타임아웃된 참가자 자동 제거
-     * 대기 중인 방 또는 진행 중인 DUEL 방에서 30초 이상 하트비트가 없는 참가자를 제거
+     * 주기적으로 실행: 하트비트 타임아웃된 참가자 자동 제거
+     * 대기 중인 방 또는 진행 중인 DUEL 방에서 타임아웃 시간 이상 하트비트가 없는 참가자를 제거
+     * 실행 간격은 설정 파일에서 조정 가능 (기본값: 30초)
      */
-    @Scheduled(fixedRate = 30000) // 30초마다
+    @Scheduled(fixedRateString = "${versus.scheduler.timeout-check-interval-ms:30000}")
     @Transactional
     public void removeTimeoutParticipants() {
         try {

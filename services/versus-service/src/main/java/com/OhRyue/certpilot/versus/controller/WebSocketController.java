@@ -9,6 +9,7 @@ import com.OhRyue.certpilot.versus.service.AnswerSubmissionService;
 import com.OhRyue.certpilot.versus.service.PresenceService;
 import com.OhRyue.certpilot.versus.service.RedisMatchingQueueService;
 import com.OhRyue.certpilot.versus.service.RoomSnapshotService;
+import com.OhRyue.certpilot.versus.service.VersusService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -18,6 +19,7 @@ import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
+import java.time.Instant;
 
 /**
  * WebSocket 메시지 핸들러
@@ -38,6 +40,7 @@ public class WebSocketController {
     private final PresenceService presenceService;
     private final RedisMatchingQueueService redisMatchingQueueService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final VersusService versusService;
 
     /**
      * JOIN_ROOM 명령 처리
@@ -151,7 +154,7 @@ public class WebSocketController {
      * HEARTBEAT 명령 처리
      * 
      * 클라이언트가 하트비트를 전송할 때 호출
-     * - roomId를 받아서 Redis에 접속 상태 업데이트
+     * - roomId를 받아서 Redis와 DB 모두에 접속 상태 업데이트
      * - userId는 WebSocket 인증 정보(Principal)에서 추출
      * 
      * @param command HEARTBEAT 명령 (roomId 포함)
@@ -165,23 +168,59 @@ public class WebSocketController {
     ) {
         String userId = principal != null ? principal.getName() : null;
         Long roomId = command.roomId();
+        Instant now = Instant.now();
+        String sessionId = principal != null ? principal.toString() : "null";
 
-        log.debug("WebSocket HEARTBEAT 요청: userId={}, roomId={}", userId, roomId);
+        // 이전 lastSeen 조회 (Redis)
+        Instant previousLastSeenRedis = null;
+        if (roomId != null && userId != null) {
+            previousLastSeenRedis = presenceService.getLastSeenAt(roomId, userId);
+        }
+
+        log.info("HEARTBEAT 수신: userId={}, roomId={}, sessionId={}, now={}, previousLastSeenRedis={}",
+                userId, roomId, sessionId, now, previousLastSeenRedis);
 
         if (roomId == null) {
             log.warn("HEARTBEAT: roomId가 null입니다. userId={}", userId);
             return WebSocketDtos.HeartbeatResponse.failure(null, "roomId는 필수입니다.");
         }
 
-        try {
-            // Redis에 접속 상태 업데이트
-            presenceService.updatePresence(roomId, userId);
+        if (userId == null) {
+            log.warn("HEARTBEAT: userId가 null입니다. roomId={}", roomId);
+            return WebSocketDtos.HeartbeatResponse.failure(roomId, "인증이 필요합니다.");
+        }
 
-            log.debug("HEARTBEAT 성공: userId={}, roomId={}", userId, roomId);
+        try {
+            // Redis에 접속 상태 업데이트 (상세 로그는 PresenceService에서 출력)
+            String redisKey = "presence:room:" + roomId;
+            presenceService.updatePresence(roomId, userId);
+            log.info("HEARTBEAT Redis 저장 완료: userId={}, roomId={}, redisKey={}, now={}, previousLastSeenRedis={}",
+                    userId, roomId, redisKey, now, previousLastSeenRedis);
+
+            // DB에도 접속 상태 업데이트 (timeout 체크용)
+            // DONE 상태면 조용히 무시 (400 에러 방지)
+            try {
+                versusService.updateHeartbeat(roomId, userId);
+                log.info("HEARTBEAT DB 저장 완료: userId={}, roomId={}, now={}", userId, roomId, now);
+            } catch (org.springframework.web.server.ResponseStatusException e) {
+                // 400 BAD_REQUEST는 DONE 상태일 가능성이 높음 (이미 updateHeartbeat에서 무시됨)
+                if (e.getStatusCode() == org.springframework.http.HttpStatus.BAD_REQUEST) {
+                    log.debug("HEARTBEAT DB 저장 스킵 (BAD_REQUEST): userId={}, roomId={}, reason={}",
+                            userId, roomId, e.getReason());
+                } else {
+                    log.warn("HEARTBEAT DB 저장 실패: userId={}, roomId={}, status={}, error={}",
+                            userId, roomId, e.getStatusCode(), e.getReason());
+                }
+            } catch (Exception dbException) {
+                // 기타 예외는 경고만 (Redis는 성공했으므로)
+                log.warn("HEARTBEAT DB 저장 실패 (Redis는 성공): userId={}, roomId={}, error={}",
+                        userId, roomId, dbException.getMessage());
+            }
+
             return WebSocketDtos.HeartbeatResponse.success(roomId);
 
         } catch (Exception e) {
-            log.error("HEARTBEAT 오류: userId={}, roomId={}", userId, roomId, e);
+            log.error("HEARTBEAT 오류: userId={}, roomId={}, now={}", userId, roomId, now, e);
             return WebSocketDtos.HeartbeatResponse.failure(roomId, "하트비트 처리 중 오류가 발생했습니다.");
         }
     }

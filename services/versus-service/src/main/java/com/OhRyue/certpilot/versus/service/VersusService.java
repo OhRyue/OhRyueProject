@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -52,7 +53,10 @@ public class VersusService {
     private static final int SPEED_BONUS_MAX = 200;
     private static final int MAX_TIMELINE_FETCH = 200;
     private static final int QUESTION_INTERMISSION_SEC = 5; // 문제 간 쉬는 시간 (초)
-    private static final int HEARTBEAT_TIMEOUT_SECONDS = 30; // 하트비트 타임아웃 시간 (초). 30초 동안 하트비트가 없으면 타임아웃
+    
+    // 하트비트 타임아웃 시간 (초). 설정 파일에서 주입 가능, 기본값 30초
+    @Value("${versus.heartbeat.timeout-seconds:30}")
+    private int heartbeatTimeoutSeconds;
 
     private final MatchRoomRepository roomRepository;
     private final MatchParticipantRepository participantRepository;
@@ -72,6 +76,9 @@ public class VersusService {
     private final AccountServiceClient accountServiceClient;
     private final MonitoringConfig monitoringConfig;
     private final RewardRetryService rewardRetryService;
+    private final DuelQuestionFinishService duelQuestionFinishService;
+    private final DuelMatchFinishService duelMatchFinishService;
+    private final ScoreboardService scoreboardService;
     private final Random random = new Random();
 
     // 모드별 인원 제한
@@ -167,7 +174,39 @@ public class VersusService {
             validateGoldenbellQuestionsWithRule(room.getId(), questions);
         }
 
+        // DUEL 모드: 저장 전 문제 수 검증 및 로깅
+        if (room.getMode() == MatchMode.DUEL) {
+            int expectedCount = DUEL_TOTAL_QUESTIONS;
+            int actualCount = questions.size();
+            List<Long> questionIds = questions.stream().map(MatchQuestion::getQuestionId).toList();
+            
+            log.info("DUEL_QUESTIONS_SAVE roomId={} expectedCount={} actualCount={} questionIds={}",
+                    room.getId(), expectedCount, actualCount, questionIds);
+            
+            if (actualCount != expectedCount) {
+                log.error("DUEL_QUESTIONS_SAVE_MISMATCH roomId={} expected={} actual={} questionIds={}",
+                        room.getId(), expectedCount, actualCount, questionIds);
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        String.format("DUEL requires exactly %d questions, but got %d. questionIds=%s",
+                                expectedCount, actualCount, questionIds));
+            }
+        }
+        
         questionRepository.saveAll(questions);
+        
+        // 저장 후 실제 저장된 문제 수 확인
+        long savedCount = questionRepository.countByRoomId(room.getId());
+        if (room.getMode() == MatchMode.DUEL && savedCount != DUEL_TOTAL_QUESTIONS) {
+            log.error("DUEL_QUESTIONS_SAVE_VERIFY_FAILED roomId={} expected={} savedCount={}",
+                    room.getId(), DUEL_TOTAL_QUESTIONS, savedCount);
+            throw new IllegalStateException(
+                    String.format("DUEL questions save verification failed: expected=%d, savedCount=%d",
+                            DUEL_TOTAL_QUESTIONS, savedCount));
+        }
+        
+        log.info("DUEL_QUESTIONS_SAVED roomId={} count={} savedCount={}",
+                room.getId(), questions.size(), savedCount);
+        
         recordEvent(room.getId(), "QUESTIONS_REGISTERED", Map.of(
                 "count", questions.size()
         ));
@@ -545,17 +584,63 @@ public class VersusService {
             // DUEL, GOLDENBELL 모드: 모든 참가자 표시
             scoreboard = computeScoreboard(room);
         }
-        ModeResolution resolution = handleModeAfterAnswer(room, question, scoreboard);
-        if (resolution.matchCompleted()) {
-            room.setStatus(MatchStatus.DONE);
-            roomRepository.save(room);
-            stateChanged = true;
 
-            // progress-service에 결과 통지 및 보상 지급
-            notifyProgressService(room, scoreboard);
-        }
-        if (resolution.stateChanged()) {
-            stateChanged = true;
+        // DUEL 모드: 질문 종료 후처리는 DuelQuestionFinishService로 위임
+        if (room.getMode() == MatchMode.DUEL) {
+            // 모든 참가자가 답안을 제출했는지 확인
+            long participants = participantRepository.countByRoomId(roomId);
+            long answeredForQuestion = answerRepository.countByRoomIdAndQuestionId(roomId, question.getQuestionId());
+            boolean allParticipantsAnswered = participants > 0 && answeredForQuestion >= participants;
+
+            if (allParticipantsAnswered) {
+                // 질문 종료 후처리는 DuelQuestionFinishService로 위임
+                // (이미 종료된 질문인지 확인 및 락 처리는 DuelQuestionFinishService에서 수행)
+                try {
+                    DuelQuestionFinishService.FinishResult result = duelQuestionFinishService.finishQuestion(
+                            roomId,
+                            question.getQuestionId(),
+                            DuelQuestionFinishService.FinishReason.SUBMIT,
+                            userId
+                    );
+
+                    if (result.isProcessed()) {
+                        if (result.isMatchCompleted()) {
+                            stateChanged = true;
+                            room = roomRepository.findById(roomId).orElse(room); // 최신 상태 조회
+                        }
+                        // 다음 문제로 이동했거나 매치가 완료되었으므로 스코어보드 재계산
+                        scoreboard = computeScoreboard(room);
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to finish question via DuelQuestionFinishService: roomId={}, questionId={}, error={}",
+                            roomId, question.getQuestionId(), e.getMessage(), e);
+                    // 에러 발생 시 기존 로직으로 폴백 (안전장치)
+                    ModeResolution resolution = handleModeAfterAnswer(room, question, scoreboard);
+                    if (resolution.matchCompleted()) {
+                        room.setStatus(MatchStatus.DONE);
+                        roomRepository.save(room);
+                        stateChanged = true;
+                        notifyProgressService(room, scoreboard);
+                    }
+                    if (resolution.stateChanged()) {
+                        stateChanged = true;
+                    }
+                }
+            }
+        } else {
+            // TOURNAMENT, GOLDENBELL 모드: 기존 로직 유지
+            ModeResolution resolution = handleModeAfterAnswer(room, question, scoreboard);
+            if (resolution.matchCompleted()) {
+                room.setStatus(MatchStatus.DONE);
+                roomRepository.save(room);
+                stateChanged = true;
+
+                // progress-service에 결과 통지 및 보상 지급
+                notifyProgressService(room, scoreboard);
+            }
+            if (resolution.stateChanged()) {
+                stateChanged = true;
+            }
         }
 
         if (stateChanged) {
@@ -1519,11 +1604,19 @@ public class VersusService {
      * 하트비트 업데이트
      * - WAIT 상태: 모든 모드에서 허용
      * - ONGOING 상태: DUEL 모드에서만 허용
+     * - DONE 상태: 조용히 무시 (Redis만 갱신, DB 저장 스킵)
      * 사용자가 아직 연결되어 있음을 서버에 알림
      */
     @Transactional
     public void updateHeartbeat(Long roomId, String userId) {
         MatchRoom room = findRoomOrThrow(roomId);
+
+        // DONE 상태: 매치 종료 후 heartbeat는 조용히 무시 (400 에러 방지)
+        if (room.getStatus() == MatchStatus.DONE) {
+            log.debug("HEARTBEAT_IGNORED roomId={} userId={} status=DONE (매치 종료 후 heartbeat 무시)",
+                    roomId, userId);
+            return; // 조용히 무시 (Redis는 이미 PresenceService에서 갱신됨)
+        }
 
         // WAIT 상태 또는 DUEL 모드의 ONGOING 상태에서만 하트비트 업데이트 가능
         if (room.getStatus() == MatchStatus.WAIT) {
@@ -1550,18 +1643,36 @@ public class VersusService {
      */
     @Transactional
     public int removeTimeoutParticipants() {
-        Instant thresholdTime = Instant.now().minus(HEARTBEAT_TIMEOUT_SECONDS, ChronoUnit.SECONDS);
+        Instant now = Instant.now();
+        Instant thresholdTime = now.minus(heartbeatTimeoutSeconds, ChronoUnit.SECONDS);
         List<MatchParticipant> timeoutParticipants = participantRepository.findTimeoutParticipants(thresholdTime);
+
+        log.info("Timeout 체크 시작: now={}, thresholdTime={}, timeoutSeconds={}, 발견된 참가자 수={}",
+                now, thresholdTime, heartbeatTimeoutSeconds, timeoutParticipants.size());
 
         int removedCount = 0;
         for (MatchParticipant participant : timeoutParticipants) {
             try {
                 // 봇은 하트비트를 보내지 않으므로 타임아웃 체크에서 제외
                 if (participant.getUserId().startsWith("BOT_")) {
+                    log.debug("봇 참가자 제외: userId={}, roomId={}", participant.getUserId(), participant.getRoomId());
                     continue;
                 }
                 
-                MatchRoom room = findRoomOrThrow(participant.getRoomId());
+                Long roomId = participant.getRoomId();
+                String userId = participant.getUserId();
+                Instant lastHeartbeatAt = participant.getLastHeartbeatAt();
+                
+                // 타임아웃 판정 상세 로그
+                long diffMs = lastHeartbeatAt != null 
+                        ? Duration.between(lastHeartbeatAt, now).toMillis() 
+                        : -1;
+                long timeoutMs = heartbeatTimeoutSeconds * 1000L;
+                
+                log.info("Timeout 판정: roomId={}, userId={}, lastHeartbeatAt={}, now={}, diffMs={}, timeoutMs={}, 타임아웃 여부={}",
+                        roomId, userId, lastHeartbeatAt, now, diffMs, timeoutMs, diffMs >= timeoutMs);
+                
+                MatchRoom room = findRoomOrThrow(roomId);
 
                 if (room.getStatus() == MatchStatus.WAIT) {
                     // 대기 중인 방: 참가자 제거
@@ -1606,31 +1717,46 @@ public class VersusService {
                     // 남은 참가자 확인
                     long remainingParticipants = participantRepository.countByRoomId(room.getId());
 
-                    if (remainingParticipants <= 1) {
-                        // 게임 종료 처리
-                        room.setStatus(MatchStatus.DONE);
-                        roomRepository.save(room);
-
-                        // 승자 결정 (남은 참가자가 있으면 승자, 없으면 null)
+                    if (remainingParticipants <= 1 && room.getMode() == MatchMode.DUEL) {
+                        // 매치 종료 처리: DuelMatchFinishService로 위임
                         String winner = null;
-                        if (remainingParticipants == 1) {
-                            List<MatchParticipant> remaining = participantRepository.findByRoomId(room.getId());
-                            if (!remaining.isEmpty()) {
-                                winner = remaining.get(0).getUserId();
+                        try {
+                            DuelMatchFinishService.MatchFinishResult result = duelMatchFinishService.finishMatch(
+                                    room.getId(),
+                                    DuelMatchFinishService.FinishMatchReason.HEARTBEAT_TIMEOUT
+                            );
+
+                            if (result.isProcessed()) {
+                                winner = result.getWinner();
+                                log.info("DUEL game ended due to heartbeat timeout: roomId={}, disconnectedUserId={}, winner={}, xpGranted={}",
+                                        room.getId(), disconnectedUserId, winner, result.isXpGranted());
+                            } else if (result.isAlreadyFinished()) {
+                                log.info("DUEL game already finished: roomId={}, disconnectedUserId={}", room.getId(), disconnectedUserId);
+                            } else {
+                                log.warn("DUEL game finish skipped: roomId={}, disconnectedUserId={}", room.getId(), disconnectedUserId);
                             }
+                        } catch (Exception e) {
+                            log.error("Failed to finish match via DuelMatchFinishService: roomId={}, disconnectedUserId={}, error={}",
+                                    room.getId(), disconnectedUserId, e.getMessage(), e);
+                            // 에러 발생 시 기존 로직으로 폴백 (안전장치)
+                            room.setStatus(MatchStatus.DONE);
+                            roomRepository.save(room);
+                            if (remainingParticipants == 1) {
+                                List<MatchParticipant> remaining = participantRepository.findByRoomId(room.getId());
+                                if (!remaining.isEmpty()) {
+                                    winner = remaining.get(0).getUserId();
+                                }
+                            }
+                            recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
+                                    "mode", "DUEL",
+                                    "winner", winner != null ? winner : "NONE",
+                                    "reason", "OPPONENT_TIMEOUT",
+                                    "disconnectedUserId", disconnectedUserId,
+                                    "finishedAt", Instant.now().toString()
+                            ));
+                            VersusDtos.ScoreBoardResp scoreboard = computeScoreboard(room);
+                            notifyProgressService(room, scoreboard);
                         }
-
-                        recordEvent(room.getId(), "MATCH_FINISHED", Map.of(
-                                "mode", "DUEL",
-                                "winner", winner != null ? winner : "NONE",
-                                "reason", "OPPONENT_TIMEOUT",
-                                "disconnectedUserId", disconnectedUserId,
-                                "finishedAt", Instant.now().toString()
-                        ));
-
-                        // 스코어보드 계산하여 보상 지급
-                        VersusDtos.ScoreBoardResp scoreboard = computeScoreboard(room);
-                        notifyProgressService(room, scoreboard);
 
                         log.info("DUEL game ended due to timeout: roomId={}, timeoutUserId={}, winner={}",
                                 room.getId(), disconnectedUserId, winner);
@@ -1851,7 +1977,7 @@ public class VersusService {
     }
 
     public VersusDtos.ScoreBoardResp computeScoreboard(MatchRoom room) {
-        return computeScoreboard(room, null, null);
+        return scoreboardService.computeScoreboard(room);
     }
 
     /**
@@ -1861,262 +1987,11 @@ public class VersusService {
      * @param currentUserId 현재 사용자 ID (토너먼트 모드에서 상대방 필터링용, null이면 전체 표시)
      */
     public VersusDtos.ScoreBoardResp computeScoreboard(MatchRoom room, MatchQuestion currentQuestion, String currentUserId) {
-        Long roomId = room.getId();
-        List<MatchParticipant> participants = participantRepository.findByRoomId(roomId);
-        Map<String, GoldenbellState> goldenState = goldenbellStateRepository.findByRoomId(roomId).stream()
-                .collect(Collectors.toMap(GoldenbellState::getUserId, g -> g));
-
-        // 사용자 프로필 정보 조회 (닉네임, 스킨 ID)
-        List<String> userIds = participants.stream()
-                .map(MatchParticipant::getUserId)
-                .toList();
-        Map<String, AccountServiceClient.ProfileSummary> profileMap = new HashMap<>();
-        try {
-            List<AccountServiceClient.ProfileSummary> profiles = accountServiceClient.getUserProfiles(userIds);
-            profileMap = profiles.stream()
-                    .collect(Collectors.toMap(
-                            AccountServiceClient.ProfileSummary::userId,
-                            profile -> profile,
-                            (a, b) -> a
-                    ));
-        } catch (Exception e) {
-            log.warn("사용자 프로필 조회 실패: roomId={}, error={}", roomId, e.getMessage());
-        }
-
-        Map<Long, MatchQuestion> questionMap = questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId).stream()
-                .collect(Collectors.toMap(
-                        MatchQuestion::getQuestionId,
-                        q -> q,
-                        (existing, replacement) -> existing  // 중복 키 발생 시 기존 값 유지
-                ));
-
-        // 답안 조회: flush() 후에도 영속성 컨텍스트에 이전 답안이 캐시되어 있을 수 있으므로
-        // 명시적으로 DB에서 최신 답안을 조회하기 위해 entityManager를 사용하여 쿼리 힌트 추가
-        // 또는 간단하게 answerRepository를 통해 조회 (JPA는 기본적으로 최신 데이터를 조회함)
-        List<MatchAnswer> answers = answerRepository.findByRoomId(roomId);
-        Map<String, Score> stats = new HashMap<>();
-        Map<String, FinalRoundScore> finalScores = new HashMap<>(); // FINAL 라운드 점수 별도 관리
-
-        // GOLDENBELL 모드인 경우 FINAL 라운드 점수 별도 계산
-        boolean isGoldenbell = room.getMode() == MatchMode.GOLDENBELL;
-
-        for (MatchAnswer answer : answers) {
-            Score score = stats.computeIfAbsent(answer.getUserId(), u -> new Score());
-            MatchQuestion q = questionMap.get(answer.getQuestionId());
-
-            // 디버깅: 답안 정보 로그
-            log.debug("Processing answer: roomId={}, userId={}, questionId={}, correct={}, userAnswer=[{}], scoreDelta={}",
-                    roomId, answer.getUserId(), answer.getQuestionId(), answer.isCorrect(),
-                    answer.getUserAnswer(), answer.getScoreDelta());
-
-            // FINAL 라운드인지 확인
-            boolean isFinalRound = q != null && q.getPhase() == MatchPhase.FINAL;
-
-            if (isFinalRound && isGoldenbell) {
-                // FINAL 라운드 점수 별도 관리
-                FinalRoundScore finalScore = finalScores.computeIfAbsent(answer.getUserId(), u -> new FinalRoundScore());
-                finalScore.total++;
-                if (answer.isCorrect()) {
-                    finalScore.correct++;
-                }
-                finalScore.score += Optional.ofNullable(answer.getScoreDelta()).orElse(0);
-                int limitMs = Optional.ofNullable(q)
-                        .map(MatchQuestion::getTimeLimitSec)
-                        .orElse(GOLDENBELL_TIME_LIMIT_SEC) * 1000;
-                int time = Optional.ofNullable(answer.getTimeMs()).orElse(limitMs);
-                if (time <= 0) {
-                    time = limitMs;
-                }
-                finalScore.totalTimeMs += Math.min(time, limitMs);
-            } else {
-                // 일반 라운드 점수
-                score.total++;
-                if (answer.isCorrect()) {
-                    score.correct++;
-                }
-                score.score += Optional.ofNullable(answer.getScoreDelta()).orElse(0);
-                int limitMs = Optional.ofNullable(q)
-                        .map(MatchQuestion::getTimeLimitSec)
-                        .orElse(GOLDENBELL_TIME_LIMIT_SEC) * 1000;
-                int time = Optional.ofNullable(answer.getTimeMs()).orElse(limitMs);
-                if (time <= 0) {
-                    time = limitMs;
-                }
-                score.totalTimeMs += Math.min(time, limitMs);
-            }
-        }
-
-        // 디버깅: 최종 통계 로그
-        log.debug("Scoreboard stats for room {}: {}", roomId,
-                stats.entrySet().stream()
-                        .map(e -> String.format("%s: correct=%d, total=%d, score=%d",
-                                e.getKey(), e.getValue().correct, e.getValue().total, e.getValue().score))
-                        .collect(Collectors.joining(", ")));
-
-        for (MatchParticipant participant : participants) {
-            stats.computeIfAbsent(participant.getUserId(), u -> new Score());
-        }
-
-        // GOLDENBELL 모드이고 FINAL 라운드가 있으면 FINAL 라운드 점수로 정렬
-        List<ScoreboardIntermediate> intermediates;
-        if (isGoldenbell && !finalScores.isEmpty()) {
-            // FINAL 라운드 점수로 정렬 (FINAL 라운드 점수가 우선)
-            intermediates = stats.entrySet().stream()
-                    .map(entry -> {
-                        String userId = entry.getKey();
-                        Score score = entry.getValue();
-                        FinalRoundScore finalScore = finalScores.getOrDefault(userId, new FinalRoundScore());
-
-                        // 전체 점수 합산: 일반 라운드 점수 + FINAL 라운드 점수
-                        int totalScoreValue = score.score + finalScore.score;
-                        // correctCount와 totalCount는 모든 라운드 합계
-                        int totalCorrect = score.correct + finalScore.correct;
-                        int totalCount = score.total + finalScore.total;
-                        // 전체 시간 합산: 일반 라운드 시간 + FINAL 라운드 시간
-                        long totalTime = score.totalTimeMs + finalScore.totalTimeMs;
-
-                        GoldenbellState state = goldenState.get(userId);
-                        boolean alive = state != null ? state.isAlive() : participants.stream()
-                                .filter(p -> p.getUserId().equals(userId))
-                                .findFirst()
-                                .map(p -> !p.isEliminated())
-                                .orElse(true);
-                        boolean revived = state != null && state.isRevived();
-                        return new ScoreboardIntermediate(userId, totalCorrect, totalCount, totalScoreValue, totalTime, alive, revived);
-                    })
-                    .sorted((a, b) -> {
-                        // alive 상태 우선: alive=true가 항상 alive=false보다 높은 순위
-                        int aliveCompare = Boolean.compare(b.alive(), a.alive());
-                        if (aliveCompare != 0) return aliveCompare;
-                        // FINAL 라운드 점수 내림차순
-                        // 점수는 정답 + 속도 보너스로 계산되므로, 정답 수가 같아도 속도가 빠른 사람이 더 높은 점수를 받음
-                        int scoreCompare = Integer.compare(b.score(), a.score());
-                        if (scoreCompare != 0) return scoreCompare;
-                        // 점수가 같을 경우 (거의 발생하지 않지만) 전체 제출속도(합산) 빠른 사람이 우선
-                        int timeCompare = Long.compare(a.totalTimeMs(), b.totalTimeMs());
-                        if (timeCompare != 0) return timeCompare;
-                        // userId 오름차순
-                        return a.userId().compareTo(b.userId());
-                    })
-                    .toList();
-        } else {
-            // 일반 정렬 (점수 내림차순)
-            // DUEL 모드: 동점일 경우 전체 제출속도(합산) 빠른 사람이 우승
-            // TOURNAMENT/GOLDENBELL: 동일한 정렬 기준 적용
-            intermediates = stats.entrySet().stream()
-                    .map(entry -> {
-                        String userId = entry.getKey();
-                        Score score = entry.getValue();
-                        GoldenbellState state = goldenState.get(userId);
-                        boolean alive = state != null ? state.isAlive() : participants.stream()
-                                .filter(p -> p.getUserId().equals(userId))
-                                .findFirst()
-                                .map(p -> !p.isEliminated())
-                                .orElse(true);
-                        boolean revived = state != null && state.isRevived();
-                        return new ScoreboardIntermediate(userId, score.correct, score.total, score.score, score.totalTimeMs, alive, revived);
-                    })
-                    .sorted((a, b) -> {
-                        // GOLDENBELL, TOURNAMENT 모드인 경우 alive 상태 우선
-                        if (isGoldenbell || room.getMode() == MatchMode.TOURNAMENT) {
-                            int aliveCompare = Boolean.compare(b.alive(), a.alive());
-                            if (aliveCompare != 0) return aliveCompare;
-                        }
-                        // 점수 내림차순
-                        // 점수는 정답 + 속도 보너스로 계산되므로, 정답 수가 같아도 속도가 빠른 사람이 더 높은 점수를 받음
-                        // 따라서 점수 비교만으로도 정답 수와 속도를 모두 반영한 순위 결정 가능
-                        int scoreCompare = Integer.compare(b.score(), a.score());
-                        if (scoreCompare != 0) return scoreCompare;
-                        // 점수가 같을 경우 (거의 발생하지 않지만) 전체 제출속도(합산) 빠른 사람이 우선
-                        // totalTimeMs는 모든 문제의 제출 시간 합계이므로 이미 전체 제출속도 합산임
-                        int timeCompare = Long.compare(a.totalTimeMs(), b.totalTimeMs());
-                        if (timeCompare != 0) return timeCompare;
-                        // userId 오름차순
-                        return a.userId().compareTo(b.userId());
-                    })
-                    .toList();
-        }
-
-        // 정렬 결과 확인 (디버깅용)
-        log.debug("정렬된 intermediates: {}", intermediates.stream()
-                .map(i -> String.format("%s: score=%d, correct=%d", i.userId(), i.score(), i.correct()))
-                .collect(Collectors.joining(", ")));
-
-        // 토너먼트 모드: 현재 라운드의 활성 참가자만 필터링
-        Set<String> activeUserIds = null;
-        if (room.getMode() == MatchMode.TOURNAMENT && currentQuestion != null) {
-            List<MatchParticipant> activeParticipants = participantRepository.findByRoomIdAndEliminatedFalse(roomId);
-            activeUserIds = activeParticipants.stream()
-                    .map(MatchParticipant::getUserId)
-                    .collect(Collectors.toSet());
-
-            // 현재 사용자와 같은 라운드의 활성 참가자만 표시
-            // (토너먼트는 라운드별로 경쟁하므로, 같은 라운드의 모든 활성 참가자가 상대방)
-            log.debug("토너먼트 라운드 {} 활성 참가자: {}", currentQuestion.getRoundNo(), activeUserIds);
-        }
-
-        int rank = 1;
-        int previousScore = Integer.MIN_VALUE;
-        int previousCorrect = Integer.MIN_VALUE;
-        Long previousTime = null;
-
-        List<VersusDtos.ScoreBoardItem> finalItems = new ArrayList<>();
-        Map<String, MatchParticipant> participantMap = participants.stream()
-                .collect(Collectors.toMap(MatchParticipant::getUserId, p -> p));
-
-        Map<String, AccountServiceClient.ProfileSummary> finalProfileMap = profileMap;
-        for (ScoreboardIntermediate intermediate : intermediates) {
-            // 토너먼트 모드: 현재 라운드의 활성 참가자만 포함
-            if (activeUserIds != null && !activeUserIds.contains(intermediate.userId())) {
-                continue;
-            }
-            Long totalTime = intermediate.totalTimeMs() == 0 && intermediate.total() == 0
-                    ? null
-                    : intermediate.totalTimeMs();
-            if (intermediate.score() != previousScore
-                    || intermediate.correct() != previousCorrect
-                    || !Objects.equals(totalTime, previousTime)) {
-                rank = finalItems.size() + 1;
-            }
-            previousScore = intermediate.score();
-            previousCorrect = intermediate.correct();
-            previousTime = totalTime;
-
-            AccountServiceClient.ProfileSummary profile = finalProfileMap.get(intermediate.userId());
-            finalItems.add(new VersusDtos.ScoreBoardItem(
-                    intermediate.userId(),
-                    profile != null ? profile.nickname() : null,
-                    determineSkinId(intermediate.userId(), profile),
-                    intermediate.correct(),
-                    intermediate.total(),
-                    intermediate.score(),
-                    totalTime,
-                    rank,
-                    intermediate.alive(),
-                    intermediate.revived()
-            ));
-
-            MatchParticipant participant = participantMap.get(intermediate.userId());
-            if (participant != null) {
-                participant.setFinalScore(intermediate.score());
-                participant.setPlayerRank(rank);
-            }
-        }
-
-        participantRepository.saveAll(participantMap.values());
-
-        // 현재 문제 정보 계산
-        VersusDtos.CurrentQuestionInfo currentQuestionInfo = getCurrentQuestionInfo(roomId, room.getStatus());
-
-        // 쉬는 시간 정보 계산 (현재 문제가 없고 진행 중일 때만)
-        VersusDtos.IntermissionInfo intermissionInfo = null;
-        if (room.getStatus() == MatchStatus.ONGOING && currentQuestionInfo == null) {
-            intermissionInfo = getCurrentIntermissionInfo(roomId);
-        }
-
-        List<VersusDtos.XpResult> xpResults = fetchXpResults(roomId);
-        return new VersusDtos.ScoreBoardResp(roomId, room.getStatus(), finalItems, currentQuestionInfo, intermissionInfo, xpResults);
+        return scoreboardService.computeScoreboard(room, currentQuestion, currentUserId);
     }
+
+    // computeScoreboard 메서드는 ScoreboardService로 위임됩니다.
+    // 기존 구현 코드는 ScoreboardService로 완전히 이동되었습니다.
 
     private boolean hasNextRound(Long roomId, int currentRound) {
         return questionRepository.findByRoomIdOrderByRoundNoAscOrderNoAsc(roomId).stream()
@@ -3090,6 +2965,23 @@ public class VersusService {
 
             // MatchQuestion 형태로 변환
             List<VersusDtos.QuestionInfo> result = convertToQuestionInfos(questions, room.getMode());
+            
+            // DUEL 모드: 문제 수 검증 및 로깅
+            if (room.getMode() == MatchMode.DUEL) {
+                int expectedCount = getTotalQuestionCount(MatchMode.DUEL);
+                log.info("DUEL_QUESTIONS_GENERATED roomId={} expectedCount={} studyServiceCount={} convertedCount={} questionIds={}",
+                        room.getId(), expectedCount, questions.size(), result.size(),
+                        result.stream().map(q -> q.questionId()).toList());
+                
+                if (result.size() != expectedCount) {
+                    log.error("DUEL_QUESTIONS_COUNT_MISMATCH roomId={} expected={} actual={} studyServiceCount={} questionIds={}",
+                            room.getId(), expectedCount, result.size(), questions.size(),
+                            result.stream().map(q -> q.questionId()).toList());
+                    throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                            String.format("DUEL requires exactly %d questions, but got %d from study-service (converted: %d)",
+                                    expectedCount, questions.size(), result.size()));
+                }
+            }
 
             // 골든벨의 경우 문제 수 확인 및 경고
             if (room.getMode() == MatchMode.GOLDENBELL && result.size() < 7) {
@@ -4299,7 +4191,13 @@ public class VersusService {
 
     // ========== 개선 사항 6: progress-service 연동 ==========
 
-    private void notifyProgressService(MatchRoom room, VersusDtos.ScoreBoardResp scoreboard) {
+    /**
+     * Progress service에 결과 통지 및 XP 지급
+     * 
+     * @param room 방 정보
+     * @param scoreboard 스코어보드
+     */
+    public void notifyProgressService(MatchRoom room, VersusDtos.ScoreBoardResp scoreboard) {
         if (room.getResultReported() != null && room.getResultReported()) {
             log.info("Progress notification already sent for room {}, skipping", room.getId());
             return;

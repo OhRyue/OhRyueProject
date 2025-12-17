@@ -1,14 +1,10 @@
 package com.OhRyue.certpilot.versus.service;
 
-import com.OhRyue.certpilot.versus.domain.MatchAnswer;
 import com.OhRyue.certpilot.versus.domain.MatchEvent;
 import com.OhRyue.certpilot.versus.domain.MatchQuestion;
 import com.OhRyue.certpilot.versus.domain.MatchRoom;
 import com.OhRyue.certpilot.versus.domain.MatchStatus;
-import com.OhRyue.certpilot.versus.dto.VersusDtos;
-import com.OhRyue.certpilot.versus.repository.MatchAnswerRepository;
 import com.OhRyue.certpilot.versus.repository.MatchEventRepository;
-import com.OhRyue.certpilot.versus.repository.MatchParticipantRepository;
 import com.OhRyue.certpilot.versus.repository.MatchQuestionRepository;
 import com.OhRyue.certpilot.versus.repository.MatchRoomRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -24,16 +20,11 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 시간 초과 시 자동 오답 처리 서비스
- *
- * 1) 한 문제(방+questionId)에서 timeout 처리/진행은 "딱 1번"만 수행
- *    - MatchEvent: QUESTION_TIMEOUT_HANDLED 기록으로 idempotent 보장
- * 2) 미제출 유저 timeout 오답은 "전원 저장" 후
- *    - handleModeAfterAnswer()는 마지막에 1번만 호출
+ * 
+ * 리팩토링 후: 타임아웃 감지만 수행하고, 질문 종료 후처리는 DuelQuestionFinishService로 위임
  */
 @Service
 @RequiredArgsConstructor
@@ -41,15 +32,11 @@ import java.util.stream.Collectors;
 public class TimeoutAnswerService {
 
   private static final String EVENT_QUESTION_STARTED = "QUESTION_STARTED";
-  private static final String EVENT_TIMEOUT_HANDLED = "QUESTION_TIMEOUT_HANDLED";
-  private static final String EVENT_ANSWER_TIMEOUT = "ANSWER_TIMEOUT";
 
   private final MatchRoomRepository roomRepository;
   private final MatchQuestionRepository questionRepository;
-  private final MatchAnswerRepository answerRepository;
-  private final MatchParticipantRepository participantRepository;
   private final MatchEventRepository eventRepository;
-  private final VersusService versusService;
+  private final DuelQuestionFinishService duelQuestionFinishService;
   private final RedisLockService redisLockService;
   private final ObjectMapper objectMapper;
 
@@ -66,6 +53,11 @@ public class TimeoutAnswerService {
 
     for (MatchRoom room : ongoingRooms) {
       try {
+        // DUEL 모드만 처리
+        if (room.getMode() != com.OhRyue.certpilot.versus.domain.MatchMode.DUEL) {
+          continue;
+        }
+
         // 방 단위 분산락(예: roomId 기반)
         // 락 타임아웃: 30초
         redisLockService.executeWithLock(room.getId(), 30, () -> {
@@ -82,135 +74,77 @@ public class TimeoutAnswerService {
   /**
    * 특정 방의 시간 초과 답안 처리
    * - 분산락으로 보호됨
+   * - 타임아웃 감지만 수행하고, 질문 종료 후처리는 DuelQuestionFinishService로 위임
    */
   @Transactional
   protected void processRoomTimeoutAnswers(Long roomId, Instant now) {
     MatchRoom room = roomRepository.findById(roomId).orElse(null);
-    if (room == null || room.getStatus() != MatchStatus.ONGOING) {
+    if (room == null) {
+      return;
+    }
+    
+    // 매치가 이미 종료되었으면 skip
+    if (room.getStatus() != MatchStatus.ONGOING) {
+      log.debug("TIMEOUT_SCHEDULER_SKIP roomId={} status={} (매치가 이미 종료됨)", roomId, room.getStatus());
       return;
     }
 
     // 현재 진행 중 문제(최근 QUESTION_STARTED 이벤트 기준)
     MatchQuestion currentQuestion = getCurrentQuestion(roomId);
     if (currentQuestion == null) {
+      log.debug("TIMEOUT_SCHEDULER_SKIP roomId={} (현재 진행 중인 문제 없음)", roomId);
+      return;
+    }
+
+    Long questionId = currentQuestion.getQuestionId();
+    
+    // 이미 종료된 문제인지 확인 (멱등성 보호)
+    if (isQuestionAlreadyFinished(roomId, questionId)) {
+      log.info("TIMEOUT_SCHEDULER_SKIP roomId={} q={} (이미 종료된 문제, 무시)", roomId, questionId);
       return;
     }
 
     // endTime 계산
-    QuestionTimeInfo timeInfo = getQuestionTimeInfo(roomId, currentQuestion.getQuestionId());
+    QuestionTimeInfo timeInfo = getQuestionTimeInfo(roomId, questionId);
     if (timeInfo == null || timeInfo.endTime == null) {
+      log.debug("TIMEOUT_SCHEDULER_SKIP roomId={} q={} (시간 정보 없음)", roomId, questionId);
       return;
     }
 
     // 아직 시간 안 지났으면 skip
     if (now.isBefore(timeInfo.endTime)) {
+      log.debug("TIMEOUT_SCHEDULER_SKIP roomId={} q={} now={} endTime={} (아직 시간 안 지남)", 
+          roomId, questionId, now, timeInfo.endTime);
       return;
     }
 
-    // 이미 timeout 처리한 문제면 재처리 금지 (idempotent)
-    if (alreadyHandledTimeout(roomId, currentQuestion.getQuestionId())) {
-      return;
-    }
+    log.info("TIMEOUT_SCHEDULER_TRIGGER roomId={} q={} now={} endTime={} (타임아웃 감지)", 
+        roomId, questionId, now, timeInfo.endTime);
 
-    // 참가자 목록
-    Set<String> allParticipants = participantRepository.findByRoomId(roomId).stream()
-        .map(p -> p.getUserId())
-        .collect(Collectors.toSet());
-
-    // 해당 문제에 대해 이미 답한 유저들만 조회(방 전체 답을 전부 끌어오지 않도록 개선)
-    Set<String> answeredUsers = answerRepository.findByRoomIdAndQuestionId(roomId, currentQuestion.getQuestionId())
-        .stream()
-        .map(MatchAnswer::getUserId)
-        .collect(Collectors.toSet());
-
-    Set<String> unansweredUsers = allParticipants.stream()
-        .filter(u -> !answeredUsers.contains(u))
-        .collect(Collectors.toSet());
-
-    // 1) 미제출 유저 timeout 오답 저장(전원)
-    if (!unansweredUsers.isEmpty()) {
-      log.info("Processing timeout answers for room {}, question {} (orderNo: {}): {} users, endTime: {}, now: {}",
-          roomId, currentQuestion.getQuestionId(), currentQuestion.getOrderNo(),
-          unansweredUsers.size(), timeInfo.endTime, now);
-
-      for (String userId : unansweredUsers) {
-        saveTimeoutAnswer(roomId, currentQuestion, userId);
+    // 질문 종료 후처리는 DuelQuestionFinishService로 위임
+    // (이미 종료된 질문인지 확인 및 락 처리는 DuelQuestionFinishService에서 수행)
+    try {
+      DuelQuestionFinishService.FinishResult result = duelQuestionFinishService.finishQuestion(
+          roomId,
+          questionId,
+          DuelQuestionFinishService.FinishReason.TIMEOUT,
+          null
+      );
+      
+      if (result.isAlreadyFinished()) {
+        log.info("TIMEOUT_SCHEDULER_RESULT roomId={} q={} alreadyFinished=true (이미 종료됨)", 
+            roomId, questionId);
+      } else if (result.isProcessed()) {
+        log.info("TIMEOUT_SCHEDULER_RESULT roomId={} q={} processed=true matchCompleted={}", 
+            roomId, questionId, result.isMatchCompleted());
+      } else {
+        log.debug("TIMEOUT_SCHEDULER_RESULT roomId={} q={} skipped (락 획득 실패)", 
+            roomId, questionId);
       }
-    } else {
-      log.info("Time limit expired for room {}, question {} (orderNo: {}): all users answered. Proceeding.",
-          roomId, currentQuestion.getQuestionId(), currentQuestion.getOrderNo());
-    }
-
-    // 2) timeout 처리 완료 이벤트 기록(여기서 1번만)
-    markTimeoutHandled(roomId, currentQuestion.getQuestionId(), now);
-
-    // 3) 다음 진행/종료 판단은 딱 1번만 호출
-    try {
-      VersusDtos.ScoreBoardResp scoreboard = versusService.computeScoreboard(room);
-      versusService.handleModeAfterAnswer(room, currentQuestion, scoreboard);
     } catch (Exception e) {
-      log.error("Failed to process match progress after timeout handled: {}", e.getMessage(), e);
+      log.error("TIMEOUT_SCHEDULER_ERROR roomId={} q={} error={}", 
+          roomId, questionId, e.getMessage(), e);
     }
-  }
-
-  private boolean alreadyHandledTimeout(Long roomId, Long questionId) {
-    // 이미 기록된 이벤트가 있으면 "이번 문제 timeout 처리/진행"은 끝난 것으로 간주
-    return eventRepository.existsByRoomIdAndEventTypeAndPayloadJsonContaining(
-        roomId, EVENT_TIMEOUT_HANDLED, "\"questionId\":" + questionId
-    );
-  }
-
-  private void markTimeoutHandled(Long roomId, Long questionId, Instant now) {
-    try {
-      String payloadJson = String.format("{\"questionId\":%d,\"handledAt\":\"%s\"}", questionId, now.toString());
-      MatchEvent e = MatchEvent.builder()
-          .roomId(roomId)
-          .eventType(EVENT_TIMEOUT_HANDLED)
-          .payloadJson(payloadJson)
-          .build();
-      eventRepository.save(e);
-    } catch (Exception ex) {
-      // idempotent 마커 저장 실패는 치명적일 수 있으므로 warn 이상으로 남김
-      log.warn("Failed to save timeout handled marker: roomId={}, questionId={}, error={}",
-          roomId, questionId, ex.getMessage());
-    }
-  }
-
-  /**
-   * timeout 오답 저장(단건)
-   * - 중복 저장 방어(유니크 제약이 없을 수 있으므로 코드로 방어)
-   */
-  private void saveTimeoutAnswer(Long roomId, MatchQuestion question, String userId) {
-    boolean alreadyAnswered = answerRepository
-        .findByRoomIdAndQuestionIdAndUserId(roomId, question.getQuestionId(), userId)
-        .isPresent();
-    if (alreadyAnswered) return;
-
-    MatchAnswer timeoutAnswer = MatchAnswer.builder()
-        .roomId(roomId)
-        .questionId(question.getQuestionId())
-        .userId(userId)
-        .roundNo(question.getRoundNo())
-        .phase(question.getPhase())
-        .correct(false)
-        .timeMs(question.getTimeLimitSec() * 1000)
-        .scoreDelta(0)
-        .userAnswer("")
-        .build();
-    answerRepository.save(timeoutAnswer);
-
-    MatchEvent timeoutEvent = MatchEvent.builder()
-        .roomId(roomId)
-        .eventType(EVENT_ANSWER_TIMEOUT)
-        .payloadJson(String.format(
-            "{\"userId\":\"%s\",\"questionId\":%d,\"round\":%d,\"phase\":\"%s\",\"timeLimitSec\":%d}",
-            userId, question.getQuestionId(), question.getRoundNo(),
-            question.getPhase().name(), question.getTimeLimitSec()))
-        .build();
-    eventRepository.save(timeoutEvent);
-
-    log.debug("Auto-processed timeout answer: roomId={}, questionId={}, userId={}",
-        roomId, question.getQuestionId(), userId);
   }
 
   /**
@@ -284,6 +218,47 @@ public class TimeoutAnswerService {
     } catch (Exception e) {
       log.debug("Failed to get question time info: {}", e.getMessage());
       return null;
+    }
+  }
+
+  /**
+   * 이미 종료된 문제인지 확인 (멱등성 보호)
+   */
+  private boolean isQuestionAlreadyFinished(Long roomId, Long questionId) {
+    try {
+      List<MatchEvent> finishEvents = eventRepository.findByRoomIdAndEventType(roomId, "QUESTION_FINISHED");
+      
+      for (MatchEvent event : finishEvents) {
+        if (event.getPayloadJson() == null) {
+          continue;
+        }
+        
+        try {
+          Map<String, Object> payload = objectMapper.readValue(
+              event.getPayloadJson(), 
+              new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}
+          );
+          
+          Object qIdObj = payload.get("questionId");
+          if (qIdObj != null) {
+            Long qId = qIdObj instanceof Number 
+                ? ((Number) qIdObj).longValue() 
+                : Long.valueOf(qIdObj.toString());
+            
+            if (qId.equals(questionId)) {
+              return true;
+            }
+          }
+        } catch (Exception e) {
+          // payload 파싱 실패는 무시
+        }
+      }
+      
+      return false;
+    } catch (Exception e) {
+      log.debug("Failed to check if question already finished: roomId={} q={} error={}", 
+          roomId, questionId, e.getMessage());
+      return false;
     }
   }
 

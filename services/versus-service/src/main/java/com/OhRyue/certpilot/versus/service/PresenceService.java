@@ -38,7 +38,19 @@ public class PresenceService {
      */
     public void updatePresence(Long roomId, String userId) {
         String key = getPresenceKey(roomId);
-        String lastSeenAt = Instant.now().toString();
+        Instant now = Instant.now();
+        String lastSeenAt = now.toString();
+
+        // 이전 lastSeen 조회
+        Instant previousLastSeen = null;
+        try {
+            Object previousValue = redisTemplate.opsForHash().get(key, userId);
+            if (previousValue != null) {
+                previousLastSeen = Instant.parse(previousValue.toString());
+            }
+        } catch (Exception e) {
+            // 이전 값 조회 실패는 무시 (첫 heartbeat일 수 있음)
+        }
 
         try {
             // Hash에 userId -> lastSeenAt 저장
@@ -47,10 +59,12 @@ public class PresenceService {
             // 키에 TTL 설정 (하트비트가 없으면 자동 삭제)
             redisTemplate.expire(key, Duration.ofSeconds(PRESENCE_TTL_SECONDS));
 
-            log.debug("Presence updated: roomId={}, userId={}, lastSeenAt={}", roomId, userId, lastSeenAt);
+            log.info("Presence 업데이트: userId={}, roomId={}, redisKey={}, now={}, previousLastSeen={}, ttl={}초",
+                    userId, roomId, key, now, previousLastSeen, PRESENCE_TTL_SECONDS);
         } catch (Exception e) {
-            log.warn("Failed to update presence: roomId={}, userId={}, error={}", 
-                    roomId, userId, e.getMessage());
+            log.error("Presence 업데이트 실패: userId={}, roomId={}, redisKey={}, now={}, error={}", 
+                    userId, roomId, key, now, e.getMessage(), e);
+            throw e; // 상위로 예외 전파
         }
     }
 
@@ -153,6 +167,10 @@ public class PresenceService {
         return PRESENCE_PREFIX + roomId;
     }
 }
+
+
+
+
 
 
 
