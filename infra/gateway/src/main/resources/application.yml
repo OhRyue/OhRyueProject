@@ -138,7 +138,7 @@ spring:
             - AddRequestHeader=X-Forwarded-Prefix, /api/cert
             - RewritePath=/api/cert/(?<segment>v3/api-docs.*), /${segment}
 
-        # --- versus ---
+        # --- versus (REST) ---
         - id: versus-service
           uri: lb://versus-service
           predicates:
@@ -160,6 +160,12 @@ spring:
           filters:
             - AddRequestHeader=X-Forwarded-Prefix, /api/versus
             - RewritePath=/api/versus/(?<segment>v3/api-docs.*), /${segment}
+
+        # --- versus (WebSocket / STOMP + SockJS) ---
+        - id: versus-ws
+          uri: lb:ws://versus-service
+          predicates:
+            - Path=/ws/versus/**
 
         # --- community ---
         - id: community-service
