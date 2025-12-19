@@ -44,17 +44,19 @@ public class XpService {
     );
     
     /**
-     * 정답률 기반 XP 계산
-     * - 100%: 활동별 기본 XP (correctCount == totalCount로 정확히 판단)
-     * - 80% ~ 99%: 50 XP
-     * - 30% ~ 79%: 30 XP
-     * - 0% ~ 29%: 10 XP
+     * 정답률에 비례해서 XP 계산
+     * 공식: earnedXp = round(maxXp * accuracy)
+     * 
+     * - accuracy는 correctCount/totalCount 또는 scorePct/100.0으로 계산
+     * - 0% 정답 → 0 XP
+     * - 50% 정답 → maxXp * 0.5 XP
+     * - 100% 정답 → maxXp XP
      * 
      * @param activityType 활동 타입
      * @param scorePct 정답률 (0.0 ~ 100.0)
-     * @param correctCount 정답 수 (100% 판단용, 선택)
-     * @param totalCount 총 문제 수 (100% 판단용, 선택)
-     * @return 지급할 XP
+     * @param correctCount 정답 수 (accuracy 계산용, 선택)
+     * @param totalCount 총 문제 수 (accuracy 계산용, 선택)
+     * @return 지급할 XP (정답률에 비례)
      */
     private int calculateXpByScore(String activityType, Double scorePct, Integer correctCount, Integer totalCount) {
         log.info("[calculateXpByScore] Called with: activityType={}, scorePct={}, correctCount={}, totalCount={}", 
@@ -92,59 +94,56 @@ public class XpService {
         
         // MICRO의 경우 totalCount가 9인지 확인 (OX 4 + MCQ/SHORT 5 = 9)
         if ((activityType.equals("WRITTEN_MICRO") || activityType.equals("PRACTICAL_MICRO")) 
-                && totalCount != null && totalCount != 9) {
-            log.warn("[calculateXpByScore] MICRO totalCount is not 9: activityType={}, totalCount={}, returning 0 XP", 
-                    activityType, totalCount);
-            return 0;
+                && totalCount != null) {
+            if (!totalCount.equals(9)) {
+                log.warn("[calculateXpByScore] MICRO totalCount is not 9: activityType={}, totalCount={}, returning 0 XP", 
+                        activityType, totalCount);
+                return 0;
+            }
         }
         
         // REVIEW의 경우 totalCount가 0이면 XP 지급하지 않음
         if ((activityType.equals("WRITTEN_REVIEW") || activityType.equals("PRACTICAL_REVIEW")) 
-                && totalCount != null && totalCount == 0) {
-            log.warn("[calculateXpByScore] REVIEW totalCount is 0 (문제 부족): activityType={}, returning 0 XP", 
-                    activityType);
-            return 0;
+                && totalCount != null) {
+            if (totalCount.equals(0)) {
+                log.warn("[calculateXpByScore] REVIEW totalCount is 0 (문제 부족): activityType={}, returning 0 XP", 
+                        activityType);
+                return 0;
+            }
         }
         
-        // 메인학습: 정답률 기반 XP 계산
-        // 100% 판단: correctCount와 totalCount가 모두 제공되면 정확히 비교 (정수 비교로 부동소수점 오차 방지)
-        // REVIEW는 실제 출제 수(N)가 가변적이므로, correctCount == totalCount로만 100% 판단
-        boolean isPerfectScore = false;
+        // 메인학습: 정답률에 비례해서 XP 계산
+        // earnedXp = round(maxXp * accuracy)
+        // accuracy는 scorePct / 100.0 또는 correctCount / totalCount로 계산
+        int maxXp = BASE_XP_RULES.getOrDefault(activityType, 0);
+        
+        // accuracy 계산: correctCount/totalCount가 있으면 그것을 사용 (더 정확)
+        // 없으면 scorePct를 사용
+        double accuracy;
         if (correctCount != null && totalCount != null && totalCount > 0) {
-            isPerfectScore = (correctCount == totalCount);
-            log.info("[calculateXpByScore] 100% 판단 (정수 비교): correctCount={}, totalCount={}, isPerfectScore={}", 
-                    correctCount, totalCount, isPerfectScore);
+            accuracy = (double) correctCount / totalCount;
+            log.info("[calculateXpByScore] accuracy 계산 (정수 기반): correctCount={}, totalCount={}, accuracy={}", 
+                    correctCount, totalCount, accuracy);
         } else {
-            // correctCount/totalCount가 없으면 scorePct로 판단 (하위 호환성, 부동소수점 오차 고려)
-            // 하지만 메인학습에서는 correctCount/totalCount를 제공하는 것을 권장
-            isPerfectScore = (scorePct >= 99.5);
-            log.warn("[calculateXpByScore] 100% 판단 (scorePct, 하위 호환성): activityType={}, scorePct={}, isPerfectScore={}. " +
+            // scorePct를 사용 (0.0 ~ 100.0 범위를 0.0 ~ 1.0으로 변환)
+            accuracy = scorePct / 100.0;
+            log.warn("[calculateXpByScore] accuracy 계산 (scorePct 기반, 하위 호환성): activityType={}, scorePct={}, accuracy={}. " +
                     "correctCount/totalCount를 제공하는 것을 권장합니다.", 
-                    activityType, scorePct, isPerfectScore);
+                    activityType, scorePct, accuracy);
         }
         
-        int xp;
-        if (isPerfectScore) {
-            // 100%: 기본 XP
-            xp = BASE_XP_RULES.getOrDefault(activityType, 0);
-            log.info("[calculateXpByScore] Perfect score! activityType={}, scorePct={}, correctCount={}, totalCount={}, baseXp={}", 
-                    activityType, scorePct, correctCount, totalCount, xp);
-        } else if (scorePct >= 80.0) {
-            // 80% ~ 99%: 50 XP
-            xp = 50;
-            log.info("[calculateXpByScore] High score: activityType={}, scorePct={}, xp=50", activityType, scorePct);
-        } else if (scorePct >= 30.0) {
-            // 30% ~ 79%: 30 XP
-            xp = 30;
-            log.info("[calculateXpByScore] Medium score: activityType={}, scorePct={}, xp=30", activityType, scorePct);
-        } else {
-            // 0% ~ 29%: 10 XP
-            xp = 10;
-            log.info("[calculateXpByScore] Low score: activityType={}, scorePct={}, xp=10", activityType, scorePct);
+        // accuracy는 0.0 ~ 1.0 범위로 제한
+        if (accuracy < 0.0) {
+            accuracy = 0.0;
+        } else if (accuracy > 1.0) {
+            accuracy = 1.0;
         }
         
-        log.info("[calculateXpByScore] Final result: activityType={}, scorePct={}, correctCount={}, totalCount={}, xp={}", 
-                activityType, scorePct, correctCount, totalCount, xp);
+        // 정답률에 비례해서 XP 계산: earnedXp = round(maxXp * accuracy)
+        int xp = (int) Math.round(maxXp * accuracy);
+        
+        log.info("[calculateXpByScore] XP 계산 결과: activityType={}, maxXp={}, scorePct={}, correctCount={}, totalCount={}, accuracy={}, earnedXp={}", 
+                activityType, maxXp, scorePct, correctCount, totalCount, accuracy, xp);
         return xp;
     }
 
@@ -322,40 +321,56 @@ public class XpService {
         log.info("[XP_EARN] activityType={}", req.activityType());
         log.info("[XP_EARN] sessionId={}", req.sessionId());
         log.info("[XP_EARN] topicId={}", req.topicId());
-        log.info("[XP_EARN] scorePct={} (type: {})", req.scorePct(), req.scorePct() != null ? req.scorePct().getClass().getName() : "null");
+        log.info("[XP_EARN] earnedXp={} (단일 소스, 우선 사용)", req.earnedXp());
+        log.info("[XP_EARN] scorePct={} (earnedXp가 없을 때만 사용)", req.scorePct());
+        log.info("[XP_EARN] correctCount={}, totalCount={}", req.correctCount(), req.totalCount());
         
-        // 2. 정답률 기반 XP 계산
-        int xpAmount = calculateXpByScore(req.activityType(), req.scorePct(), req.correctCount(), req.totalCount());
-        log.info("[XP_EARN] ========== XP CALCULATION RESULT ==========");
-        log.info("[XP_EARN] activityType={}, scorePct={}, correctCount={}, totalCount={}, xpAmount={}", 
-                req.activityType(), req.scorePct(), req.correctCount(), req.totalCount(), xpAmount);
-        
-        if (xpAmount == 0 && req.scorePct() == null) {
-            log.warn("[XP_EARN] Unknown activity type or null scorePct: activityType={}, scorePct={}", 
-                    req.activityType(), req.scorePct());
+        // 2. XP 계산: earnedXp가 있으면 그대로 사용 (단일 소스), 없으면 기존 계산 로직 사용
+        int xpAmount;
+        if (req.earnedXp() != null) {
+            // earnedXp를 단일 소스로 사용 (SUMMARY에서 계산된 값)
+            xpAmount = req.earnedXp();
+            log.info("[XP_EARN] earnedXp를 단일 소스로 사용: earnedXp={}", xpAmount);
+        } else {
+            // earnedXp가 없으면 기존 계산 로직 사용 (하위 호환성)
+            xpAmount = calculateXpByScore(req.activityType(), req.scorePct(), req.correctCount(), req.totalCount());
+            log.info("[XP_EARN] earnedXp가 없어 기존 계산 로직 사용: activityType={}, scorePct={}, correctCount={}, totalCount={}, xpAmount={}", 
+                    req.activityType(), req.scorePct(), req.correctCount(), req.totalCount(), xpAmount);
         }
         
-        // 2. XP 지급 (중복 지급 방지는 study-service의 xp_granted 플래그로 처리)
-        // refId를 null로 전달하여 addXp의 중복 지급 방지 로직을 우회
-        // (study-service에서 이미 xp_granted 플래그로 중복 지급을 방지함)
+        // 3. XP 지급 (중복 지급 방지: sessionId를 refId로 사용)
         XpReason reason = mapActivityTypeToReason(req.activityType());
+        
+        // refId 생성: sessionId를 사용하여 중복 적립 방지
+        // 형식: "session:{sessionId}" 또는 null (sessionId가 없을 때)
+        String refId = req.sessionId() != null ? "session:" + req.sessionId() : null;
         
         UserXpWallet walletBefore = getWallet(userId);
         long xpBefore = walletBefore.getXpTotal();
         int levelBefore = walletBefore.getLevel();
         
-        // refId를 null로 전달하여 항상 XP 지급 (중복 지급 방지 우회)
-        UserXpWallet walletAfter = addXp(userId, xpAmount, reason, null);
+        log.info("[XP_EARN] XP 적립 직전: userId={}, xpAmount={}, reason={}, refId={}, walletBefore={}", 
+                userId, xpAmount, reason, refId, xpBefore);
+        
+        // addXp 호출 (refId로 중복 적립 방지)
+        UserXpWallet walletAfter = addXp(userId, xpAmount, reason, refId);
         long xpAfter = walletAfter.getXpTotal();
         int levelAfter = walletAfter.getLevel();
         
-        int earnedXp = (int) (xpAfter - xpBefore);
+        int actualEarnedXp = (int) (xpAfter - xpBefore);
         boolean leveledUp = levelAfter > levelBefore;
         // 레벨업 보상 포인트는 더 이상 지급하지 않음 (레벨 × 500 방식으로 변경)
         int levelUpRewardPoints = 0;
         
-        log.info("XP earned: userId={}, activityType={}, sessionId={}, scorePct={}, earnedXp={}, totalXp={}, level={}->{}, leveledUp={}", 
-                userId, req.activityType(), req.sessionId(), req.scorePct(), earnedXp, xpAfter, levelBefore, levelAfter, leveledUp);
+        log.info("[XP_EARN] ========== XP EARN RESULT ==========");
+        log.info("[XP_EARN] userId={}, activityType={}, sessionId={}, earnedXp={}, actualEarnedXp={}, totalXp={}, level={}->{}, leveledUp={}", 
+                userId, req.activityType(), req.sessionId(), req.earnedXp(), actualEarnedXp, xpAfter, levelBefore, levelAfter, leveledUp);
+        
+        // 중복 적립 방지 확인 (idempotency hit)
+        if (actualEarnedXp == 0 && xpAmount > 0) {
+            log.warn("[XP_EARN] 중복 적립 방지됨 (idempotency hit): userId={}, sessionId={}, refId={}, requestedXp={}", 
+                    userId, req.sessionId(), refId, xpAmount);
+        }
         
         // XP 10000 배지 체크 (비동기로 처리하여 성능 영향 최소화)
         if (xpAfter >= 10_000 && xpBefore < 10_000) {
@@ -367,7 +382,7 @@ public class XpService {
         }
         
         return new XpDtos.XpEarnResponse(
-                earnedXp,
+                actualEarnedXp,  // 실제 적립된 XP (중복 방지로 0일 수 있음)
                 xpAfter,
                 levelAfter,
                 calculateXpToNextLevel(levelAfter, xpAfter),

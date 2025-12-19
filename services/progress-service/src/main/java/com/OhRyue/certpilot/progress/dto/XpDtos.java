@@ -15,11 +15,13 @@ public class XpDtos {
             Long sessionId,
             @Schema(description = "토픽 ID (선택)", example = "11101")
             Long topicId,
-            @Schema(description = "정답률 (0.0 ~ 100.0, 선택, 정답률 기반 XP 계산용)", example = "90.0")
+            @Schema(description = "지급할 XP (단일 소스, 우선 사용). 없으면 scorePct/correctCount/totalCount로 계산", example = "30")
+            Integer earnedXp,
+            @Schema(description = "정답률 (0.0 ~ 100.0, 선택, earnedXp가 없을 때만 사용)", example = "90.0")
             Double scorePct,
-            @Schema(description = "정답 수 (100% 판단용, 선택)", example = "9")
+            @Schema(description = "정답 수 (earnedXp가 없을 때만 사용)", example = "9")
             Integer correctCount,
-            @Schema(description = "총 문제 수 (100% 판단용, 선택)", example = "9")
+            @Schema(description = "총 문제 수 (earnedXp가 없을 때만 사용)", example = "9")
             Integer totalCount
     ) {}
 

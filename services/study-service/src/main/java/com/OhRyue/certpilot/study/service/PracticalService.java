@@ -1244,25 +1244,32 @@ public class PracticalService {
           scorePct = 0.0;
         }
         
-        // 로깅: 실제 전달되는 scorePct 값 확인
-        System.out.println("[PracticalService.practicalReviewSummary] XP 지급 요청: sessionId=" + session.getId() + 
-                          ", practicalTotal=" + practicalTotal + ", practicalCorrect=" + practicalCorrect + 
-                          ", scorePct=" + scorePct);
+        // earnedXp 계산 (단일 소스): 정답률에 비례해서 계산
+        // PRACTICAL_REVIEW의 maxXp = 250
+        int maxXp = 250;
+        double accuracy = practicalTotal > 0 ? (double) practicalCorrect / practicalTotal : 0.0;
+        int calculatedEarnedXp = (int) Math.round(maxXp * accuracy);
         
-        // 1. XP 지급 요청 (정답률 기반) - scorePct는 절대 null이 아님
+        // 로깅: earnedXp 계산 결과
+        System.out.println("[PracticalService.practicalReviewSummary] earnedXp 계산: practicalTotal=" + practicalTotal + 
+                          ", practicalCorrect=" + practicalCorrect + ", scorePct=" + scorePct + 
+                          ", accuracy=" + accuracy + ", maxXp=" + maxXp + ", earnedXp=" + calculatedEarnedXp);
+        
+        // 1. XP 지급 요청 (earnedXp를 단일 소스로 전달)
         // REVIEW는 실제 출제 수(N)가 10보다 적을 수 있으므로, 실제 출제 수를 totalCount로 전달
         ProgressXpClient.XpEarnRequest xpRequest = new ProgressXpClient.XpEarnRequest(
             "PRACTICAL_REVIEW",
             session.getId(),
             rootTopicId,
-            scorePct,          // 항상 유효한 Double 값 (null 아님)
-            practicalCorrect,  // 정답 수 (실제 출제된 N문제 중 정답인 개수)
-            practicalTotal     // 총 문제 수 (실제 출제 수 N, 0 < N ≤ 10)
+            calculatedEarnedXp,  // 단일 소스: 정답률에 비례해서 계산된 XP
+            scorePct,            // 하위 호환성/감사용 (earnedXp가 없을 때만 사용)
+            practicalCorrect,    // 하위 호환성/감사용
+            practicalTotal       // 하위 호환성/감사용
         );
         
         System.out.println("[PracticalService.practicalReviewSummary] XP 요청 상세: activityType=" + xpRequest.activityType() + 
                           ", sessionId=" + xpRequest.sessionId() + ", topicId=" + xpRequest.topicId() + 
-                          ", scorePct=" + xpRequest.scorePct());
+                          ", earnedXp=" + xpRequest.earnedXp() + ", scorePct=" + xpRequest.scorePct());
         
         ProgressXpClient.XpEarnResponse xpResp = progressXpClient.earnXp(xpRequest);
           
@@ -1590,25 +1597,33 @@ public class PracticalService {
             scorePct = 0.0;
           }
           
-          System.out.println("[PracticalService.summary] XP 지급 요청 (MICRO): sessionId=" + session.getId() + 
-                            ", totalSolved=" + totalSolved + ", totalCorrect=" + (miniCorrect + practicalCorrect) + 
-                            ", scorePct=" + scorePct);
-          
-          // 1. XP 지급 요청 (정답률 기반) - scorePct는 절대 null이 아님
-          // MICRO는 OX 4문제 + SHORT 5문제 = 총 9문제
+          // earnedXp 계산 (단일 소스): 정답률에 비례해서 계산
+          // PRACTICAL_MICRO의 maxXp = 200
+          int maxXp = 200;
           int totalCorrect = miniCorrect + practicalCorrect;
+          double accuracy = totalSolved > 0 ? (double) totalCorrect / totalSolved : 0.0;
+          int calculatedEarnedXp = (int) Math.round(maxXp * accuracy);
+          
+          // 로깅: earnedXp 계산 결과
+          System.out.println("[PracticalService.summary] earnedXp 계산 (MICRO): totalSolved=" + totalSolved + 
+                            ", totalCorrect=" + totalCorrect + ", scorePct=" + scorePct + 
+                            ", accuracy=" + accuracy + ", maxXp=" + maxXp + ", earnedXp=" + calculatedEarnedXp);
+          
+          // 1. XP 지급 요청 (earnedXp를 단일 소스로 전달)
+          // MICRO는 OX 4문제 + SHORT 5문제 = 총 9문제
           ProgressXpClient.XpEarnRequest xpRequest = new ProgressXpClient.XpEarnRequest(
               "PRACTICAL_MICRO",
               session.getId(),
               topicId,
-              scorePct,  // 항상 유효한 Double 값 (null 아님)
-              totalCorrect,  // 정답 수 (OX + SHORT 합산)
-              totalSolved     // 총 문제 수 (OX 4 + SHORT 5 = 9)
+              calculatedEarnedXp,  // 단일 소스: 정답률에 비례해서 계산된 XP
+              scorePct,            // 하위 호환성/감사용 (earnedXp가 없을 때만 사용)
+              totalCorrect,        // 하위 호환성/감사용
+              totalSolved          // 하위 호환성/감사용
           );
           
           System.out.println("[PracticalService.summary] XP 요청 상세: activityType=" + xpRequest.activityType() + 
                             ", sessionId=" + xpRequest.sessionId() + ", topicId=" + xpRequest.topicId() + 
-                            ", scorePct=" + xpRequest.scorePct());
+                            ", earnedXp=" + xpRequest.earnedXp() + ", scorePct=" + xpRequest.scorePct());
           
           ProgressXpClient.XpEarnResponse xpResp = progressXpClient.earnXp(xpRequest);
             
