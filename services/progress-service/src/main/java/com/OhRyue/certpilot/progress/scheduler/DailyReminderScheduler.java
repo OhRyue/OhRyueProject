@@ -32,8 +32,14 @@ public class DailyReminderScheduler {
     @Scheduled(cron = "0 0 12 * * *", zone = "Asia/Seoul")
     public void sendDailyReminders() {
         LocalDateTime now = LocalDateTime.now(KST);
+        java.time.ZoneId systemDefault = java.time.ZoneId.systemDefault();
+        
         log.info("========================================");
-        log.info("📅 [DailyReminderScheduler] 스케줄러 실행 시작 - 현재 시간: {}", now.format(FORMATTER));
+        log.info("📅 [DailyReminderScheduler] 스케줄러 실행 시작");
+        log.info("   현재 시간 (Asia/Seoul): {}", now.format(FORMATTER));
+        log.info("   시스템 기본 타임존: {}", systemDefault);
+        log.info("   JVM 타임존: {}", System.getProperty("user.timezone", "미설정"));
+        log.info("   환경변수 TZ: {}", System.getenv("TZ"));
         log.info("========================================");
         
         try {

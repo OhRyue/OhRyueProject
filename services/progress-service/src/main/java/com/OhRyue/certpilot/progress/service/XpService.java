@@ -45,17 +45,20 @@ public class XpService {
     
     /**
      * 정답률 기반 XP 계산
-     * - 100%: 활동별 기본 XP
+     * - 100%: 활동별 기본 XP (correctCount == totalCount로 정확히 판단)
      * - 80% ~ 99%: 50 XP
      * - 30% ~ 79%: 30 XP
      * - 0% ~ 29%: 10 XP
      * 
      * @param activityType 활동 타입
      * @param scorePct 정답률 (0.0 ~ 100.0)
+     * @param correctCount 정답 수 (100% 판단용, 선택)
+     * @param totalCount 총 문제 수 (100% 판단용, 선택)
      * @return 지급할 XP
      */
-    private int calculateXpByScore(String activityType, Double scorePct) {
-        log.info("[calculateXpByScore] Called with: activityType={}, scorePct={}", activityType, scorePct);
+    private int calculateXpByScore(String activityType, Double scorePct, Integer correctCount, Integer totalCount) {
+        log.info("[calculateXpByScore] Called with: activityType={}, scorePct={}, correctCount={}, totalCount={}", 
+                activityType, scorePct, correctCount, totalCount);
         
         // 메인학습 활동인지 확인
         boolean isMainLearning = activityType != null && (
@@ -87,12 +90,45 @@ public class XpService {
             return 0;
         }
         
+        // MICRO의 경우 totalCount가 9인지 확인 (OX 4 + MCQ/SHORT 5 = 9)
+        if ((activityType.equals("WRITTEN_MICRO") || activityType.equals("PRACTICAL_MICRO")) 
+                && totalCount != null && totalCount != 9) {
+            log.warn("[calculateXpByScore] MICRO totalCount is not 9: activityType={}, totalCount={}, returning 0 XP", 
+                    activityType, totalCount);
+            return 0;
+        }
+        
+        // REVIEW의 경우 totalCount가 0이면 XP 지급하지 않음
+        if ((activityType.equals("WRITTEN_REVIEW") || activityType.equals("PRACTICAL_REVIEW")) 
+                && totalCount != null && totalCount == 0) {
+            log.warn("[calculateXpByScore] REVIEW totalCount is 0 (문제 부족): activityType={}, returning 0 XP", 
+                    activityType);
+            return 0;
+        }
+        
         // 메인학습: 정답률 기반 XP 계산
+        // 100% 판단: correctCount와 totalCount가 모두 제공되면 정확히 비교 (정수 비교로 부동소수점 오차 방지)
+        // REVIEW는 실제 출제 수(N)가 가변적이므로, correctCount == totalCount로만 100% 판단
+        boolean isPerfectScore = false;
+        if (correctCount != null && totalCount != null && totalCount > 0) {
+            isPerfectScore = (correctCount == totalCount);
+            log.info("[calculateXpByScore] 100% 판단 (정수 비교): correctCount={}, totalCount={}, isPerfectScore={}", 
+                    correctCount, totalCount, isPerfectScore);
+        } else {
+            // correctCount/totalCount가 없으면 scorePct로 판단 (하위 호환성, 부동소수점 오차 고려)
+            // 하지만 메인학습에서는 correctCount/totalCount를 제공하는 것을 권장
+            isPerfectScore = (scorePct >= 99.5);
+            log.warn("[calculateXpByScore] 100% 판단 (scorePct, 하위 호환성): activityType={}, scorePct={}, isPerfectScore={}. " +
+                    "correctCount/totalCount를 제공하는 것을 권장합니다.", 
+                    activityType, scorePct, isPerfectScore);
+        }
+        
         int xp;
-        if (scorePct == 100.0) {
+        if (isPerfectScore) {
             // 100%: 기본 XP
             xp = BASE_XP_RULES.getOrDefault(activityType, 0);
-            log.info("[calculateXpByScore] Perfect score! activityType={}, scorePct={}, baseXp={}", activityType, scorePct, xp);
+            log.info("[calculateXpByScore] Perfect score! activityType={}, scorePct={}, correctCount={}, totalCount={}, baseXp={}", 
+                    activityType, scorePct, correctCount, totalCount, xp);
         } else if (scorePct >= 80.0) {
             // 80% ~ 99%: 50 XP
             xp = 50;
@@ -107,7 +143,8 @@ public class XpService {
             log.info("[calculateXpByScore] Low score: activityType={}, scorePct={}, xp=10", activityType, scorePct);
         }
         
-        log.info("[calculateXpByScore] Final result: activityType={}, scorePct={}, xp={}", activityType, scorePct, xp);
+        log.info("[calculateXpByScore] Final result: activityType={}, scorePct={}, correctCount={}, totalCount={}, xp={}", 
+                activityType, scorePct, correctCount, totalCount, xp);
         return xp;
     }
 
@@ -288,10 +325,10 @@ public class XpService {
         log.info("[XP_EARN] scorePct={} (type: {})", req.scorePct(), req.scorePct() != null ? req.scorePct().getClass().getName() : "null");
         
         // 2. 정답률 기반 XP 계산
-        int xpAmount = calculateXpByScore(req.activityType(), req.scorePct());
+        int xpAmount = calculateXpByScore(req.activityType(), req.scorePct(), req.correctCount(), req.totalCount());
         log.info("[XP_EARN] ========== XP CALCULATION RESULT ==========");
-        log.info("[XP_EARN] activityType={}, scorePct={}, xpAmount={}", 
-                req.activityType(), req.scorePct(), xpAmount);
+        log.info("[XP_EARN] activityType={}, scorePct={}, correctCount={}, totalCount={}, xpAmount={}", 
+                req.activityType(), req.scorePct(), req.correctCount(), req.totalCount(), xpAmount);
         
         if (xpAmount == 0 && req.scorePct() == null) {
             log.warn("[XP_EARN] Unknown activity type or null scorePct: activityType={}, scorePct={}", 

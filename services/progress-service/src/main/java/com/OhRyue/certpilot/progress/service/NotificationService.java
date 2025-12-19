@@ -98,6 +98,15 @@ public class NotificationService {
         log.info("Marked {} notifications as read for user {}", updated, userId);
     }
 
+    /**
+     * 멱등성 체크: 특정 사용자의 특정 타입과 weekIso를 가진 알림이 이미 존재하는지 확인
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<UserNotification> findByUserIdAndTypeAndWeekIso(
+            String userId, NotificationType type, String weekIsoPattern) {
+        return notificationRepository.findByUserIdAndTypeAndWeekIso(userId, type, weekIsoPattern);
+    }
+
     private NotificationDtos.NotificationResponse toResponse(UserNotification notification) {
         Map<String, Object> payload = null;
         if (notification.getPayloadJson() != null) {
@@ -120,6 +129,7 @@ public class NotificationService {
         );
     }
 }
+
 
 
 

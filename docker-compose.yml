@@ -146,6 +146,7 @@ services:
       - "8083:8083"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - TZ=Asia/Seoul
       - AUTH_JWT_SECRET=${JWT_SECRET}
       - GATEWAY_BASE_URL=${GATEWAY_BASE_URL:-http://gateway:8080}
       - MAIL_ENABLED=${MAIL_ENABLED:-true}

@@ -16,6 +16,7 @@ public class RankDtos {
       long score,
       int rank,
       Long xp,
+      Integer level,
       Integer streak,
       Instant lastUpdatedAt
   ) {}

@@ -3,6 +3,7 @@ package com.OhRyue.certpilot.progress.service;
 import com.OhRyue.certpilot.progress.domain.ReportDaily;
 import com.OhRyue.certpilot.progress.domain.ReportWeekly;
 import com.OhRyue.certpilot.progress.domain.UserBadge;
+import com.OhRyue.certpilot.progress.domain.UserNotification;
 import com.OhRyue.certpilot.progress.domain.enums.NotificationType;
 import com.OhRyue.certpilot.progress.feign.AccountClient;
 import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
@@ -177,22 +178,46 @@ public class WeeklyReportService {
 
             // 메일 발송 (HTML)
             String subject = String.format("[CertPilot] %s 주간 학습 리포트", weekIso);
-            mailSender.sendHtml(email, subject, emailBody);
+            try {
+                mailSender.sendHtml(email, subject, emailBody);
+                log.info("Weekly report email sent successfully to user {} (email: {})", userId, email);
+            } catch (Exception e) {
+                log.error("Failed to send weekly report email to user {} (email: {}): {}", 
+                        userId, email, e.getMessage(), e);
+                throw e; // 메일 발송 실패 시 예외를 다시 던져서 알림 생성하지 않음
+            }
 
-            // 인앱 알림 기록
-            notificationService.createNotification(
-                    userId,
-                    NotificationType.WEEKLY_REPORT,
-                    "주간 학습 리포트가 발송되었습니다",
-                    String.format("지난 주 학습 리포트가 이메일(%s)로 발송되었습니다.", email),
-                    Map.of(
-                            "weekIso", weekIso,
-                            "totalSolved", totalSolved,
-                            "accuracy", accuracy,
-                            "totalStudyMinutes", totalStudyMinutes,
-                            "newBadgesCount", newBadges.size()
-                    )
-            );
+            // 메일 발송 성공 후 인앱 알림 기록 (멱등성 체크 포함)
+            try {
+                // 멱등성 체크: 같은 주차에 대한 알림이 이미 존재하는지 확인
+                String weekIsoPattern = "%\"weekIso\":\"" + weekIso + "\"%";
+                List<UserNotification> existingNotifications = 
+                        notificationService.findByUserIdAndTypeAndWeekIso(userId, NotificationType.WEEKLY_REPORT, weekIsoPattern);
+                
+                if (!existingNotifications.isEmpty()) {
+                    log.info("Weekly report notification already exists for user {} week {}, skipping notification creation", 
+                            userId, weekIso);
+                } else {
+                    notificationService.createNotification(
+                            userId,
+                            NotificationType.WEEKLY_REPORT,
+                            "주간 학습 리포트 발송",
+                            "주간 학습 리포트가 발송되었습니다. 메일을 확인해주세요.",
+                            Map.of(
+                                    "weekIso", weekIso,
+                                    "totalSolved", totalSolved,
+                                    "accuracy", accuracy,
+                                    "totalStudyMinutes", totalStudyMinutes,
+                                    "newBadgesCount", newBadges.size()
+                            )
+                    );
+                    log.info("Weekly report notification created for user {} (week: {})", userId, weekIso);
+                }
+            } catch (Exception e) {
+                // 알림 생성 실패는 로그만 남기고 메일 발송 성공은 유지
+                log.error("Failed to create weekly report notification for user {} (week: {}): {}", 
+                        userId, weekIso, e.getMessage(), e);
+            }
 
             log.info("Weekly report sent to user {} (email: {})", userId, email);
         } catch (Exception e) {

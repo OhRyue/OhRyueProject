@@ -2,16 +2,18 @@ package com.OhRyue.certpilot.progress.service;
 
 import com.OhRyue.certpilot.progress.domain.AssistGoalDaily;
 import com.OhRyue.certpilot.progress.domain.AssistGoalDailyKey;
-import com.OhRyue.certpilot.progress.domain.ReportDaily;
+import com.OhRyue.certpilot.progress.domain.ProgressActivity;
 import com.OhRyue.certpilot.progress.dto.GoalDtos;
 import com.OhRyue.certpilot.progress.repository.AssistGoalDailyRepository;
-import com.OhRyue.certpilot.progress.repository.ReportDailyRepository;
+import com.OhRyue.certpilot.progress.repository.ProgressActivityRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.WeekFields;
 import java.util.List;
@@ -23,7 +25,7 @@ public class GoalService {
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
   private final AssistGoalDailyRepository goalRepository;
-  private final ReportDailyRepository reportDailyRepository;
+  private final ProgressActivityRepository activityRepository;
 
   @Transactional(readOnly = true)
   public AssistGoalDaily getToday(String userId) {
@@ -78,12 +80,16 @@ public class GoalService {
     LocalDate startOfWeek = today.with(weekFields.dayOfWeek(), 1);
     LocalDate endOfWeek = startOfWeek.plusDays(6);
 
-    List<ReportDaily> weeklyReports = reportDailyRepository.findByUserIdAndDateBetween(
-        userId, startOfWeek, endOfWeek);
+    // 이번 주의 활동 조회 (ProgressActivity 기반)
+    LocalDateTime startOfWeekDateTime = startOfWeek.atStartOfDay();
+    LocalDateTime endOfWeekDateTime = endOfWeek.atTime(LocalTime.MAX);
+    List<ProgressActivity> weeklyActivities = activityRepository.findByUserIdAndFinishedAtBetween(
+        userId, startOfWeekDateTime, endOfWeekDateTime);
+
     List<AssistGoalDaily> weeklyGoals = goalRepository.findByUserIdAndDateBetween(
         userId, startOfWeek, endOfWeek);
 
-    GoalDtos.WeeklyStats weeklyStats = toWeeklyStats(today, weeklyReports, weeklyGoals);
+    GoalDtos.WeeklyStats weeklyStats = toWeeklyStats(today, weeklyActivities, weeklyGoals);
 
     return new GoalDtos.AssistSummary(dailyStatus, weeklyStats);
   }
@@ -98,15 +104,20 @@ public class GoalService {
   }
 
   private GoalDtos.WeeklyStats toWeeklyStats(LocalDate today,
-                                             List<ReportDaily> reports,
+                                             List<ProgressActivity> activities,
                                              List<AssistGoalDaily> goals) {
     WeekFields weekFields = WeekFields.ISO;
     int week = today.get(weekFields.weekOfWeekBasedYear());
     int year = today.get(weekFields.weekBasedYear());
     String weekIso = "%d-W%02d".formatted(year, week);
 
-    int solved = reports.stream().mapToInt(ReportDaily::getSolvedCount).sum();
-    int correct = reports.stream().mapToInt(ReportDaily::getCorrectCount).sum();
+    // ProgressActivity에서 solvedCount와 correctCount 집계
+    int solved = activities.stream()
+        .mapToInt(activity -> activity.getQuestionCount() != null ? activity.getQuestionCount() : 0)
+        .sum();
+    int correct = activities.stream()
+        .mapToInt(activity -> activity.getCorrectCount() != null ? activity.getCorrectCount() : 0)
+        .sum();
     double accuracy = solved == 0 ? 0.0 : Math.round((correct * 1000.0 / solved)) / 10.0;
 
     int goalCompletedDays = (int) goals.stream()

@@ -27,7 +27,9 @@ public interface ProgressXpClient {
             String activityType,  // WRITTEN_MICRO, PRACTICAL_MICRO, WRITTEN_REVIEW, PRACTICAL_REVIEW 등
             Long sessionId,        // study_session ID (중복 XP 지급 방지용)
             Long topicId,          // 선택 (진척도 계산할 때 필요할 수 있음)
-            Double scorePct        // 선택 (정답률 기반 XP 계산용, 0.0 ~ 100.0)
+            Double scorePct,       // 선택 (정답률 기반 XP 계산용, 0.0 ~ 100.0)
+            Integer correctCount,  // 선택 (100% 판단용, 정답 수)
+            Integer totalCount     // 선택 (100% 판단용, 총 문제 수)
     ) {}
 
     record XpEarnResponse(

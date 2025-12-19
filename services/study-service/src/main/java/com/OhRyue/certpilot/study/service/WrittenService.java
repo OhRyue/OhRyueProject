@@ -1050,11 +1050,14 @@ public class WrittenService {
                           ", scorePct=" + scorePct);
         
         // 1. XP 지급 요청 (정답률 기반) - scorePct는 절대 null이 아님
+        // REVIEW는 실제 출제 수(N)가 10보다 적을 수 있으므로, 실제 출제 수를 totalCount로 전달
         ProgressXpClient.XpEarnRequest xpRequest = new ProgressXpClient.XpEarnRequest(
             "WRITTEN_REVIEW",
             session.getId(),
             rootTopicId,
-            scorePct  // 항상 유효한 Double 값 (null 아님)
+            scorePct,      // 항상 유효한 Double 값 (null 아님)
+            mcqCorrect,     // 정답 수 (실제 출제된 N문제 중 정답인 개수)
+            mcqTotal        // 총 문제 수 (실제 출제 수 N, 0 < N ≤ 10)
         );
         
         System.out.println("[WrittenService.reviewSummary] XP 요청 상세: activityType=" + xpRequest.activityType() + 
@@ -1410,11 +1413,14 @@ public class WrittenService {
                             ", scorePct=" + scorePct);
           
           // 1. XP 지급 요청 (정답률 기반) - scorePct는 절대 null이 아님
+          // MICRO는 OX 4문제 + MCQ 5문제 = 총 9문제
           ProgressXpClient.XpEarnRequest xpRequest = new ProgressXpClient.XpEarnRequest(
               "WRITTEN_MICRO",
               session.getId(),
               topicId,
-              scorePct  // 항상 유효한 Double 값 (null 아님)
+              scorePct,  // 항상 유효한 Double 값 (null 아님)
+              totalCorrect,  // 정답 수 (OX + MCQ 합산)
+              totalSolved    // 총 문제 수 (OX 4 + MCQ 5 = 9)
           );
           
           System.out.println("[WrittenService.summary] XP 요청 상세: activityType=" + xpRequest.activityType() + 

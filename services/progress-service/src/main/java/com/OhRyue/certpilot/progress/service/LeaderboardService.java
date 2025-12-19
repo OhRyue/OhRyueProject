@@ -172,6 +172,7 @@ public class LeaderboardService {
           score.getScore(),
           rank++,
           wallet == null ? null : wallet.getXpTotal(),
+          wallet == null ? 1 : wallet.getLevel(),  // level 추가 (wallet이 null이면 기본값 1)
           streak == null ? null : streak.getBestDays(),
           score.getLastUpdatedAt()
       ));
@@ -210,6 +211,7 @@ public class LeaderboardService {
               score.getScore(),
               (int) higher + 1,
               wallet == null ? null : wallet.getXpTotal(),
+              wallet == null ? 1 : wallet.getLevel(),  // level 추가 (wallet이 null이면 기본값 1)
               streak == null ? null : streak.getBestDays(),
               score.getLastUpdatedAt()
           );
@@ -254,6 +256,10 @@ public class LeaderboardService {
               log.warn("닉네임 조회 실패 (userId: {}): {}", report.getUserId(), e.getMessage());
             }
             
+            // XP 기반 level 계산 (weekly는 xpGained만 있으므로 wallet 조회 필요)
+            UserXpWallet wallet = xpWalletRepository.findById(report.getUserId()).orElse(null);
+            int level = wallet == null ? 1 : wallet.getLevel();
+            
             return new RankDtos.LeaderboardEntry(
                 report.getUserId(),
                 nickname,
@@ -261,6 +267,7 @@ public class LeaderboardService {
                 report.getXpGained(),
                 (int) higher + 1,
                 (long) report.getXpGained(),
+                level,  // level 추가
                 streak == null ? null : streak.getCurrentDays(),
                 Instant.now()
             );
@@ -317,6 +324,7 @@ public class LeaderboardService {
                 streak.getBestDays(),
                 (int) higher + 1,
                 wallet == null ? null : wallet.getXpTotal(),
+                wallet == null ? 1 : wallet.getLevel(),  // level 추가 (wallet이 null이면 기본값 1)
                 streak.getBestDays(),
                 Instant.now()
             );
@@ -395,6 +403,10 @@ public class LeaderboardService {
     List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
     List<String> userIds = weekly.stream().map(ReportWeekly::getUserId).toList();
     
+    // XP Wallet 조회 (level 계산용)
+    Map<String, UserXpWallet> wallets = xpWalletRepository.findAllById(userIds).stream()
+        .collect(Collectors.toMap(UserXpWallet::getUserId, w -> w));
+    
     // Streak 조회
     Map<String, UserStreak> streaks = userStreakRepository.findAllById(userIds).stream()
         .collect(Collectors.toMap(UserStreak::getUserId, s -> s));
@@ -418,6 +430,7 @@ public class LeaderboardService {
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     int rank = 1;
     for (ReportWeekly report : weekly) {
+      UserXpWallet wallet = wallets.get(report.getUserId());
       UserStreak streak = streaks.get(report.getUserId());
       String nickname = nicknameMap.getOrDefault(report.getUserId(), "");
       Long skinId = skinIdMap.get(report.getUserId());
@@ -428,6 +441,7 @@ public class LeaderboardService {
           report.getXpGained(),
           rank++,
           (long) report.getXpGained(),
+          wallet == null ? 1 : wallet.getLevel(),  // level 추가 (wallet이 null이면 기본값 1)
           streak == null ? null : streak.getCurrentDays(),
           Instant.now()
       ));
@@ -439,6 +453,10 @@ public class LeaderboardService {
     Pageable pageable = PageRequest.of(page, size);
     List<ReportWeekly> weekly = reportWeeklyRepository.findByWeekIsoOrderByXpGainedDesc(weekIso, pageable);
     List<String> userIds = weekly.stream().map(ReportWeekly::getUserId).toList();
+    
+    // XP Wallet 조회 (level 계산용)
+    Map<String, UserXpWallet> wallets = xpWalletRepository.findAllById(userIds).stream()
+        .collect(Collectors.toMap(UserXpWallet::getUserId, w -> w));
     
     // Streak 조회
     Map<String, UserStreak> streaks = userStreakRepository.findAllById(userIds).stream()
@@ -463,6 +481,7 @@ public class LeaderboardService {
     List<RankDtos.LeaderboardEntry> entries = new ArrayList<>();
     int rank = page * size + 1;
     for (ReportWeekly report : weekly) {
+      UserXpWallet wallet = wallets.get(report.getUserId());
       UserStreak streak = streaks.get(report.getUserId());
       String nickname = nicknameMap.getOrDefault(report.getUserId(), "");
       Long skinId = skinIdMap.get(report.getUserId());
@@ -473,6 +492,7 @@ public class LeaderboardService {
           report.getXpGained(),
           rank++,
           (long) report.getXpGained(),
+          wallet == null ? 1 : wallet.getLevel(),  // level 추가 (wallet이 null이면 기본값 1)
           streak == null ? null : streak.getCurrentDays(),
           Instant.now()
       ));
@@ -517,6 +537,7 @@ public class LeaderboardService {
           streak.getBestDays(),
           rank++,
           wallet == null ? null : wallet.getXpTotal(),
+          wallet == null ? 1 : wallet.getLevel(),  // level 추가 (wallet이 null이면 기본값 1)
           streak.getBestDays(),
           Instant.now()
       ));

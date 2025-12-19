@@ -16,7 +16,11 @@ public class XpDtos {
             @Schema(description = "토픽 ID (선택)", example = "11101")
             Long topicId,
             @Schema(description = "정답률 (0.0 ~ 100.0, 선택, 정답률 기반 XP 계산용)", example = "90.0")
-            Double scorePct
+            Double scorePct,
+            @Schema(description = "정답 수 (100% 판단용, 선택)", example = "9")
+            Integer correctCount,
+            @Schema(description = "총 문제 수 (100% 판단용, 선택)", example = "9")
+            Integer totalCount
     ) {}
 
     @Schema(name = "XpEarnResponse", description = "XP 지급 응답")
