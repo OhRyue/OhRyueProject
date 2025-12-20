@@ -35,6 +35,10 @@ public class SecurityConfig {
       "/api/cert/external/**"  // Q-Net API 테스트용
   };
 
+  private static final String[] PUBLIC_API_WHITELIST = {
+      "/api/cert/topics"  // 카테고리 목록 API (외부 공개)
+  };
+
   private final InternalJwtAuthFilter internalJwtAuthFilter;
   private final JwtAuthFilter jwtAuthFilter;
 
@@ -67,9 +71,11 @@ public class SecurityConfig {
             .requestMatchers(ACTUATOR_WHITELIST).permitAll()
             // External Q-Net API (테스트용) - /api/cert/** 보다 먼저 체크
             .requestMatchers(EXTERNAL_API_WHITELIST).permitAll()
+            // Public API - 카테고리 목록 (외부 공개, 인증 불필요)
+            .requestMatchers(PUBLIC_API_WHITELIST).permitAll()
 
             // 실제 Cert API (자격증 정보/토픽 등)는 JWT 필요
-            // 주의: /api/cert/external/**는 위에서 이미 permitAll로 처리됨
+            // 주의: /api/cert/external/**와 /api/cert/topics는 위에서 이미 permitAll로 처리됨
             .requestMatchers("/api/cert/**").authenticated()
 
             // 그 외 요청은 일단 허용

@@ -123,6 +123,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-ui")
                 || path.startsWith("/swagger-ui.html")
-                || path.startsWith("/api/cert/external");  // Q-Net External API는 공개 경로
+                || path.startsWith("/api/cert/external")  // Q-Net External API는 공개 경로
+                || path.equals("/api/cert/topics")  // 카테고리 목록 API (외부 공개)
+                || (path.startsWith("/api/cert/topics") && path.contains("?"));  // 쿼리 파라미터 포함 케이스
     }
 }

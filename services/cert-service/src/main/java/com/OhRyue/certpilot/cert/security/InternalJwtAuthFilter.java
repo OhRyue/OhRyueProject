@@ -41,8 +41,8 @@ public class InternalJwtAuthFilter extends OncePerRequestFilter {
     
     // Internal JWT가 필요한 경로 패턴
     private static final String[] INTERNAL_PATHS = {
-        "/api/cert/topics",  // TopicTree API
         "/api/cert/internal"  // 기타 internal API
+        // 참고: /api/cert/topics는 외부 공개 API이므로 제외됨
     };
 
     private final JwtUtil internalJwtUtil;
@@ -78,6 +78,12 @@ public class InternalJwtAuthFilter extends OncePerRequestFilter {
         // Internal JWT가 비활성화된 경우 필터링 스킵
         if (!enabled) {
             log.debug("[cert-service] InternalJwtAuthFilter skipped (disabled): path={}", path);
+            return true;
+        }
+        
+        // 외부 공개 API는 필터링 스킵
+        if (path.equals("/api/cert/topics") || path.startsWith("/api/cert/topics?")) {
+            log.debug("[cert-service] InternalJwtAuthFilter skipped (public API): path={}", path);
             return true;
         }
         
