@@ -46,6 +46,13 @@ frontend:
 auth:
   jwt:
     secret: ${AUTH_JWT_SECRET:${JWT_SECRET:your-super-secure-secret-key123456}}
+  # 서비스 간 내부 호출용 JWT 설정
+  internal:
+    jwt:
+      secret: ${AUTH_INTERNAL_JWT_SECRET:${INTERNAL_JWT_SECRET:internal-secret-key-change-in-production}}
+      issuer: ${AUTH_INTERNAL_JWT_ISSUER:${INTERNAL_JWT_ISSUER:certpilot-internal}}
+      audience: ${AUTH_INTERNAL_JWT_AUDIENCE:${INTERNAL_JWT_AUDIENCE:cert-service}}
+      expiration-minutes: ${AUTH_INTERNAL_JWT_EXPIRATION_MINUTES:${INTERNAL_JWT_EXPIRATION_MINUTES:15}}
 
 management:
   endpoints:

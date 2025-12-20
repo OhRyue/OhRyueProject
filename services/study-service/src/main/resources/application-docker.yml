@@ -33,7 +33,7 @@ auth:
     jwt:
       secret: ${AUTH_INTERNAL_JWT_SECRET:${INTERNAL_JWT_SECRET}}
       issuer: ${AUTH_INTERNAL_JWT_ISSUER:${INTERNAL_JWT_ISSUER:certpilot-internal}}
-      audience: ${AUTH_INTERNAL_JWT_AUDIENCE:${INTERNAL_JWT_AUDIENCE:study-service}}
+      audience: ${AUTH_INTERNAL_JWT_AUDIENCE:${INTERNAL_JWT_AUDIENCE:cert-service}}
       expiration-minutes: ${AUTH_INTERNAL_JWT_EXPIRATION_MINUTES:${INTERNAL_JWT_EXPIRATION_MINUTES:15}}
 
 

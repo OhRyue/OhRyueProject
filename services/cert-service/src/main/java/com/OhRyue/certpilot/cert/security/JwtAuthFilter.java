@@ -44,6 +44,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
+        // 이미 Internal JWT로 인증된 경우 스킵 (InternalJwtAuthFilter가 먼저 실행됨)
+        if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_INTERNAL"))) {
+                log.debug("[cert-service] JwtAuthFilter skipped (Internal JWT already authenticated): path={}", path);
+                filterChain.doFilter(request, response);
+                return;
+            }
+        }
+
         // 1) Gateway가 붙여준 헤더 우선 사용
         String userIdHeader = request.getHeader("X-User-Id");
         String rolesHeader = request.getHeader("X-User-Roles");
@@ -59,6 +69,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     roles = rolesHeader.split(",");
                 }
             } else if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
+                // Internal JWT는 InternalJwtAuthFilter에서 처리하므로 여기서는 스킵
+                // Internal JWT의 subject는 "internal-"으로 시작함
+                try {
+                    String token = authHeader.substring(7);
+                    // Internal JWT인지 확인 (subject가 internal-으로 시작)
+                    String subject = jwtUtil.getUserId(token);
+                    if (subject != null && subject.startsWith("internal-")) {
+                        log.debug("[cert-service] JwtAuthFilter skipped (Internal JWT detected): path={}", path);
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+                } catch (Exception e) {
+                    // Internal JWT가 아닐 수 있으므로 계속 진행
+                    log.debug("[cert-service] JwtAuthFilter: not Internal JWT, continuing with user JWT validation");
+                }
+                
                 // 혹시 게이트웨이 우회 호출 대비해서 JWT 직접 파싱
                 userId = jwtUtil.getUserId(authHeader);
                 roles = jwtUtil.getRoles(authHeader);

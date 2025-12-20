@@ -522,12 +522,14 @@ public class RedisMatchingQueueService {
     private String buildScopeJson(MatchingDtos.MatchRequest request) {
         try {
             if ("CATEGORY".equals(request.matchingMode())) {
-                // 카테고리 모드: topicId만 사용
-                return objectMapper.writeValueAsString(Map.of(
-                        "certId", request.certId(),
-                        "topicId", request.topicId(),
-                        "examMode", request.examMode()
-                ));
+                // 카테고리 모드: topicScope=CATEGORY로 명시 (보조학습과 동일한 규칙)
+                Map<String, Object> scope = new HashMap<>();
+                scope.put("certId", request.certId());
+                scope.put("topicId", request.topicId());
+                scope.put("examMode", request.examMode());
+                scope.put("topicScope", "CATEGORY");  // 명시적으로 CATEGORY 설정
+                scope.put("difficulty", "ALL");  // 카테고리 모드는 난이도 무관
+                return objectMapper.writeValueAsString(scope);
             } else {
                 // 난이도 모드: difficulty만 사용
                 return objectMapper.writeValueAsString(Map.of(
@@ -702,11 +704,20 @@ public class RedisMatchingQueueService {
         String exceptionType = e.getClass().getSimpleName();
         
         // HTTP 상태 코드 체크
+        // 503/502는 일시적 오류로 간주 (재시도 가능)
+        if (errorMessage.contains("503") || errorMessage.contains("service unavailable") || 
+            errorMessage.contains("502") || errorMessage.contains("bad gateway")) {
+            return false; // 일시적 오류 - 재시도 가능
+        }
+        
         if (errorMessage.contains("403") || errorMessage.contains("forbidden")) {
-            return true;
+            return true; // 구조적 오류
         }
         if (errorMessage.contains("401") || errorMessage.contains("unauthorized")) {
-            return true;
+            return true; // 구조적 오류
+        }
+        if (errorMessage.contains("404") || errorMessage.contains("not found")) {
+            return true; // 구조적 오류 (데이터 없음)
         }
         
         // 예외 타입 체크
@@ -715,6 +726,28 @@ public class RedisMatchingQueueService {
         }
         if (e instanceof IllegalStateException) {
             return true;
+        }
+        
+        // FeignException의 status 코드 확인
+        if (e instanceof feign.FeignException fe) {
+            int status = fe.status();
+            if (status == 503 || status == 502) {
+                return false; // 일시적 오류 - 재시도 가능
+            }
+            if (status == 404 || status == 403 || status == 401) {
+                return true; // 구조적 오류
+            }
+        }
+        
+        // ResponseStatusException의 status 코드 확인
+        if (e instanceof org.springframework.web.server.ResponseStatusException rse) {
+            int status = rse.getStatusCode().value();
+            if (status == 503 || status == 502) {
+                return false; // 일시적 오류 - 재시도 가능
+            }
+            if (status == 404 || status == 403 || status == 401) {
+                return true; // 구조적 오류
+            }
         }
         
         // 기타 구조적 문제는 일시적 문제로 간주

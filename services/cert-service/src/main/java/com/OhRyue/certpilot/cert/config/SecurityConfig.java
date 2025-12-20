@@ -1,5 +1,6 @@
 package com.OhRyue.certpilot.cert.config;
 
+import com.OhRyue.certpilot.cert.security.InternalJwtAuthFilter;
 import com.OhRyue.certpilot.cert.security.JwtAuthFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class SecurityConfig {
       "/api/cert/external/**"  // Q-Net API 테스트용
   };
 
+  private final InternalJwtAuthFilter internalJwtAuthFilter;
   private final JwtAuthFilter jwtAuthFilter;
 
   @Bean
@@ -74,7 +76,10 @@ public class SecurityConfig {
             .anyRequest().permitAll()
         )
 
-        // 커스텀 JwtAuthFilter 사용
+        // Internal JWT 필터를 먼저 배치 (내부 서비스 호출 처리)
+        // 일반 JWT 필터보다 앞에 배치하여 Internal JWT를 우선 처리
+        .addFilterBefore(internalJwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+        // 커스텀 JwtAuthFilter 사용 (사용자 JWT 처리)
         .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
 
         // 기본 로그인 폼 / HTTP Basic 인증 비활성화

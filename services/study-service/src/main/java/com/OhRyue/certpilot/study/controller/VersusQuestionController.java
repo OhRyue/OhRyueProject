@@ -34,6 +34,7 @@ public class VersusQuestionController {
         log.info("basePath=/api/study/versus");
         log.info("endpoints=[POST /questions, GET /questions/{questionId}, POST /questions/{questionId}/validate]");
         log.info("Service bean: {}", versusQuestionService != null ? versusQuestionService.getClass().getName() : "NULL");
+        log.info("✅ DUEL 문제 생성 엔드포인트 등록됨: POST /api/study/versus/questions");
     }
 
     @Operation(
@@ -52,7 +53,8 @@ public class VersusQuestionController {
             "- HARD: 어려움\n\n" +
             "**topicScope:**\n" +
             "- ALL: 전체 범위\n" +
-            "- SPECIFIC: topicId로 지정된 특정 토픽"
+            "- SPECIFIC: topicId로 지정된 특정 토픽 (하위 토픽 포함)\n" +
+            "- ROOT_DESCENDANTS: rootTopicId의 직접 자식 토픽(3레벨)에서 균등 분배 출제 (Category 모드)"
     )
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "문제 생성 성공"),

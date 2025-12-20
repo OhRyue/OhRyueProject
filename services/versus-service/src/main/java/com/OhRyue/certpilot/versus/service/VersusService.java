@@ -2144,18 +2144,14 @@ public class VersusService {
                         "1:1 배틀(실기)은 SHORT 10개(" + DUEL_PRACTICAL_SHORT_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: SHORT " + shortCount + "개, LONG " + longCount + "개)");
             }
         } else {
-            // 필기 모드: OX 2개 + MCQ 8개
-            long oxCount = questions.stream()
-                    .filter(q -> Objects.equals(q.getTimeLimitSec(), DUEL_WRITTEN_OX_LIMIT_SEC))
-                    .count();
+            // 필기 모드: MCQ 10개 고정 (OX 제거)
             long mcqCount = questions.stream()
                     .filter(q -> Objects.equals(q.getTimeLimitSec(), DUEL_WRITTEN_MCQ_LIMIT_SEC))
                     .count();
 
-            if (oxCount != 2 || mcqCount != 8) {
+            if (mcqCount != 10) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "1:1 배틀(필기)은 OX 2개(" + DUEL_WRITTEN_OX_LIMIT_SEC + "초)와 MCQ 8개("
-                                + DUEL_WRITTEN_MCQ_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: OX " + oxCount + "개, MCQ " + mcqCount + "개)");
+                        "1:1 배틀(필기)은 MCQ 10개(" + DUEL_WRITTEN_MCQ_LIMIT_SEC + "초)로 구성되어야 합니다. (현재: MCQ " + mcqCount + "개)");
             }
         }
     }
@@ -2405,10 +2401,11 @@ public class VersusService {
                 log.info("토너먼트 라운드 {} 답안 삭제: roomId={}, count={}", roundNo, roomId, roundAnswers.size());
             }
 
-            // 3. scopeJson에서 examMode, topicId 추출
+            // 3. scopeJson에서 examMode, topicId, certId 추출
             Map<String, Object> scope = readScope(room.getScopeJson());
             String examMode = (String) scope.getOrDefault("examMode", "WRITTEN");
             Long topicId = scope.get("topicId") != null ? Long.valueOf(scope.get("topicId").toString()) : null;
+            Long certId = scope.get("certId") != null ? Long.valueOf(scope.get("certId").toString()) : null;
             boolean isPractical = "PRACTICAL".equalsIgnoreCase(examMode);
 
             // 4. 라운드별 문제 타입 결정 및 새 문제 생성
@@ -2421,6 +2418,7 @@ public class VersusService {
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        certId,
                         "NORMAL",
                         3,
                         List.of(new StudyServiceClient.QuestionTypeSpec(questionType, 3))
@@ -2433,6 +2431,7 @@ public class VersusService {
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        certId,
                         "NORMAL",
                         3,
                         List.of(new StudyServiceClient.QuestionTypeSpec(questionType, 3))
@@ -2446,6 +2445,7 @@ public class VersusService {
                             examMode,
                             topicId != null ? "SPECIFIC" : "ALL",
                             topicId,
+                            certId,
                             "NORMAL",
                             3,
                             List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
@@ -2457,6 +2457,7 @@ public class VersusService {
                             examMode,
                             topicId != null ? "SPECIFIC" : "ALL",
                             topicId,
+                            certId,
                             "HARD",
                             3,
                             List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
@@ -2571,12 +2572,14 @@ public class VersusService {
             }
             String difficulty = (String) scope.getOrDefault("difficulty", "NORMAL");
             Long topicId = scope.get("topicId") != null ? Long.valueOf(scope.get("topicId").toString()) : null;
+            Long certId = scope.get("certId") != null ? Long.valueOf(scope.get("certId").toString()) : null;
 
             // 새로운 문제 요청
             StudyServiceClient.VersusQuestionRequest request = new StudyServiceClient.VersusQuestionRequest(
                     examMode,
                     topicId != null ? "SPECIFIC" : "ALL",
                     topicId,
+                    certId,
                     difficulty,
                     1, // 1개만 필요
                     List.of(new StudyServiceClient.QuestionTypeSpec(questionType, 1))
@@ -2892,21 +2895,37 @@ public class VersusService {
             String difficulty = (String) scope.getOrDefault("difficulty", "NORMAL");
             String topicScope = (String) scope.getOrDefault("topicScope", "ALL");
             Long topicId = scope.get("topicId") != null ? Long.valueOf(scope.get("topicId").toString()) : null;
+            Long certId = scope.get("certId") != null ? Long.valueOf(scope.get("certId").toString()) : null;
 
-            log.info("Parsed scope: roomId={}, examMode={}, difficulty={}, topicScope={}, topicId={}",
-                    room.getId(), examMode, difficulty, topicScope, topicId);
-
-            // topicScope가 "CATEGORY"인 경우 "SPECIFIC"로 변환 (둘 다 특정 topicId에서 문제를 가져옴)
-            if ("CATEGORY".equalsIgnoreCase(topicScope)) {
-                topicScope = "SPECIFIC";
-                log.info("topicScope 'CATEGORY'를 'SPECIFIC'로 변환: roomId={}, topicId={}", room.getId(), topicId);
-            }
+            log.info("Parsed scope: roomId={}, examMode={}, difficulty={}, topicScope={}, topicId={}, certId={}",
+                    room.getId(), examMode, difficulty, topicScope, topicId, certId);
 
             List<StudyServiceClient.QuestionDto> questions;
-            // topicScope가 "ALL"이 아니고 topicId가 있으면 "SPECIFIC"로 설정
-            String finalTopicScope = (topicId != null && !"ALL".equalsIgnoreCase(topicScope))
-                    ? "SPECIFIC"
-                    : (topicId != null ? "SPECIFIC" : "ALL");
+            // topicScope 결정: 파싱된 값을 존중하되, CATEGORY 모드는 ROOT_DESCENDANTS로 변환
+            String finalTopicScope;
+            if ("CATEGORY".equalsIgnoreCase(topicScope) && topicId != null) {
+                // Category 모드: rootTopicId의 하위 토픽(descendants)에서 균등 분배 출제
+                finalTopicScope = "ROOT_DESCENDANTS";
+                log.info("topicScope 'CATEGORY'를 'ROOT_DESCENDANTS'로 변환: roomId={}, rootTopicId={}", room.getId(), topicId);
+            } else if ("SPECIFIC".equalsIgnoreCase(topicScope) && topicId != null) {
+                // SPECIFIC 모드: 파싱된 값 그대로 사용
+                finalTopicScope = "SPECIFIC";
+            } else if ("ALL".equalsIgnoreCase(topicScope) || topicScope == null || topicScope.isBlank()) {
+                // ALL 모드 또는 topicScope가 없는 경우
+                if (topicId != null) {
+                    // topicId가 있으면 SPECIFIC으로 변환 (하위 호환성)
+                    finalTopicScope = "SPECIFIC";
+                    log.warn("topicScope가 ALL이지만 topicId가 있어 SPECIFIC으로 변환: roomId={}, topicId={}", room.getId(), topicId);
+                } else {
+                    finalTopicScope = "ALL";
+                }
+            } else {
+                // 기타 경우: 파싱된 값 그대로 사용
+                finalTopicScope = topicScope;
+            }
+            
+            log.info("Final topicScope 결정: roomId={}, parsed={}, final={}, topicId={}", 
+                    room.getId(), topicScope, finalTopicScope, topicId);
 
             if (room.getMode() == MatchMode.TOURNAMENT) {
                 // 토너먼트는 라운드별로 다른 난이도/타입 요청 필요
@@ -2923,21 +2942,23 @@ public class VersusService {
                         examMode,
                         finalTopicScope,
                         topicId,
+                        certId,  // scopeJson에서 추출한 certId 전달
                         difficulty,
                         totalCount,
                         questionTypes
                 );
 
-                log.info("Requesting {} questions from study-service for room {}: mode={}, examMode={}, topicScope={}, topicId={}, difficulty={}",
-                        totalCount, room.getId(), room.getMode(), examMode, finalTopicScope, topicId, difficulty);
+                // DUEL final payload 로깅 강화
+                String questionTypesStr = questionTypes.stream()
+                        .map(qt -> String.format("%s:%d", qt.type(), qt.count()))
+                        .collect(java.util.stream.Collectors.joining(", ", "[", "]"));
+                log.info("DUEL 문제 생성 요청 (final payload): roomId={}, mode={}, examMode={}, topicScope={}, topicId={}, difficulty={}, count={}, questionTypes={}",
+                        room.getId(), room.getMode(), examMode, finalTopicScope, topicId, difficulty, totalCount, questionTypesStr);
 
                 try {
-                    log.info("study-service 호출 시도: roomId={}, request={}", room.getId(),
-                            String.format("examMode=%s, topicScope=%s, topicId=%s, difficulty=%s, count=%d, questionTypes=%s",
-                                    request.examMode(), request.topicScope(), request.topicId(), request.difficulty(),
-                                    request.count(), request.questionTypes()));
                     questions = studyServiceClient.generateVersusQuestions(request);
-                    log.info("study-service 호출 성공: roomId={}, questionsCount={}", room.getId(), questions.size());
+                    log.info("study-service 호출 성공: roomId={}, questionsCount={}, questionTypes={}", 
+                            room.getId(), questions.size(), questionTypesStr);
                 } catch (Exception e) {
                     log.error("study-service 호출 실패: roomId={}, examMode={}, topicScope={}, topicId={}, difficulty={}, count={}, questionTypes={}, error={}, class={}",
                             room.getId(), examMode, finalTopicScope, topicId, difficulty, request.count(), request.questionTypes(),
@@ -3007,13 +3028,12 @@ public class VersusService {
     private List<StudyServiceClient.QuestionTypeSpec> determineQuestionTypes(MatchMode matchMode, String examMode) {
         if (matchMode == MatchMode.DUEL) {
             if ("WRITTEN".equals(examMode)) {
-                // 필기: OX 먼저, 그 다음 객관식 (순서 보장)
+                // DUEL 필기: MCQ 10문제 고정 (OX 제거)
                 return List.of(
-                        new StudyServiceClient.QuestionTypeSpec("OX", 2),
-                        new StudyServiceClient.QuestionTypeSpec("MCQ", 8)
+                        new StudyServiceClient.QuestionTypeSpec("MCQ", 10)
                 );
             } else {
-                // 실기: SHORT 10개 고정 (LONG 제거)
+                // DUEL 실기: SHORT 10문제 고정
                 return List.of(
                         new StudyServiceClient.QuestionTypeSpec("SHORT", 10)
                 );
@@ -3055,25 +3075,9 @@ public class VersusService {
         int roundNo = 1;
         int orderNo = 1;
 
-        // DUEL 모드 필기: OX 먼저, 그 다음 MCQ 순서 보장
-        List<StudyServiceClient.QuestionDto> sortedQuestions = questions;
-        if (mode == MatchMode.DUEL && !questions.isEmpty()) {
-            // 첫 번째 문제의 examMode 확인
-            String examMode = questions.get(0).mode();
-            if ("WRITTEN".equals(examMode)) {
-                // OX 타입을 먼저, 그 다음 MCQ 타입 순서로 정렬
-                sortedQuestions = new ArrayList<>(questions);
-                sortedQuestions.sort((a, b) -> {
-                    boolean aIsOx = "OX".equals(a.type());
-                    boolean bIsOx = "OX".equals(b.type());
-                    if (aIsOx && !bIsOx) return -1; // OX가 먼저
-                    if (!aIsOx && bIsOx) return 1;  // OX가 먼저
-                    return 0; // 같은 타입이면 원래 순서 유지
-                });
-            }
-        }
-
-        for (StudyServiceClient.QuestionDto q : sortedQuestions) {
+        // DUEL 모드: 문제 타입이 단일 타입(MCQ 또는 SHORT)이므로 정렬 불필요
+        // questions를 그대로 사용
+        for (StudyServiceClient.QuestionDto q : questions) {
             MatchPhase phase = determinePhase(q.type(), mode);
             int timeLimit = determineTimeLimit(q.type(), q.mode(), mode);
 
@@ -3481,6 +3485,7 @@ public class VersusService {
                         "PRACTICAL",
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "NORMAL",
                         7, // SHORT 7문제
                         List.of(
@@ -3511,6 +3516,7 @@ public class VersusService {
                         "WRITTEN",
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "NORMAL",
                         4, // OX 2 + MCQ 2
                         List.of(
@@ -3529,6 +3535,7 @@ public class VersusService {
                         "WRITTEN",
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "NORMAL",
                         1, // MCQ 1개 (REVIVAL)
                         List.of(
@@ -3547,6 +3554,7 @@ public class VersusService {
                             "WRITTEN",
                             topicId != null ? "SPECIFIC" : "ALL",
                             topicId,
+                            null, // certId는 이 메서드에서 사용 불가 (null 전달)
                             "HARD",
                             2, // MCQ 2개 (FINAL)
                             List.of(
@@ -3564,6 +3572,7 @@ public class VersusService {
                             "WRITTEN",
                             topicId != null ? "SPECIFIC" : "ALL",
                             topicId,
+                            null, // certId는 이 메서드에서 사용 불가 (null 전달)
                             "NORMAL",
                             2, // MCQ 2개 (FINAL, NORMAL)
                             List.of(
@@ -3622,6 +3631,7 @@ public class VersusService {
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "NORMAL",
                         3,
                         List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
@@ -3635,6 +3645,7 @@ public class VersusService {
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "NORMAL",
                         3,
                         List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
@@ -3648,6 +3659,7 @@ public class VersusService {
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "NORMAL",
                         3,
                         List.of(new StudyServiceClient.QuestionTypeSpec("SHORT", 3))
@@ -3669,6 +3681,7 @@ public class VersusService {
                     examMode,
                     topicId != null ? "SPECIFIC" : "ALL",
                     topicId,
+                    null, // certId는 이 메서드에서 사용 불가 (null 전달)
                     "NORMAL",
                     3,
                     List.of(new StudyServiceClient.QuestionTypeSpec("OX", 3))
@@ -3681,6 +3694,7 @@ public class VersusService {
                     examMode,
                     topicId != null ? "SPECIFIC" : "ALL",
                     topicId,
+                    null, // certId는 이 메서드에서 사용 불가 (null 전달)
                     "NORMAL",
                     3,
                     List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
@@ -3695,6 +3709,7 @@ public class VersusService {
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "HARD",
                         3,
                         List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
@@ -3711,6 +3726,7 @@ public class VersusService {
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "NORMAL",
                         3,
                         List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
@@ -3723,6 +3739,7 @@ public class VersusService {
                         examMode,
                         topicId != null ? "SPECIFIC" : "ALL",
                         topicId,
+                        null, // certId는 이 메서드에서 사용 불가 (null 전달)
                         "NORMAL",
                         3,
                         List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
@@ -3735,6 +3752,7 @@ public class VersusService {
                             examMode,
                             topicId != null ? "SPECIFIC" : "ALL",
                             topicId,
+                            null, // certId는 이 메서드에서 사용 불가 (null 전달)
                             "NORMAL",
                             3,
                             List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
@@ -3752,6 +3770,7 @@ public class VersusService {
                             examMode,
                             topicId != null ? "SPECIFIC" : "ALL",
                             topicId,
+                            null, // certId는 이 메서드에서 사용 불가 (null 전달)
                             "NORMAL",
                             3,
                             List.of(new StudyServiceClient.QuestionTypeSpec("MCQ", 3))
@@ -3804,11 +3823,8 @@ public class VersusService {
         } else if (matchMode == MatchMode.DUEL) {
             // DUEL 모드 시간 제한
             if ("WRITTEN".equals(examMode)) {
-                return switch (questionType) {
-                    case "OX" -> DUEL_WRITTEN_OX_LIMIT_SEC;      // 5초
-                    case "MCQ" -> DUEL_WRITTEN_MCQ_LIMIT_SEC;    // 10초
-                    default -> DUEL_WRITTEN_MCQ_LIMIT_SEC;
-                };
+                // DUEL 필기: MCQ만 사용 (OX 제거)
+                return DUEL_WRITTEN_MCQ_LIMIT_SEC;    // 10초
             } else {
                 return switch (questionType) {
                     case "SHORT" -> DUEL_PRACTICAL_SHORT_LIMIT_SEC; // 15초

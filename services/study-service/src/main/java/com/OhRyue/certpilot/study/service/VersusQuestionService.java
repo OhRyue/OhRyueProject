@@ -13,8 +13,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +20,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -47,6 +44,11 @@ public class VersusQuestionService {
 
         ExamMode examMode = parseExamMode(request.examMode());
         Difficulty difficulty = parseDifficulty(request.difficulty());
+
+        // ROOT_DESCENDANTS 모드: 보조학습과 동일한 균등 분배 로직 적용
+        if ("ROOT_DESCENDANTS".equals(request.topicScope()) && request.topicId() != null) {
+            return generateQuestionsWithRootDescendants(request, examMode, difficulty);
+        }
 
         List<Question> allQuestions = new ArrayList<>();
 
@@ -83,8 +85,12 @@ public class VersusQuestionService {
             .limit(totalCount)
             .toList();
 
-        log.info("Generated {} questions for versus mode: examMode={}, difficulty={}, types={}, requested={}",
-            selected.size(), examMode, difficulty, request.questionTypes(), request.count());
+        // questionTypes 상세 로깅
+        String questionTypesDetail = request.questionTypes().stream()
+                .map(qt -> String.format("%s:%d", qt.type(), qt.count()))
+                .collect(Collectors.joining(", ", "[", "]"));
+        log.info("Generated {} questions for versus mode: examMode={}, difficulty={}, topicScope={}, topicId={}, requestedCount={}, questionTypes={}, actualCount={}",
+            selected.size(), examMode, difficulty, request.topicScope(), request.topicId(), request.count(), questionTypesDetail, selected.size());
 
         return selected.stream()
             .map(this::toQuestionDto)
@@ -151,6 +157,318 @@ public class VersusQuestionService {
     }
 
     // ========== Private Helper Methods ==========
+
+    /**
+     * ROOT_DESCENDANTS 모드: rootTopicId의 하위 토픽(children)에서 균등 분배로 문제 생성
+     * 보조학습 Category 모드와 동일한 출제 규칙 적용
+     */
+    private List<VersusDtos.QuestionDto> generateQuestionsWithRootDescendants(
+            VersusDtos.VersusQuestionRequest request,
+            ExamMode examMode,
+            Difficulty difficulty) {
+        
+        Long rootTopicId = request.topicId();
+        int want = request.count();
+        
+        log.info("🌳 ROOT_DESCENDANTS 모드 시작: rootTopicId={}, examMode={}, count={}", rootTopicId, examMode, want);
+        
+        // 1. rootTopicId의 직접 자식 토픽(3레벨 leaf 토픽) 조회
+        Long certId = request.certId();
+        if (certId == null) {
+            log.warn("[study] certId missing -> default certId=1 (멀티 자격증 지원 시 수정 필요)");
+            certId = 1L; // 기본값: certId=1 (정보처리기사)
+        }
+        log.info("[study] ROOT_DESCENDANTS: 자식 토픽 조회 시작, rootTopicId={}, examMode={}, certId={}", rootTopicId, examMode, certId);
+        
+        Set<Long> childTopicIds;
+        try {
+            childTopicIds = topicTreeService.childrenOf(rootTopicId, examMode.name(), certId);
+        } catch (ResponseStatusException e) {
+            // TopicTreeService에서 던진 예외를 그대로 전파 (503/502 등)
+            log.error("[study] ROOT_DESCENDANTS FAILED: cert-service 호출 실패, status={}, message={}", 
+                    e.getStatusCode(), e.getMessage());
+            throw e; // 503/502/500 등을 그대로 전파
+        } catch (Exception e) {
+            // 예상치 못한 예외
+            log.error("[study] ROOT_DESCENDANTS FAILED: 예상치 못한 예외, rootTopicId={}, examMode={}, error={}", 
+                    rootTopicId, examMode, e.getMessage(), e);
+            throw new ResponseStatusException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                String.format("Unexpected error while getting child topics. rootTopicId=%d, examMode=%s", 
+                        rootTopicId, examMode),
+                e);
+        }
+        
+        if (childTopicIds == null || childTopicIds.isEmpty()) {
+            // cert-service 호출은 성공했지만 빈 리스트를 반환한 경우 (데이터 없음)
+            log.error("[study] ROOT_DESCENDANTS FAILED: 자식 토픽이 없습니다 (데이터 없음)");
+            log.error("[study] ROOT_DESCENDANTS FAILED: rootTopicId={}, examMode={}, childTopicIds={}", 
+                    rootTopicId, examMode, childTopicIds);
+            log.error("[study] ROOT_DESCENDANTS FAILED: cert-service 호출은 성공했지만 빈 리스트를 반환했습니다.");
+            log.error("[study] ROOT_DESCENDANTS FAILED: 가능한 원인:");
+            log.error("[study]   1. DB에 실제로 자식 토픽이 없음");
+            log.error("[study]   2. examMode 필터로 제외됨");
+            log.error("[study]   3. certId 불일치");
+            log.error("[study] ROOT_DESCENDANTS FAILED: 404 NOT_FOUND 반환 (데이터 없음)");
+            
+            throw new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                String.format("No child topics found for rootTopicId=%d, examMode=%s. " +
+                        "Please check if child topics exist in the database.", 
+                        rootTopicId, examMode));
+        }
+        
+        log.info("📋 ROOT_DESCENDANTS: childTopicIds={}, count={}", childTopicIds, childTopicIds.size());
+        
+        // 2. 각 문제 타입별로 문제 풀 수집
+        Map<QuestionType, List<Question>> poolByType = new HashMap<>();
+        for (VersusDtos.QuestionTypeSpec spec : request.questionTypes()) {
+            QuestionType questionType = parseQuestionType(spec.type());
+            log.info("🔍 문제 조회 시작: topicIds={}, examMode={}, questionType={}", childTopicIds, examMode, questionType);
+            
+            List<Question> questions = questionRepository.findByTopicIdInAndModeAndType(
+                childTopicIds, examMode, questionType);
+            
+            log.info("📚 문제 조회 결과: questionType={}, foundCount={}, topicIds={}", 
+                    questionType, questions.size(), 
+                    questions.stream().map(Question::getTopicId).distinct().collect(Collectors.toList()));
+            
+            poolByType.put(questionType, questions);
+        }
+        
+        // 전체 풀 크기 확인
+        int totalPoolSize = poolByType.values().stream().mapToInt(List::size).sum();
+        log.info("📊 전체 문제 풀 크기: total={}, byType={}", 
+                totalPoolSize,
+                poolByType.entrySet().stream()
+                    .collect(Collectors.toMap(e -> e.getKey().name(), e -> e.getValue().size())));
+        
+        // 3. 모든 문제를 토픽별로 그룹화
+        Map<Long, List<Question>> questionsByTopicId = new HashMap<>();
+        for (List<Question> questions : poolByType.values()) {
+            for (Question q : questions) {
+                questionsByTopicId.computeIfAbsent(q.getTopicId(), k -> new ArrayList<>()).add(q);
+            }
+        }
+        
+        // 각 토픽의 문제를 섞기
+        questionsByTopicId.values().forEach(Collections::shuffle);
+        
+        List<Long> topicIdsList = new ArrayList<>(questionsByTopicId.keySet());
+        int topicCount = topicIdsList.size();
+        
+        if (topicCount == 0) {
+            log.error("❌ ROOT_DESCENDANTS: 문제를 찾을 수 없습니다.");
+            log.error("❌ 원인 분석:");
+            log.error("   1. childTopicIds={} (자식 토픽 목록)", childTopicIds);
+            log.error("   2. examMode={}, questionTypes={}", examMode, request.questionTypes());
+            log.error("   3. poolByType 크기: {}", poolByType.values().stream().mapToInt(List::size).sum());
+            log.error("   4. questionsByTopicId 크기: {}", questionsByTopicId.size());
+            log.error("❌ 가능한 원인:");
+            log.error("   - 자식 토픽에 해당 examMode/questionType의 문제가 없음");
+            log.error("   - 문제 seed 데이터가 하위 토픽에 매핑되지 않음");
+            log.error("   - cert-service에서 잘못된 자식 토픽을 반환함");
+            
+            throw new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                String.format("No questions found for rootTopicId=%d, examMode=%s, childTopicIds=%s. " +
+                        "Please check if questions exist for child topics.", rootTopicId, examMode, childTopicIds));
+        }
+        
+        // 4. 각 타입별로 토픽 균등 분배
+        List<Question> selectedQuestions = new ArrayList<>();
+        Map<QuestionType, Integer> remainingByType = new HashMap<>();
+        for (VersusDtos.QuestionTypeSpec spec : request.questionTypes()) {
+            QuestionType questionType = parseQuestionType(spec.type());
+            remainingByType.put(questionType, spec.count());
+        }
+        
+        // 각 타입별로 토픽 균등 분배 적용
+        for (Map.Entry<QuestionType, Integer> entry : remainingByType.entrySet()) {
+            QuestionType questionType = entry.getKey();
+            int typeCount = entry.getValue();
+            
+            // 해당 타입의 문제만 필터링
+            Map<Long, List<Question>> typeQuestionsByTopic = new HashMap<>();
+            for (Map.Entry<Long, List<Question>> topicEntry : questionsByTopicId.entrySet()) {
+                List<Question> typeQuestions = topicEntry.getValue().stream()
+                    .filter(q -> q.getType() == questionType)
+                    .toList();
+                if (!typeQuestions.isEmpty()) {
+                    typeQuestionsByTopic.put(topicEntry.getKey(), new ArrayList<>(typeQuestions));
+                }
+            }
+            
+            if (typeQuestionsByTopic.isEmpty()) {
+                log.warn("ROOT_DESCENDANTS: type={}에 해당하는 문제가 없습니다.", questionType);
+                continue;
+            }
+            
+            List<Long> typeTopicIds = new ArrayList<>(typeQuestionsByTopic.keySet());
+            int typeTopicCount = typeTopicIds.size();
+            
+            // 기본 할당량 계산
+            int basePerTopic = typeCount / typeTopicCount;
+            int remainder = typeCount % typeTopicCount;
+            
+            Map<Long, Integer> topicQuotas = new HashMap<>();
+            for (int i = 0; i < typeTopicIds.size(); i++) {
+                Long topicId = typeTopicIds.get(i);
+                int quota = basePerTopic + (i < remainder ? 1 : 0);
+                topicQuotas.put(topicId, quota);
+            }
+            
+            log.info("[study] ROOT_DESCENDANTS 균등 분배: type={}, typeCount={}, typeTopicCount={}, topicQuotas={}",
+                questionType, typeCount, typeTopicCount, topicQuotas);
+            
+            // 라운드로빈 방식으로 균등 분배
+            Map<Long, Integer> selectedCountByTopic = new HashMap<>();
+            Map<Long, Integer> currentIndexByTopic = new HashMap<>();
+            for (Long topicId : typeTopicIds) {
+                selectedCountByTopic.put(topicId, 0);
+                currentIndexByTopic.put(topicId, 0);
+            }
+            
+            int selectedForType = 0;
+            while (selectedForType < typeCount && selectedQuestions.size() < want) {
+                boolean anySelected = false;
+                
+                // 각 토픽을 순회하며 1문제씩 선택 (라운드로빈)
+                for (Long topicId : typeTopicIds) {
+                    if (selectedForType >= typeCount) break;
+                    
+                    List<Question> topicQuestions = typeQuestionsByTopic.get(topicId);
+                    if (topicQuestions == null || topicQuestions.isEmpty()) {
+                        continue;
+                    }
+                    
+                    int quota = topicQuotas.getOrDefault(topicId, 0);
+                    int alreadySelected = selectedCountByTopic.getOrDefault(topicId, 0);
+                    
+                    // 할당량을 초과하지 않도록 체크
+                    if (alreadySelected >= quota) {
+                        continue;
+                    }
+                    
+                    // 현재 인덱스에서 문제 선택
+                    int currentIndex = currentIndexByTopic.getOrDefault(topicId, 0);
+                    if (currentIndex < topicQuestions.size()) {
+                        Question q = topicQuestions.get(currentIndex);
+                        if (!selectedQuestions.contains(q)) {
+                            selectedQuestions.add(q);
+                            selectedCountByTopic.put(topicId, alreadySelected + 1);
+                            selectedForType++;
+                            anySelected = true;
+                        }
+                        currentIndexByTopic.put(topicId, currentIndex + 1);
+                    }
+                }
+                
+                // 더 이상 선택할 문제가 없으면 종료
+                if (!anySelected) {
+                    break;
+                }
+            }
+            
+            // 각 토픽별 선택된 문제 수 로깅
+            log.info("[study] ROOT_DESCENDANTS 분배 결과: type={}, selectedByTopic={}, totalSelected={}, requested={}",
+                questionType, selectedCountByTopic, selectedForType, typeCount);
+        }
+        
+        // 5. 할당량으로 부족한 경우, 문제가 많은 토픽에서 추가 선택
+        if (selectedQuestions.size() < want) {
+            int remaining = want - selectedQuestions.size();
+            
+            // 타입별로 남은 할당량 계산
+            Map<QuestionType, Integer> selectedByType = new HashMap<>();
+            for (Question q : selectedQuestions) {
+                selectedByType.put(q.getType(), selectedByType.getOrDefault(q.getType(), 0) + 1);
+            }
+            
+            // 각 타입별로 부족한 만큼 추가 선택
+            for (VersusDtos.QuestionTypeSpec spec : request.questionTypes()) {
+                QuestionType questionType = parseQuestionType(spec.type());
+                int selected = selectedByType.getOrDefault(questionType, 0);
+                int needed = spec.count() - selected;
+                
+                if (needed <= 0 || remaining <= 0) continue;
+                
+                // 해당 타입의 문제를 토픽별로 그룹화
+                Map<Long, List<Question>> typeQuestionsByTopic = new HashMap<>();
+                for (Map.Entry<Long, List<Question>> topicEntry : questionsByTopicId.entrySet()) {
+                    List<Question> typeQuestions = topicEntry.getValue().stream()
+                        .filter(q -> q.getType() == questionType && !selectedQuestions.contains(q))
+                        .toList();
+                    if (!typeQuestions.isEmpty()) {
+                        typeQuestionsByTopic.put(topicEntry.getKey(), new ArrayList<>(typeQuestions));
+                    }
+                }
+                
+                // 선택 비율이 낮은 토픽 우선으로 정렬
+                Map<Long, Integer> selectedCountByTopic = new HashMap<>();
+                for (Question q : selectedQuestions) {
+                    if (q.getType() == questionType) {
+                        selectedCountByTopic.put(q.getTopicId(), 
+                            selectedCountByTopic.getOrDefault(q.getTopicId(), 0) + 1);
+                    }
+                }
+                
+                List<Map.Entry<Long, List<Question>>> sortedTopics = typeQuestionsByTopic.entrySet().stream()
+                    .sorted((e1, e2) -> {
+                        int size1 = e1.getValue().size();
+                        int size2 = e2.getValue().size();
+                        int selected1 = selectedCountByTopic.getOrDefault(e1.getKey(), 0);
+                        int selected2 = selectedCountByTopic.getOrDefault(e2.getKey(), 0);
+                        int ratio1 = size1 > 0 ? (selected1 * 100) / size1 : 0;
+                        int ratio2 = size2 > 0 ? (selected2 * 100) / size2 : 0;
+                        if (ratio1 != ratio2) {
+                            return Integer.compare(ratio1, ratio2);
+                        }
+                        return Integer.compare(size2 - selected2, size1 - selected1);
+                    })
+                    .toList();
+                
+                for (Map.Entry<Long, List<Question>> entry : sortedTopics) {
+                    if (remaining <= 0 || needed <= 0) break;
+                    
+                    List<Question> topicQuestions = entry.getValue();
+                    for (Question q : topicQuestions) {
+                        if (remaining <= 0 || needed <= 0) break;
+                        if (!selectedQuestions.contains(q)) {
+                            selectedQuestions.add(q);
+                            remaining--;
+                            needed--;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 6. 최종적으로 부족하면 전체 풀에서 랜덤으로 추가
+        if (selectedQuestions.size() < want) {
+            List<Question> allPool = new ArrayList<>();
+            for (List<Question> questions : poolByType.values()) {
+                allPool.addAll(questions);
+            }
+            allPool.removeAll(selectedQuestions);
+            Collections.shuffle(allPool);
+            
+            int additional = Math.min(want - selectedQuestions.size(), allPool.size());
+            selectedQuestions.addAll(allPool.subList(0, additional));
+        }
+        
+        // 최종 셔플
+        Collections.shuffle(selectedQuestions);
+        
+        log.info("ROOT_DESCENDANTS: selectedQuestions={}, requested={}, topicDistribution={}",
+            selectedQuestions.size(), want,
+            selectedQuestions.stream()
+                .collect(Collectors.groupingBy(Question::getTopicId, Collectors.counting())));
+        
+        return selectedQuestions.stream()
+            .map(this::toQuestionDto)
+            .toList();
+    }
 
     private List<Question> collectQuestions(
         ExamMode examMode,
@@ -283,6 +601,13 @@ public class VersusQuestionService {
 
     private Difficulty parseDifficulty(String difficulty) {
         if (difficulty == null || difficulty.isBlank()) return Difficulty.NORMAL;
+        
+        // DUEL에서는 difficulty 필터를 사용하지 않으므로, ALL은 무시
+        if ("ALL".equalsIgnoreCase(difficulty)) {
+            log.debug("difficulty=ALL detected, using NORMAL (DUEL does not filter by difficulty)");
+            return Difficulty.NORMAL;
+        }
+        
         try {
             return Difficulty.valueOf(difficulty.toUpperCase());
         } catch (IllegalArgumentException e) {

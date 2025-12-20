@@ -77,6 +77,14 @@ public class JwtUtil {
         return exp != null && exp.before(new Date());
     }
 
+    /**
+     * JWT에서 모든 Claims 추출 (서명 검증 포함)
+     * Internal JWT 검증 등에서 issuer/audience 확인 시 사용
+     */
+    public Claims getClaims(String token) {
+        return getAllClaims(token);
+    }
+
     private Claims getAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(key)

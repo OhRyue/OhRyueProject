@@ -38,8 +38,9 @@ public interface StudyServiceClient {
 
     record VersusQuestionRequest(
         String examMode,  // WRITTEN, PRACTICAL
-        String topicScope,  // ALL, 특정 topicId
+        String topicScope,  // ALL, 특정 topicId, ROOT_DESCENDANTS
         Long topicId,
+        Long certId,  // 자격증 ID (ROOT_DESCENDANTS 모드에서 TopicTree 조회 시 사용)
         String difficulty,  // EASY, NORMAL, HARD
         Integer count,
         List<QuestionTypeSpec> questionTypes  // [{type: "OX", count: 2}, {type: "MCQ", count: 8}]

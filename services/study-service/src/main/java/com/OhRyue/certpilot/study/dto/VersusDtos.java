@@ -18,13 +18,17 @@ public class VersusDtos {
             example = "WRITTEN", required = true)
         String examMode,
         
-        @Schema(description = "토픽 범위 (ALL: 전체, SPECIFIC: 특정 토픽)", 
+        @Schema(description = "토픽 범위 (ALL: 전체, SPECIFIC: 특정 토픽, ROOT_DESCENDANTS: rootTopicId의 하위 토픽에서 균등 분배)", 
             example = "ALL")
         String topicScope,
         
         @Schema(description = "특정 토픽 ID (topicScope가 SPECIFIC일 때 필수)", 
             example = "100")
         Long topicId,
+        
+        @Schema(description = "자격증 ID (ROOT_DESCENDANTS 모드에서 TopicTree 조회 시 사용)", 
+            example = "1")
+        Long certId,
         
         @Schema(description = "난이도 (EASY, NORMAL, HARD)", 
             example = "NORMAL")

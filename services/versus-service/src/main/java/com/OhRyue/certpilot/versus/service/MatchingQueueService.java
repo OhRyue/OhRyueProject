@@ -562,9 +562,10 @@ public class MatchingQueueService {
             scope.put("examMode", request.examMode());
             
             if ("CATEGORY".equals(request.matchingMode())) {
-                scope.put("topicScope", "SPECIFIC");
+                // 카테고리 모드: topicScope=CATEGORY로 명시 (보조학습과 동일한 규칙)
+                scope.put("topicScope", "CATEGORY");
                 scope.put("topicId", request.topicId());
-                scope.put("difficulty", "NORMAL");  // 기본값
+                scope.put("difficulty", "ALL");  // 카테고리 모드는 난이도 무관
             } else {
                 scope.put("topicScope", "ALL");
                 scope.put("difficulty", request.difficulty());
